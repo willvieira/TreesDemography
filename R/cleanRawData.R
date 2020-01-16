@@ -316,7 +316,7 @@ suppressPackageStartupMessages(library(dplyr))
 
   # remove nb column
   growth_dt[, nb := NULL]
-  mort[, nb := NULL]
+  growth_dt[, nb := NULL]
   fec_dt[, nb := NULL]
 
   # save species_id
