@@ -74,7 +74,7 @@ set.seed(42)
 
 
 ## run the model
-s
+
   model <- stan_model(file = "../../../stan/mortality.stan")
 
   ## Data stan
@@ -105,6 +105,6 @@ s
 
 ## save output
 
-  saveRDS(object = out, file = paste0("output/mcmc_", sp, "_", format(Sys.time(), "%Y-%m-%d_%T"), ".RDS"))
+  saveRDS(object = out, file = paste0("output/mortMCMC_", sp, "_", format(Sys.time(), "%Y-%m-%d_%T"), ".RDS"))
 
 ##
