@@ -3,6 +3,7 @@ cat('####### Creating species folder to run MCMC #######\n')
 # Automate the creation of a folder for each species to run MCMC
 # Will Vieira
 # February 07, 2019
+# Last update: January 17, 2020
 ##############################
 
 ##############################
