@@ -20,16 +20,13 @@ set.seed(42)
 
 ## Get arguments about simulation and data
 
-  args = commandArgs(trailingOnly=TRUE)
-
   # species_id
-  sp = args[1]
-  # max interation
-  maxIter <- args[2]
-  # number of cores and chains
-  nCores <- nChains <- args[3]
 
-  mort <- readRDS("../../../data/mort_dt.RDS")
+  # max interation
+
+  # number of cores and chains
+
+  # load database
 
 ##
 
