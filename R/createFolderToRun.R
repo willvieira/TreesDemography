@@ -90,7 +90,7 @@ cat('####### Creating species folder to run MCMC #######\n')
 NCORES=$SLURM_CPUS_PER_TASK R -f ~/TreesDemography/MCMC/allSp/", sp, "/run_", vital, ".R")
 
       # save bash script as sub.sh
-      system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub.sh"))
+      system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, ".sh"))
     #
 
     cat('  creating folder for species', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
