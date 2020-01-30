@@ -87,7 +87,7 @@ cat('####### Creating species folder to run MCMC #######\n')
 #SBATCH --mail-user=willian.vieira@usherbrooke.ca
 #SBATCH --mail-type=FAIL
 
-NCORES=$SLURM_CPUS_PER_TASK R -f ~/TreesDemography/MCMC/allSp/", sp, "/run_", vital, ".R")
+NCORES=$SLURM_CPUS_PER_TASK R -f ~/TreesDemography/MCMC/", sp, "/run_", vital, ".R")
 
       # save bash script as sub.sh
       system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, ".sh"))

@@ -33,7 +33,7 @@ cat('####### Sending batch submission MCMC #######\n')
   if(system('hash sbatch') == 0) {
 
     # for each species_id:
-    dir <- 'MCMC/allSp/'
+    dir <- 'MCMC/'
 
     for(sp in spIds)
     {
