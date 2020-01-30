@@ -38,7 +38,7 @@ cat('####### Creating species folder to run MCMC #######\n')
 
 ## Create allSp directory
 
-  dir <- 'MCMC/allSp/'
+  dir <- 'MCMC/'
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
 
 ##
