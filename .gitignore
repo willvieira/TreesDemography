@@ -50,3 +50,4 @@ data/*
 rawData/*
 MCMC/*
 output/*
+tests/*
