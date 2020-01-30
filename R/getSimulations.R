@@ -9,19 +9,10 @@ cat('####### Loading simulations from the server #######\n')
 
 ##############################
 # Steps:
-  # load config file
   # Load simulation variables
   # check if simulation exists for each species
   # If not, load simulations from the server
 ##############################
-
-
-
-## Load conf file with server info
-
-  server_info <- readLines('_server.yml')
-
-##
 
 
 
@@ -113,6 +104,7 @@ cat('####### Loading simulations from the server #######\n')
                        sp,
                        '/')
       system(script)
+      cat('   loading sp', which(sp == speciesToLoad), 'of', length(speciesToLoad), '\n')
     }
 
   }else{
