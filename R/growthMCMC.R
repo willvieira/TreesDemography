@@ -35,16 +35,62 @@ set.seed(42)
 
 
 
-## begin sp sampling
+## begin stratified sampling (thanks Amaēl for sharing)
+
+  # load vital data
+  growth_dt <- readRDS('../../data/growth_dt.RDS')
 
   # select the species
-  growth <- growth[species_id == sp]
+  growth_dt <- growth_dt[species_id == sp]
 
-  # get nb of tree_id
-  nbTreeId = uniqueN(growth$tree_id)
+  if(growth_dt[, .N] > sampleSize) {
+    # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
+    deltaS = 10; nbLonClasses = nbLatClasses = 50
 
-  # sample (only if nbTreeId is bigger than sampleSize)
-  if(nbTreeId > sampleSize) growth = growth[tree_id %in% sample(unique(tree_id), sampleSize)]
+    # Size classes
+    sizeClass = seq(from = min(growth_dt$dbh0), to = max(growth_dt$dbh0) + deltaS, by = deltaS)
+    nbSizeClass = length(sizeClass) - 1
+
+  	for (i in 1:nbSizeClass)
+  		growth_dt[ sizeClass[i] <= dbh0 & dbh0 < sizeClass[i + 1], sizeInt := i]
+
+  	# Longitude classes
+  	lonClass = seq(from = min(growth_dt$longitude), to = max(growth_dt$longitude) + 1, length.out = nbLonClasses) # +1 to be able to get the extremeties
+
+  	for (i in 1:(nbLonClasses - 1))
+  		growth_dt[ lonClass[i] <= longitude & longitude < lonClass[i + 1], lonInt := i]
+
+  	# Species-specific latitude classes
+  	latClass = seq(from = min(growth_dt$latitude), to = max(growth_dt$latitude) + 1, length.out = nbLatClasses) # +1 to be able to get the extremeties
+
+  	for (i in 1:(nbLatClasses - 1))
+  		growth_dt[ latClass[i] <= latitude & latitude < latClass[i + 1], latInt := i]
+
+  	# Derive frequencies
+  	freqDBH = growth_dt[, table(sizeInt)]/growth_dt[, .N]
+  	freqLon = growth_dt[, table(lonInt)]/growth_dt[, .N]
+  	freqLat = growth_dt[, table(latInt)]/growth_dt[, .N]
+
+  	ls_sizeInt = growth_dt[, unique(sizeInt)]
+  	ls_lonInt = growth_dt[, unique(lonInt)]
+  	ls_latInt = growth_dt[, unique(latInt)]
+
+  	for (s in ls_sizeInt)
+  		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
+
+  	for (lg in ls_lonInt)
+  		growth_dt[lonInt == lg, proba_L := freqLon[as.character(lg)]]
+
+  	for (lt in ls_latInt)
+  		growth_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
+
+  	growth_dt[, proba := proba_s*proba_L*proba_l]
+
+  	sampledIndices = sample(x = 1:growth_dt[,.N], size = sampleSize, replace = FALSE, prob = growth_dt$proba)
+
+    # get samples values
+    growth_dt = growth_dt[sampledIndices, ]
+  }
 
 ##
 
@@ -78,13 +124,13 @@ set.seed(42)
 
   ## Data stan
   dataStan <- list(
-          N = growth[, .N],
-          T_data = growth$mean_TPperiod3_sc,
-          P_data = growth$tot_PPperiod3_sc,
-          D_data = growth$dbh0,
-          C_data = growth$canopyStatus,
-          time_interv = growth$deltaYear,
-          Y = growth$growth)
+          N = growth_dt[, .N],
+          T_data = growth_dt$mean_TPperiod3_sc,
+          P_data = growth_dt$tot_PPperiod3_sc,
+          D_data = growth_dt$dbh0,
+          C_data = growth_dt$canopyStatus,
+          time_interv = growth_dt$deltaYear,
+          Y = growth_dt$growth)
 
   ## Run
 
