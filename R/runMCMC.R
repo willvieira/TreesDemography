@@ -10,6 +10,7 @@ cat('####### Sending batch submission MCMC #######\n')
 ##############################
 # Steps:
   # Load simulation variables
+  #  Source R codes to clean data and create folders to run simulations
   # For each species_id:
     # Change directory to the sp directory
     # run sbatch command with the sub.sh file
@@ -19,10 +20,26 @@ cat('####### Sending batch submission MCMC #######\n')
 
 ## Load simulation variables
 
+  simInfo <- yaml::read_yaml('simulation_info.yml')
+
   # species id
-  spIds <- readRDS('data/spIds.RDS')
+  if(is.null(simInfo$spIds)) {
+    spIds <- readRDS('data/spIds.RDS')
+  }else {
+    spIds <- simInfo$spIds
+  }
+
   # vital rates
-  eval(parse(text = readLines('R/createFolderToRun.R')[33]))
+  vitalRates <- simInfo$vitalRates
+
+##
+
+
+
+## Source R codes to clean data and create folders to run simulations
+
+  source('R/cleanRawData.R')
+  source('R/createFolderToRun.R')
 
 ##
 
