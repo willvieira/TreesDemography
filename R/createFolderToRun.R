@@ -20,17 +20,26 @@ cat('####### Creating species folder to run MCMC #######\n')
 
 ## Set variables to be simulated
 
+  simInfo <- yaml::read_yaml('simulation_info.yml')
+
   # species id
-  spIds <- readRDS('data/spIds.RDS')
+  if(is.null(simInfo$spIds)) {
+    spIds <- readRDS('data/spIds.RDS')
+  }else {
+    spIds <- simInfo$spIds
+  }
 
   # max interation
-  maxIter <- 15000
+  maxIter <- as.numeric(simInfo$maxIter)
 
   # number of cores and chains
-  nC <- 5
+  nC <- as.numeric(simInfo$nC)
 
   # vital rates
-  vitalRates <- c('mort', 'growth')
+  vitalRates <- simInfo$vitalRates
+
+  # sample size
+  sampleSize <- as.numeric(simInfo$sampleSize)
 
 ##
 
@@ -65,11 +74,13 @@ cat('####### Creating species folder to run MCMC #######\n')
         linesToAdd = c(paste0('   sp <- \'', sp, '\''),
                        paste0('   maxIter <- ', maxIter),
                        paste0('   nCores <- nChains <- ', nC),
-                       paste0('   ', vital, ' <- readRDS(\'../../../data/', vital, '_dt.RDS\')'))
+                       paste0('   ', vital, ' <- readRDS(\'../../../data/', vital, '_dt.RDS\')'),
+                       paste0('   sampleSize <- ', sampleSize))
+
         # read file
         MCMCscript <- readLines(paste0('R/', vital, 'MCMC.R'))
         # update lines
-        MCMCscript[c(24, 26, 28, 30)] <- linesToAdd
+        MCMCscript[c(24, 26, 28, 30, 32)] <- linesToAdd
         # save file
         writeLines(MCMCscript, paste0(dir, sp, '/run_', vital, '.R'))
 
@@ -80,7 +91,7 @@ cat('####### Creating species folder to run MCMC #######\n')
         bash <- paste0("#!/bin/bash
 
 #SBATCH --account=def-dgravel
-#SBATCH -t 4-00:00:00
+#SBATCH -t 5-00:00:00
 #SBATCH --mem-per-cpu=2500M
 #SBATCH --ntasks=", nC, "
 #SBATCH --job-name=", vital, sp, "

@@ -28,6 +28,9 @@ set.seed(42)
 
   # load database
 
+  # sample size
+
+
 ##
 
 
@@ -36,8 +39,6 @@ set.seed(42)
 
   # select the species
   mort <- mort[species_id == sp]
-
-  sampleSize = 1.4e4
 
   # get nb of tree_id
   nbTreeId = uniqueN(mort$tree_id)

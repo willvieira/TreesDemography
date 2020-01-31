@@ -18,14 +18,23 @@ cat('####### Loading simulations from the server #######\n')
 
 ## Load simulation variables
 
-  # species_id
-  spIds <- readRDS('data/spIds.RDS')
+## Set variables to be simulated
 
-  # vitalRates
-  eval(parse(text = readLines('R/createFolderToRun.R')[33]))
+  simInfo <- yaml::read_yaml('simulation_info.yml')
+
+  # species id
+  if(is.null(simInfo$spIds)) {
+    spIds <- readRDS('data/spIds.RDS')
+  }else {
+    spIds <- simInfo$spIds
+  }
+
+  # vital rates
+  vitalRates <- simInfo$vitalRates
 
   serverDir <- '/TreesDemography/MCMC/'
   mainDir <- 'output/'
+
 ##
 
 
