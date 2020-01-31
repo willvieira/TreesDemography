@@ -1,0 +1,10 @@
+# Species id: define spId code or NULL to run for all species
+spIds: NULL
+# Which vital rates to run
+vitalRates: ["mort", "growth", "fec"]
+# Max interation in the MCMC
+maxIter: 15000
+# Number of cores and chains (to be ran in parallel)
+nC: 5
+# Size of transition measurements to be sampled from the population
+sampleSize: 15000
