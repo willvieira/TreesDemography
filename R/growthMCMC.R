@@ -37,9 +37,6 @@ set.seed(42)
 
 ## begin stratified sampling (thanks Amaēl for sharing)
 
-  # load vital data
-  growth_dt <- readRDS('../../data/growth_dt.RDS')
-
   # select the species
   growth_dt <- growth_dt[species_id == sp]
 

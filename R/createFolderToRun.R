@@ -20,7 +20,7 @@ cat('####### Creating species folder to run MCMC #######\n')
 
 ## Set variables to be simulated
 
-  simInfo <- yaml::read_yaml('simulation_info.yml')
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
 
   # species id
   if(is.null(simInfo$spIds)) {
@@ -74,7 +74,7 @@ cat('####### Creating species folder to run MCMC #######\n')
         linesToAdd = c(paste0('   sp <- \'', sp, '\''),
                        paste0('   maxIter <- ', maxIter),
                        paste0('   nCores <- nChains <- ', nC),
-                       paste0('   ', vital, ' <- readRDS(\'../../../data/', vital, '_dt.RDS\')'),
+                       paste0('   ', vital, '_dt <- readRDS(\'../../data/', vital, '_dt.RDS\')'),
                        paste0('   sampleSize <- ', sampleSize))
 
         # read file
