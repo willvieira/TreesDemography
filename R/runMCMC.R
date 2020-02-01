@@ -20,7 +20,7 @@ cat('####### Sending batch submission MCMC #######\n')
 
 ## Load simulation variables
 
-  simInfo <- yaml::read_yaml('simulation_info.yml')
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
 
   # species id
   if(is.null(simInfo$spIds)) {

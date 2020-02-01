@@ -105,5 +105,7 @@ NCORES=$SLURM_CPUS_PER_TASK R -f ~/TreesDemography/MCMC/", sp, "/run_", vital, "
     #
 
     cat('  creating folder for species', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+    }
   }
-}
+
+##
