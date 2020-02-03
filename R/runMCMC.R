@@ -62,7 +62,7 @@ cat('####### Sending batch submission MCMC #######\n')
         system(paste0('sbatch sub_', vital, '.sh'))
 
       # return to the main directory
-      setwd('../../../')
+      setwd('../../')
 
       cat('  Submitting batch for', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
     }

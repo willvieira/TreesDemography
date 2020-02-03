@@ -109,7 +109,9 @@ set.seed(42)
   minPP3 <- min(growth_dt$tot_pp_period3_lag)
 
 
-  saveRDS(list(mean_TP = list(maxTP3 = maxTP3, minTP3 = minTP3), tot_PP = list(maxPP3 = maxPP3, minPP3 = minPP3)), "output/scaleInfo.RDS")
+  saveRDS(list(mean_TP = list(maxTP3 = maxTP3, minTP3 = minTP3),
+          tot_PP = list(maxPP3 = maxPP3, minPP3 = minPP3)),
+          "output/scaleInfo_growth.RDS")
 
 ##
 
@@ -117,7 +119,7 @@ set.seed(42)
 
 ## run the model
 
-  model <- stan_model(file = "../../../stan/growth.stan")
+  model <- stan_model(file = "../../stan/growth.stan")
 
   ## Data stan
   dataStan <- list(

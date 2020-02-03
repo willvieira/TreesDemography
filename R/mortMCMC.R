@@ -40,9 +40,6 @@ set.seed(42)
   # select the species
   mort_dt <- mort_dt[species_id == sp]
 
-  # select the species
-  mort_dt <- mort_dt[species_id == sp]
-
   if(mort_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
     deltaS = 10; nbLonClasses = nbLatClasses = 50
@@ -111,7 +108,9 @@ set.seed(42)
   maxPP3 <- max(mort_dt$tot_annual_pp_lag)
   minPP3 <- min(mort_dt$tot_annual_pp_lag)
 
-  saveRDS(list(mean_TP = list(maxTP3 = maxTP3, minTP3 = minTP3), tot_PP = list(maxPP3 = maxPP3, minPP3 = minPP3)), "output/scaleInfo.RDS")
+  saveRDS(list(mean_TP = list(maxTP3 = maxTP3, minTP3 = minTP3),
+          tot_PP = list(maxPP3 = maxPP3, minPP3 = minPP3)),
+          "output/scaleInfo_mort.RDS")
 
 ##
 
@@ -119,7 +118,7 @@ set.seed(42)
 
 ## run the model
 
-  model <- stan_model(file = "../../../stan/mortality.stan")
+  model <- stan_model(file = "../../stan/mortality.stan")
 
   ## Data stan
   dataStan <- list(
