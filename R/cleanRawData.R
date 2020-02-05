@@ -96,10 +96,7 @@ suppressPackageStartupMessages(library(dplyr))
 
 
 
-# Separete between Growth, mortality and fecundity data
-
-  # fecundity (all individuals entering the population)
-  fec_dt = treeData[nbMeasure == 1]
+# Separete between Growth and mortality data
 
   # Growth and mortality (nb > 1 to obtain transition)
   treeData = treeData[nbMeasure > 1]
@@ -283,7 +280,29 @@ suppressPackageStartupMessages(library(dplyr))
 
 
 
-# #TODO
+# fecundity (all individuals entering the population)
+
+  # function to get plot_id in which there is nbMeasure > 1
+  # Because I want to eliminate plots in which have been measured only once
+  # So I do not overestimate individuals "arriving" in the population (nbMeasure == 1)
+  getPlotPlusOne <- function(x) {
+    unique_id <- unique(x)
+    if(length(unique_id) > 1) {
+      return (TRUE)
+    }else {
+      if(unique_id != 1) {
+        return (TRUE)
+      }else {
+        return (FALSE)
+      }
+    }
+  }
+
+  treeData[, toKeep := getPlotPlusOne(nbMeasure), by = plot_id]
+  treeData[tooKeep == TRUE]
+  treeData[, toKeep := NULL]
+
+  fec_dt = treeData[nbMeasure == 1]
 
 #
 
