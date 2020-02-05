@@ -141,7 +141,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("lambda", "DexpPhi", "M_d", "mortL"))
+                         pars = c("lgSq", "M_d", "mortL"))
 
 ##
 
