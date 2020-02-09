@@ -299,7 +299,7 @@ suppressPackageStartupMessages(library(dplyr))
   }
 
   treeData[, toKeep := getPlotPlusOne(nbMeasure), by = plot_id]
-  treeData[tooKeep == TRUE]
+  treeData[toKeep == TRUE]
   treeData[, toKeep := NULL]
 
   fec_dt = treeData[nbMeasure == 1]

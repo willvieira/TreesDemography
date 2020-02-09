@@ -99,7 +99,7 @@ cat('####### Creating species folder to run MCMC #######\n')
           bash <- paste0("#!/bin/bash
 
 #SBATCH --account=def-dgravel
-#SBATCH -t 5-00:00:00
+#SBATCH -t 4-00:00:00
 #SBATCH --mem-per-cpu=2500M
 #SBATCH --ntasks=", nC, "
 #SBATCH --job-name=", vital, sp, "
@@ -108,11 +108,12 @@ cat('####### Creating species folder to run MCMC #######\n')
 
 NCORES=$SLURM_CPUS_PER_TASK R -f ~/", simName, "/", dir, sp, "/run_", vital, "_", sim, ".R")
 
-      # save bash script as sub.sh
-      system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, "_", sim, ".sh"))
-    #
+        # save bash script as sub.sh
+        system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, "_", sim, ".sh"))
+      #
 
-    cat('  creating folder for species', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+      cat('  creating folder for species', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+      }
     }
   }
 
