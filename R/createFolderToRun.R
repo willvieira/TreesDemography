@@ -41,6 +41,12 @@ cat('####### Creating species folder to run MCMC #######\n')
   # sample size
   sampleSize <- as.numeric(simInfo$sampleSize)
 
+  # simulation name
+  simName <- simInfo$simName
+
+  # simulations
+  simulations <- simInfo$simulations
+
 ##
 
 
@@ -56,39 +62,41 @@ cat('####### Creating species folder to run MCMC #######\n')
 
 ## For each vital rate and species_id
 
-  for(sp in spIds)
+  for(sim in simulations)
   {
+    for(sp in spIds)
+    {
 
-    # Create the main folder and subfolders (output)
+      # Create the main folder and subfolders (output)
 
-      dir.create(paste0(dir, sp), showWarnings = FALSE)
-      dir.create(paste0(dir, sp, '/output'), showWarnings = FALSE)
+        dir.create(paste0(dir, sp), showWarnings = FALSE)
+        dir.create(paste0(dir, sp, '/output'), showWarnings = FALSE)
 
-    #
-
-
-    for(vital in vitalRates) {
-
-      ## edit respective vitalRate MCMC scripts and save in the folder
-
-        linesToAdd = c(paste0('   sp <- \'', sp, '\''),
-                       paste0('   maxIter <- ', maxIter),
-                       paste0('   nCores <- nChains <- ', nC),
-                       paste0('   ', vital, '_dt <- readRDS(\'../../data/', vital, '_dt.RDS\')'),
-                       paste0('   sampleSize <- ', sampleSize))
-
-        # read file
-        MCMCscript <- readLines(paste0('R/', vital, 'MCMC.R'))
-        # update lines
-        MCMCscript[c(24, 26, 28, 30, 32)] <- linesToAdd
-        # save file
-        writeLines(MCMCscript, paste0(dir, sp, '/run_', vital, '.R'))
-
-      ##
+      #
 
 
-      # Create the vital sub.sh script to run in the server
-        bash <- paste0("#!/bin/bash
+      for(vital in vitalRates) {
+
+        ## edit respective vitalRate MCMC scripts and save in the folder
+
+          linesToAdd = c(paste0('   sp <- \'', sp, '\''),
+                         paste0('   maxIter <- ', maxIter),
+                         paste0('   nCores <- nChains <- ', nC),
+                         paste0('   ', vital, '_dt <- readRDS(\'../../data/', vital, '_dt.RDS\')'),
+                         paste0('   sampleSize <- ', sampleSize))
+
+          # read file
+          MCMCscript <- readLines(paste0('R/', vital, 'MCMC_', sim, '.R'))
+          # update lines
+          MCMCscript[c(24, 26, 28, 30, 32)] <- linesToAdd
+          # save file
+          writeLines(MCMCscript, paste0(dir, sp, '/run_', vital, '_', sim, '.R'))
+
+        ##
+
+
+        # Create the vital sub.sh script to run in the server
+          bash <- paste0("#!/bin/bash
 
 #SBATCH --account=def-dgravel
 #SBATCH -t 5-00:00:00
@@ -98,10 +106,10 @@ cat('####### Creating species folder to run MCMC #######\n')
 #SBATCH --mail-user=willian.vieira@usherbrooke.ca
 #SBATCH --mail-type=FAIL
 
-NCORES=$SLURM_CPUS_PER_TASK R -f ~/TreesDemography/MCMC/", sp, "/run_", vital, ".R")
+NCORES=$SLURM_CPUS_PER_TASK R -f ~/", simName, "/", dir, sp, "/run_", vital, "_", sim, ".R")
 
       # save bash script as sub.sh
-      system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, ".sh"))
+      system(paste0("echo ", "'", bash, "' > ", dir, sp, "/sub_", vital, "_", sim, ".sh"))
     #
 
     cat('  creating folder for species', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')

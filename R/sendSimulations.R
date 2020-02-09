@@ -18,7 +18,7 @@ cat('####### Loading simulations from the server #######\n')
 
   serverInfo <- yaml::read_yaml('_serverInfo.yml')
 
-  simName <- 'TreesDemography'
+  simName <- yaml::read_yaml('_simulation_info.yml')$simName
 
 ##
 
@@ -44,5 +44,5 @@ cat('####### Loading simulations from the server #######\n')
                    simName)
 
   system(script)
-  
+
 ##

@@ -1,10 +1,25 @@
 # Species id: define spId code or NULL to run for all species
-spIds: NULL
+spIds: ["18032ABIBAL", "19462FAGGRA", "28731ACESAC",
+        "28728ACERUB", "19481BETALL", "183295PICGLA",
+        "183319PINBAN", "195773POPTRE", "18037PINTAE"]
 # Which vital rates to run
-vitalRates: ["mort", "growth", "fec"]
+vitalRates: ["mort"]
 # Max interation in the MCMC
 maxIter: 15000
 # Number of cores and chains (to be ran in parallel)
 nC: 5
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
+# The main folder name
+simName: "simulationName"
+# Specific simulations (must match with the files names to run MCMC)
+simulations: ["sim1", "sim2", "etc..."]
+
+
+##################################
+########## DESCRIPTION  ##########
+##################################
+
+## Mortality test - version
+
+## DESCRIPTION OF THE VERSION

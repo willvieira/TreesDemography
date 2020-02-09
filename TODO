@@ -1,0 +1,5 @@
+- Test where I should use scaled or not values of environmental variable
+- Test whereas vectorization of bernouilli dist is possible and returns the same results
+- Test for canopy continuous
+- Test for growth rate effect instead of size effect
+- FIX SCALE!!!

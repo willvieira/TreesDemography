@@ -32,6 +32,9 @@ cat('####### Sending batch submission MCMC #######\n')
   # vital rates
   vitalRates <- simInfo$vitalRates
 
+  # simulations
+  simulations <- simInfo$simulations
+
 ##
 
 
@@ -52,19 +55,22 @@ cat('####### Sending batch submission MCMC #######\n')
     # for each species_id:
     dir <- 'MCMC/'
 
-    for(sp in spIds)
+    for(sim in simulations)
     {
-      # Change directory to the sp directory (I'm doing so the slurm is saved inside each sp folder)
-      setwd(paste0(dir, sp, '/'))
+      for(sp in spIds)
+      {
+        # Change directory to the sp directory (I'm doing so the slurm is saved inside each sp folder)
+        setwd(paste0(dir, sp, '/'))
 
-      # run sub.sh
-      for(vital in vitalRates)
-        system(paste0('sbatch sub_', vital, '.sh'))
+        # run sub.sh
+        for(vital in vitalRates)
+          system(paste0('sbatch sub_', vital, '_', sim, '.sh'))
 
-      # return to the main directory
-      setwd('../../')
+        # return to the main directory
+        setwd('../../')
 
-      cat('  Submitting batch for', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+        cat('  Submitting batch for', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+      }
     }
   }else {
 
