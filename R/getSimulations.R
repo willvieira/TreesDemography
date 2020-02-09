@@ -20,7 +20,7 @@ cat('####### Loading simulations from the server #######\n')
 
 ## Set variables to be simulated
 
-  simInfo <- yaml::read_yaml('simulation_info.yml')
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
 
   # species id
   if(is.null(simInfo$spIds)) {
@@ -32,8 +32,10 @@ cat('####### Loading simulations from the server #######\n')
   # vital rates
   vitalRates <- simInfo$vitalRates
 
-  serverDir <- '/TreesDemography/MCMC/'
-  mainDir <- 'output/'
+  # simulation name
+  simName <- simInfo$simName
+  serverDir <- paste0(simName, '/MCMC/')
+  mainDir <- paste0('output/', simName, '/')
 
 ##
 
@@ -64,7 +66,7 @@ cat('####### Loading simulations from the server #######\n')
         checkFiles[i, 3] <- ifelse(length(grep(checkFiles[i, 2], dir(paste0(mainDir, checkFiles[i, 1])))) == 0, T, F)
     }
   }else {
-    dir.create(mainDir)
+    dir.create(mainDir, recursive = TRUE)
     foldersToLoad <- spIds
   }
 
@@ -83,37 +85,51 @@ cat('####### Loading simulations from the server #######\n')
   if(exists('checkFiles'))
     speciesToLoad <- checkFiles$Var1[which(checkFiles$Var3 == TRUE)]
 
+  # Merge folders and species to load in one single species_id vector
+  if(length(foldersToLoad > 0)) {
+    if(exists('speciesToLoad')) {
+      sp_load <- c(foldersToLoad, speciesToLoad)
+    }else{
+      sp_load <- foldersToLoad
+    }
+  }else{
+    if(exists('speciesToLoad')) {
+      sp_load <- speciesToLoad
+    }else {
+      sp_load <- NULL
+    }
+  }
 
-  if(length(foldersToLoad) > 0 & exists('speciesToLoad')) {
 
-    # merge all needed species and load
-    speciesToLoad <- c(foldersToLoad, speciesToLoad)
+  if(!is.null(sp_load)) {
 
     # load from the server
-    myPass <- Sys.getenv('MYPASS')
-    myUser <- Sys.getenv('MYUSER')
-    myAddress <- Sys.getenv('MYADDRESS')
+    serverInfo <- yaml::read_yaml(file = '_serverInfo.yml')
+    myPass <- serverInfo$myPass
+    myUser <- serverInfo$myUser
+    myAddress <- serverInfo$myAddress
 
     path <- getwd()
-
-    for(sp in speciesToLoad) {
-      script <- paste0('sshpass -p ',
+    for(sp in sp_load) {
+      script <- paste0('sshpass -f ',
                        myPass,
-                       ' scp ',
+                       ' scp -r ',
                        myUser,
                        '@',
                        myAddress,
+                       ':/home/',
+                       myUser,
+                       '/',
                        serverDir,
                        sp,
-                       '/.
-                       ',
+                       '/output/. ',
                        path,
                        '/',
                        mainDir,
                        sp,
                        '/')
       system(script)
-      cat('   loading sp', which(sp == speciesToLoad), 'of', length(speciesToLoad), '\n')
+      cat('   loading sp', which(sp == sp_load), 'of', length(sp_load), '\n')
     }
 
   }else{
