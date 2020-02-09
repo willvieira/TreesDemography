@@ -99,10 +99,9 @@ suppressPackageStartupMessages(library(dplyr))
 # Separete between Growth and mortality data
 
   # Growth and mortality (nb > 1 to obtain transition)
-  treeData = treeData[nbMeasure > 1]
+  mort_dt = treeData[nbMeasure > 1]
 
-  growth_dt = treeData[is_dead == 'f']
-  mort_dt = treeData
+  growth_dt = mort_dt[is_dead == 'f']
 
 #
 
@@ -299,7 +298,7 @@ suppressPackageStartupMessages(library(dplyr))
   }
 
   treeData[, toKeep := getPlotPlusOne(nbMeasure), by = plot_id]
-  treeData[tooKeep == TRUE]
+  treeData = treeData[toKeep == TRUE]
   treeData[, toKeep := NULL]
 
   fec_dt = treeData[nbMeasure == 1]
@@ -322,9 +321,9 @@ suppressPackageStartupMessages(library(dplyr))
   fec_dt[, nb := .N, by = species_id]
 
   # filter species_id with more than 20k measures
-  spUnique_growth = unique(growth_dt[nb > 2e4]$species_id)
-  spUnique_mort = unique(mort_dt[nb > 2e4]$species_id)
-  spUnique_fec = unique(fec_dt[nb > 2e4]$species_id)
+  spUnique_growth = unique(growth_dt[nb > 1e4]$species_id)
+  spUnique_mort = unique(mort_dt[nb > 1e4]$species_id)
+  spUnique_fec = unique(fec_dt[nb > 1e4]$species_id)
 
   ls_species <- Reduce(intersect, list(spUnique_growth, spUnique_mort, spUnique_fec))
 
