@@ -34,8 +34,8 @@ cat('####### Loading simulations from the server #######\n')
 
   # simulation name
   simName <- simInfo$simName
-  serverDir <- paste0(simName, '/MCMC/')
-  mainDir <- paste0('output/', simName, '/')
+  serverDir <- paste0('/', simName, '/MCMC/')
+  mainDir <- paste0('output/', simName)
 
 ##
 
