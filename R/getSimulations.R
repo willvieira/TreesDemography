@@ -78,7 +78,7 @@ cat('####### Loading simulations from the server #######\n')
 
   # if there was any missing folder, create it and add species to the checkFiles
   if(length(foldersToLoad) > 0)
-    invisible(sapply(foldersToLoad, function(x) dir.create(paste0(mainDir, x))))
+    invisible(sapply(foldersToLoad, function(x) dir.create(paste0(mainDir, '/', x))))
 
   # If checkFile exists, get TRUE for those species that need to be loaded and append to foldersToLoad
   # If any species missing, I will import all vital rates outputs
@@ -126,6 +126,7 @@ cat('####### Loading simulations from the server #######\n')
                        path,
                        '/',
                        mainDir,
+                       '/',
                        sp,
                        '/')
       system(script)
