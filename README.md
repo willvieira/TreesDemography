@@ -1,16 +1,11 @@
----
- title: "Trees demography"
- subtitle: "Bayesian models to predict trees vital rates"
- author: "Will Vieira"
- output:
-   html_document:
-     keep_md: yes
----
+# Trees demography
 
-# Mortality tests
+## Bayesian models to predict trees vital rates
+
+### Mortality tests
 
 - [Enviroment scaled](mort/envirScaled.html)
 
-# Growth tests
+### Growth tests
 
-# Fecundity tests
+### Fecundity tests
