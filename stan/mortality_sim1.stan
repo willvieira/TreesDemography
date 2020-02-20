@@ -20,8 +20,8 @@ data
 	int<lower = 1> N; // size of response var
 
 	// Vector data
-	vector<lower = -35, upper = 10>[N] T_data; // temperature, E data
-	vector<lower = 60, upper = 1700>[N] P_data; // Precipitation, E data
+	vector<lower = 0, upper = 1>[N] T_data; // temperature, E data
+	vector<lower = 0, upper = 1>[N] P_data; // Precipitation, E data
 	vector<lower = 0, upper = 1>[N] C_data; // canopy, E data
 	vector<lower = 0>[N] D_data; // diameter, I data
 	vector<lower = 0>[N] time_interv; // time between inventories
@@ -32,11 +32,11 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 {
 	real<lower = 100, upper = 700> psi; // baseline longevity
 
-	real<lower = -40, upper = 40> T_opt; // Optimum temperature of each species
-	real<lower = 0, upper = 100> sigmaT_opt; // Variance among individuals of optimal T within a species
+	real<lower = -0.5, upper = 1.5> T_opt; // Optimum temperature of each species
+	real<lower = 0, upper = 2> sigmaT_opt; // Variance among individuals of optimal T within a species
 
-	real<lower = 0, upper = 3000> P_opt; // Optimum precipitation of each species
-	real<lower = 0, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
+	real<lower = -0.038, upper = 1.5> P_opt; // Optimum precipitation of each species
+	real<lower = 0, upper = 2> sigmaP_opt; // Variance among individuals of optimal P within a species
 
 	real<lower = 0, upper = 4> beta;
 
@@ -78,14 +78,14 @@ model
 	// Priors
 	psi ~ normal(350, 90);
 
-	T_opt ~ normal(0, 20);
-	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
-	P_opt ~ normal(1500, 700);
-	sigmaP_opt ~ normal(1500, 1000);
+	T_opt ~ normal(0, 1);
+	sigmaT_opt ~ uniform(0, 2);
+	P_opt ~ normal(0, 1);
+	sigmaP_opt ~ uniform(0, 2);
 
 	beta ~ gamma(0.7^2/0.2, 0.7/0.2);
 
-	DBHopt ~ normal(200, 200);
+	DBHopt ~ normal(200, 300);
 	DBHvar ~ uniform(0, 13);
 
 	// mortality model

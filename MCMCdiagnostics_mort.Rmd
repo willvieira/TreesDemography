@@ -1,15 +1,10 @@
 ---
  title: "MCMC diagnostics - Mortality"
+ subtitle: "Test v1.0 - enviroment scaled"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
- output:
-     pdf_document:
-         toc: true
 ---
 
-```{r, echo = F}
-  cat('####### Creating MCMC diagnostics report #######\n')
-```
 ```{r, echo = F}
 ###############################
 # Automate MCMC diagnostics for all species and compite in a pdf report
@@ -19,7 +14,7 @@
 
 ##############################
 # Steps:
-  # Load spIds.RDS file
+  # Load simulation variables
   # Load rStan output for all species_id
   # Diagnostics:
     # Rhat for each parameter and each species
@@ -29,12 +24,14 @@
 ##############################
 ```
 
-```{r}
+```{r, echo = F}
 suppressPackageStartupMessages(library(rstan))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(DT))
 ```
 ```{r load simulations, echo = F}
 # Basic functions
@@ -43,22 +40,47 @@ suppressPackageStartupMessages(library(ggridges))
   unscaleSD <- function(x, max, min) return (x*(max - min))
 #
 
-# Load spIds.RDS file
-  spIds <- readRDS('../data/spIds.RDS')
+
+# Load simulation variables
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
+
+  # species id
+  if(is.null(simInfo$spIds)) {
+    spIds <- readRDS('data/spIds.RDS')
+  }else {
+    spIds <- simInfo$spIds
+  }
+
+  simName <- simInfo$simName
+
+  simulations <- simInfo$simulations
+
+  # Human readble simName
+  sim1name <- 'Sim1: env scaled'
+  sim2name <- 'Sim2: env not scaled'
+
 #
 
 # Load rStan output and scaleInfo for all species_id
   # get output name for each species_id
-  names = list.files(path = '../MCMC/', pattern = '.RDS', recursive = TRUE, full.names = TRUE)
-  output = names[grep('mcmc', names)]
-  scale = names[grep('scaleInfo', names)]
-  # load all outputs
-  fitNames = paste0('fit_', spIds)
-  scaleNames = paste0('scaleInfo_', spIds)
-  for(i in 1:length(spIds)) {
-    assign(fitNames[i], readRDS(output[i]))
-    assign(scaleNames[i], readRDS(scale[i]))
+  simNames = list.files(path = 'output/', pattern = '.RDS', recursive = TRUE, full.names = TRUE)
+  output = simNames[grep('mortMCMC', simNames)]
+  scale = simNames[grep('scaleInfo', simNames)]
+
+  for(sim in simulations) {
+    for(sp in spIds) {
+      fileName <- output[grep(paste0(sim, sp), output)]
+      assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
+    }
   }
+
+  # get name of parameters for each simulation
+  for(sim in simulations)
+  {
+    # get one MCMC file for a specific sim
+    assign(paste0('pars_', sim), rownames(summary(get(ls(pattern = sim)[1]))[[1]]))
+  }
+
 #
 
 ###########################################
@@ -66,90 +88,111 @@ suppressPackageStartupMessages(library(ggridges))
 ###########################################
 ```
 
+
+
 # Rhat
 
-```{r, echo = F, fig.height = 10}
-# Rhat
+```{r, echo = F, fig.height = 6, fig.width = 10}
+
+  # number of parameters for all simulations
+  nbParams <- do.call('*', lapply(as.list(paste0('pars_', simulations)), function(x) length(get(x))))
   # create a table with Rhat for each parameter (clumn) and species_id (Rhat)
-  Rhat <- sapply(fitNames, function(x) summary(get(x))$summary[1:9, 'Rhat'])
-  # boxplot with Rhat variation for each species_id and each parameter
-  par(mfrow = c(2, 1), las = 1, mar = c(3,7,0.5,0.8), mgp = c(1.5, 0.3, 0), tck = -.008)
-  boxplot(Rhat, horizontal = T)
-  boxplot(Rhat, use.cols = F, horizontal = T, xlab = expression(hat('R')))
-#
+  Rhat <- data.frame()
+  count = 1
+  for(sim in simulations) {
+    for(sp  in spIds) {
+      df <- summary(get(paste('fit', sim, sp, sep = '_')))$summary
+      nRow = nrow(df)
+      dfToAdd <- data.frame(rep(sim, nRow), rep(sp, nRow), rownames(df), df[, 'Rhat'], row.names = NULL)
+      Rhat <- rbind(Rhat ,dfToAdd)
+    }
+  }
+  names(Rhat) <- c('sim', 'sp', 'pars', 'Rhat')
+
+  p <- ggplot(data = Rhat, aes(x = sp, y = Rhat)) +
+       geom_boxplot() +
+       coord_flip() +
+       facet_grid(~sim,
+                 labeller = labeller(sim = setNames(c(sim1name,
+                                     sim2name),
+                                     c('sim1', 'sim2')))) +
+       theme_classic()
+  print(p)
 ```
 
-```{r, echo = F}
-# Density plot
 
-  # Parameter names 1 (for plot)
-  newnames <- c(expression(psi), expression("T"["opt"]), expression(paste(sigma, Topt)),
-                expression("P"["opt"]), expression(paste(sigma, Popt)),
-                expression(beta),
-                expression(phi), expression(theta), expression("DBH"["0.01"])
-  )
-  # Parameter names 2 (for data frames)
-  parNames = c('psi', 'Topt', 'sigmaTopt', 'Popt', 'sigmaPopt', 'beta', 'phi', 'theta', 'DBH001')
 
-  # Create one data frame for each parameter with all species array of draws (density values)
-  for(param in 1:9) {
+# Divergent transitions
 
-    # new parameter data frame
-    assign(parNames[param], setNames(data.frame(matrix(numeric(2), ncol = 2)), c('y', 'spId')))
-    assign(parNames[param], get(parNames[param])[-1, ]) # remove first line with 0
+```{r divergent transitions, echo = FALSE}
 
-    for(sp in 1:length(spIds)) {
-      # Extract posterior draws for later use
-      array_of_draws <- as.array(get(fitNames[sp]))
+divergentDF <- data.frame(matrix(NA, ncol = 3))
+names(divergentDF) <- c('sim', 'sp', 'divergent')
 
-      # Unscale T_opt
-      array_of_draws[,,2] <- unscale(array_of_draws[,,2], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
-      array_of_draws[,,3] <- unscaleSD(array_of_draws[,,3], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
+count = 1
+for(sim in simulations) {
+  for(sp in spIds) {
+    simName <- paste('fit', sim, sp, sep = '_')
+    sampler_params <- get_sampler_params(get(simName), inc_warmup = FALSE)
+    nbDivergent <- sum(unlist(lapply(sampler_params, function(mat) mat[, 'divergent__'])))
+    divergentDF[count, ] <- c(sim, sp, nbDivergent)
+    count = count + 1
+  }
+}
+```
 
-      # Unscale P_opt
-      array_of_draws[,,4] <- unscale(array_of_draws[,,4], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
-      array_of_draws[,,5] <- unscaleSD(array_of_draws[,,5], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
+```{r divergent table, echo = FALSE}
+DT::datatable(divergentDF)
+```
 
-      # parameter values (for all chains)
-      parami <- array_of_draws[,,param]
 
-      # merge in the parameter data frame
-        assign(parNames[param], rbind(get(parNames[param]), setNames(data.frame(as.vector(parami), rep(spIds[sp], length(as.vector(parami)))), c('y', 'spId'))))
+
+# Density plot of each parameter by species id
+
+```{r get MCMC sampling data, echo = F}
+  # Prepare data
+  # Data frame with sim, sp_id, pars and value
+  # Value is all MCMC samples after warmup for all chains together
+
+  mcmcSampleDF <- data.frame()
+  for(sim in simulations) {
+    for(sp in spIds) {
+      simObj <- get(paste('fit', sim, sp, sep = '_'))
+      dfToAdd <- gather(as.data.frame(simObj), key = 'pars')
+      dfToAdd <- cbind(data.frame(sim = rep(sim, nrow(dfToAdd)), sp = rep(sp, nrow(dfToAdd))), dfToAdd)
+      mcmcSampleDF <- rbind(mcmcSampleDF, dfToAdd)
     }
   }
 ```
 
-# Density plot
+```{r plot mcmcSample by pars, echo = F, message=FALSE, fig.height = 7, fig.width = 9}
 
-```{r, echo = F}
-
-  # define xlim for each param
-  xlim1 <- c(100, -40, 0, -5000, 0, 0, 0, -0.5, 30)
-  xlim2 <- c(700, 50, 100, 10000, 10000, 2.5, 1.5, 1.1, 300)
-  xlim <- data.frame(xlim1, xlim2)
-
-  # plot
-  for(param in 1:9) {
-    print(
-      ggplot(get(parNames[param]), aes(y, spId)) +
-        geom_density_ridges_gradient() +
-        labs(x = newnames[param]) +
-        xlim(xlim[i, 1], xlim[i, 2])
-    )
+  for(par in unique(mcmcSampleDF$pars))
+  {
+    p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp)) +
+         geom_density_ridges_gradient() +
+         facet_grid(~sim, scales = ifelse(par %in% c("T_opt", "sigmaT_opt", "P_opt", "sigmaP_opt"), 'free_x', 'fixed'),
+                   labeller = labeller(sim = setNames(c('Sim1: Env scaled',
+                                       'Sim2: Env not scaled'),
+                                       c('sim1', 'sim2')))) +
+         theme_classic() +
+         xlab(par)
+    print(p)
   }
-#
 ```
+
+
 
 # Size, temperature, precipitation and competition effect
 
-```{r, echo = F}
+```{r, echo = F, fig.height = 13, fig.width = 9}
 # Plot of size, temperature, precipitation and competition effect
 
   # define functions of the model
     # size effect
-    sizeEffect = function(x, phi, theta, DBH001) {
-      lambda = log(99)/(DBH001 * (1 - theta))
-      return((x/100)^phi/(1 + exp(lambda * (x/10 - theta * DBH001))))
+    sizeEffect = function(x, DBHopt, DBHvar) {
+      lgPart <- (log(x/DBHopt)/DBHvar)^2
+      return( exp(-lgPart))
     }
     # temperature effect
     tempEffect = function(xtemp, T_opt, sigmaT_opt) {
@@ -165,108 +208,171 @@ suppressPackageStartupMessages(library(ggridges))
     }
   #
 
+  ## PLOT ##
 
-  # plot
+  # define x axis
+  sizex = seq(10, 900)
+  tempx = seq(-35, 20)
+  precx = seq(0, 3500)
 
-    # define x axis
-    sizex = seq(10, 900)
-    tempx = seq(-20, 20)
-    precx = seq(0, 2500)
+  # species specfic colours
+  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set1"))
 
-    par(mfrow = c(2, 2), las = 1, mar = c(3,7,0.5,0.8), mgp = c(1.5, 0.3, 0), tck = -.008)
+  par(mfrow = c(4, 2), xaxs = "i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
-    # plot size effect
-      for(sp in 1:length(spIds)) {
-        # species parameters
-        out = summary(get(fitNames[sp]))$summary
-        # plot
-        if(sp == 1) plot(sizex, sizeEffect(sizex, out['phi', 1], out['theta', 1], out['DBH001', 1]), type = 'l', ylim = c(0, 1.5), xlab = 'Size', ylab = 'Size effect', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-        points(sizex, sizeEffect(sizex, out['phi', 1], out['theta', 1], out['DBH001', 1]), type = 'l', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-      }
-
-    # plot temp effect
-      for(sp in 1:length(spIds)) {
-        # unscale parameters
-        topt = unscale(out['T_opt', 1], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
-        sigTopt = unscaleSD(out['sigmaT_opt', 1], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
-
-        out = summary(get(fitNames[sp]))$summary
-
-        if(sp == 1) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', ylim = c(0, 1), xlab = 'Temperature', ylab = 'Temperature effect', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-        points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-      }
-
-    # plot precipitation effect
-      for(sp in 1:length(spIds)) {
-        # unscale parameters
-        popt = unscale(out['P_opt', 1], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
-        sigPopt = unscaleSD(out['sigmaP_opt', 1], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
-
-        out = summary(get(fitNames[sp]))$summary
-
-        if(sp == 1) plot(precx, precEffect(precx, popt, sigPopt), type = 'l', ylim = c(0, 1), xlab = 'Precipiation', ylab = 'Precipiation effect', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-        points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-      }
-
-    # plot canopy effect
+  # plot size effect
+  for(sim in simulations) {
     for(sp in 1:length(spIds)) {
-      out = summary(get(fitNames[sp]))$summary
-
-      if(sp == 1) plot(c(0, 1), c(compEffect(0, out['beta', 1]), 1), xlim = c(-.5, 1.5), ylim = c(0, 2), pch = 8, xlab = 'Canopy status', ylab = 'Competition effect', col = rgb(128, 128, 128, 60,  maxColorValue = 256))
-      points(0, compEffect(0, out['beta', 1]), pch = 8, col = rgb(128, 128, 128, 60,  maxColorValue = 256))
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      # plot
+      if(sp == 1) plot(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]),
+                  type = 'l', ylim = c(0, 1), xlab = 'Size', ylab = 'Size effect',
+                  col = spCols[sp],
+                  yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
+      points(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]), type = 'l', col = spCols[sp])
     }
+    mtext(ifelse(sim == 'sim1', sim1name, sim2name), side = 3, line = 0)
+    if(sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
+  }
 
-  #
-#
+  # plot temp effect
+  for(sim in simulations) {
+    for(sp in 1:length(spIds)) {
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      # unscale parameters for sim1
+      if(sim == 'sim1') {
+        scaleInfo <- readRDS(scale[grep(spIds[sp], scale)])
+        topt <- unscale(out['T_opt', 1], max = scaleInfo[['mean_TP']][['maxTP3']], min = scaleInfo[['mean_TP']][['minTP3']])
+        sigTopt <- unscaleSD(out['sigmaT_opt', 1], max = scaleInfo[['mean_TP']][['maxTP3']], min = scaleInfo[['mean_TP']][['minTP3']])
+      }else {
+        topt <- out['T_opt', 1]
+        sigTopt <- out['sigmaT_opt', 1]
+      }
+
+      if(sp == 1) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
+                  ylim = c(0, 1), xlab = 'Temperature', ylab = 'Temperature effect',
+                  col = spCols[sp],
+                  yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
+      points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = spCols[sp])
+    }
+    if(sim == 'sim1') mtext("Temperature effect", 2, las = 0, cex = .8, line = 1.9)
+  }
+
+  # plot precipitation effect
+  for(sim in simulations) {
+    for(sp in 1:length(spIds)) {
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      # unscale parameters for sim1
+      if(sim == 'sim1') {
+        scaleInfo <- readRDS(scale[grep(spIds[sp], scale)])
+        popt <- unscale(out['P_opt', 1], max = scaleInfo[['tot_PP']][['maxPP3']], min = scaleInfo[['tot_PP']][['minPP3']])
+        sigPopt <- unscaleSD(out['sigmaP_opt', 1], max = scaleInfo[['tot_PP']][['maxPP3']], min = scaleInfo[['tot_PP']][['minPP3']])
+      }else {
+        popt <- out['P_opt', 1]
+        sigPopt <- out['sigmaP_opt', 1]
+      }
+
+      if(sp == 1) plot(precx, precEffect(precx, popt, sigPopt), type = 'l',
+                  ylim = c(0, 1), xlab = 'Precipiation', ylab = 'Precipiation effect',
+                  col = spCols[sp],
+                  yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
+      points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = spCols[sp])
+    }
+    if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
+  }
+
+  # plot canopy effect
+  for(sim in simulations) {
+    for(sp in 1:length(spIds)) {
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+
+      if(sp == 1) plot(c(0, 1), c(compEffect(0, out['beta', 1]), 1), xlim = c(-.5, 1.5),
+      ylim = c(0, 1), pch = 8, xlab = 'Canopy status', ylab = 'Competition effect',
+      col = spCols[sp],
+      yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
+
+      points(0, compEffect(0, out['beta', 1]), pch = 8, col = spCols[sp])
+    }
+    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+  }
+  legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
 ```
+
+
 
 # Predictions
 
-```{r, echo = F, fig.height=3}
+```{r, echo = F}
 # Plot predictions
   # define model
+
   mort_model <- function(param, newdata) {
-    lambda <- log(99)/(param["DBH001"] * (1 - param["theta"]))
-    DexpPhi <- (newdata$D/100)^param["phi"]
+    lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
 
     mort <- 1 / (1 + (param["psi"] * (newdata$CS + (1 - newdata$CS) * param["beta"]) *
                 exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
                 exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-                DexpPhi / (1 + exp(lambda*(newdata$D/10 - param["theta"]*param["DBH001"])))))
+                exp(-lgPart)))
     mort_df <- cbind(mort, newdata)
   }
 
   # data frame with fixed data to run the model
   # Temp
   newdataT <- data.frame(expand.grid(CS = 1,
-                                    TP = seq(-7, 7, length.out = 200),
-                                    PP = 1150,
-                                    D = c(100, 200, 300)))
+                                     TP = seq(-30, 20, length.out = 200),
+                                     PP = 1150,
+                                     D = c(100, 300, 500)))
   # Prec
   newdataP <- data.frame(expand.grid(CS = 1,
-                                    TP = 1.5,
-                                    PP = seq(690, 1500, length.out = 200),
-                                    D = c(100, 200, 300)))
+                                     TP = 1.5,
+                                     PP = seq(200, 2500, length.out = 200),
+                                     D = c(100, 300, 500)))
   # Size
   newdataD <- data.frame(expand.grid(CS = 1,
-                                    TP = 1.5,
-                                    PP = 1150,
-                                    D = seq(80, 750, length.out = 200)))
+                                     TP = 1.5,
+                                     PP = 1150,
+                                     D = seq(10, 900, length.out = 200)))
+
 
   # Function in which you give a rstan output (species_id) and it returns the three plots
-  plot_prediction <- function(spId) {
-    posterior <- rstan::extract(get(spId))
+  plot_prediction <- function(sim, sp, model, data) {
 
-    param_summary <- summary(get(spId), probs = c(0.1, 0.9))$summary
+    # Prepare data
+    newdataT <- data[['newdataT']]
+    newdataP <- data[['newdataP']]
+    newdataD <- data[['newdataD']]
+
+    # simulation
+    fit <- get(paste('fit', sim, sp, sep = '_'))
+
+    # posterior distribution
+    posterior <- rstan::extract(fit)
+
+    param_summary <- summary(fit, probs = c(0.1, 0.9))$summary
     rownames(param_summary) <- names(posterior)
     param_summary <- param_summary[,-c(2:3)]
 
     # Unscale T_opt & P_opt
-    param_summary[2,1:3] <- unscale(param_summary[2,1:3], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
-    param_summary[3,1:3] <- unscaleSD(param_summary[3,1:3], max = get(scaleNames[sp])[['mean_TP']][['maxTP3']], min = get(scaleNames[sp])[['mean_TP']][['minTP3']])
+    if(sim == 'sim1') {
 
-    param_summary[4,1:3] <- unscale(param_summary[4,1:3], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
-    param_summary[5,1:3] <- unscaleSD(param_summary[5,1:3], max = get(scaleNames[sp])[['tot_PP']][['maxPP3']], min = get(scaleNames[sp])[['tot_PP']][['minPP3']])
+      # load scale info
+      si <- readRDS(scale[grep(sp, scale)])
+
+      param_summary[2,1:3] <- unscale(param_summary[2,1:3], max = si[['mean_TP']][['maxTP3']], min = si[['mean_TP']][['minTP3']])
+      param_summary[3,1:3] <- unscaleSD(param_summary[3,1:3], max = si[['mean_TP']][['maxTP3']], min = si[['mean_TP']][['minTP3']])
+
+      param_summary[4,1:3] <- unscale(param_summary[4,1:3], max = si[['tot_PP']][['maxPP3']], min = si[['tot_PP']][['minPP3']])
+      param_summary[5,1:3] <- unscaleSD(param_summary[5,1:3], max = si[['tot_PP']][['maxPP3']], min = si[['tot_PP']][['minPP3']])
+
+    }
 
     # define parameters
     param_mean <- param_summary[-10, 1]
@@ -286,18 +392,16 @@ suppressPackageStartupMessages(library(ggridges))
     mort_ci10D <- mort_model(param = param_ci10, newdata = newdataD)
     mort_ci90D <- mort_model(param = param_ci90, newdata = newdataD)
 
-    # get ylims
-    morts = c(mort_ci10T$mort, mort_ci90T$mort, mort_ci10P$mort, mort_ci90P$mort, mort_ci10D$mort, mort_ci90D$mort)
-    ylim = c(min(morts), max(morts))
-
-    size2plot <- c(100, 200, 300)
+    size2plot <- unique(newdataT$D)
     colsize <- rev(RColorBrewer::brewer.pal(length(size2plot) + 1, "PuBuGn"))
 
-    par(mfrow = c(1, 3), xaxs="i", las = 1, mar = c(3, 1, 3, .1), oma = c(1,3.5,2,.6), mgp = c(1.5, 0.3, 0), tck = -.008)
+    if(sim == 'sim1')
+      par(mfcol = c(3, 2), xaxs="i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
     # Mortality vs temperature
     plot(mort ~ TP, mort_ci10T, type = "n", ylim = c(0, 1),
-         xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2)
+         xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
+    if(sim == 'sim2') axis(2,labels=F)
 
     for(dhp in size2plot) {
       mu <- subset(mort_meanT, D==dhp)
@@ -310,13 +414,16 @@ suppressPackageStartupMessages(library(ggridges))
               c(ci10$mort, rev(ci90$mort)),
               col = alpha(mycol, 0.5), border = NA)
     }
-    mtext("P(Mortality)", 2, outer = T, las = 0, cex = .8, line = 1.5)
-    legend("topleft", legend=size2plot, title = "Tree DHP",
-           fill = colsize[1:3], bty = "n", border = "transparent")
+    if(sim == 'sim1')
+      legend("topleft", legend=size2plot, title = "Tree DHP",
+             fill = colsize[1:3], bty = "n", border = "transparent")
+
+     mtext(ifelse(sim == 'sim1', sim1name, sim2name), side = 3, line = 0)
+     mtext(sp, side = 3, outer = TRUE, cex = 1, line = -2)
 
     # Mortality vs precipitation
     plot(mort ~ PP, mort_ci10P, type = "n", ylim = c(0, 1),
-         xlab = "Precipiation (mm)", ylab = " ", yaxt="n", cex.lab = 1.2)
+         xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2,labels=F)
     for(dhp in size2plot) {
       mu <- subset(mort_meanP, D==dhp)
@@ -329,23 +436,65 @@ suppressPackageStartupMessages(library(ggridges))
               c(ci10$mort, rev(ci90$mort)),
               col = alpha(mycol, 0.5), border = NA)
     }
-
-    mtext(spIds[sp], side = 3, cex = 0.8)
+    mtext("P(Mortality)", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
     # Mortality vs size
     plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
-         xlab = "DHP (mm)", ylab = "", yaxt="n", cex.lab = 1.2)
+         xlab = "DHP (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2,labels=F)
     lines(mort ~ D, mort_meanD, cex=.5, pch=19, col = "grey25")
     polygon(c(mort_meanD$D, rev(mort_meanD$D)),
               c(mort_ci10D$mort, rev(mort_ci90D$mort)),
               col = alpha("grey25", 0.1), border = NA)
-  }
 
+  }
+  ```
+
+  ```{r plot predictions,echo=FALSE,fig.height = 11, fig.width = 9}
   # plot all species
-    for(sp in 1:length(fitNames)) {
-      plot_prediction(fitNames[sp])
+  for(sp in spIds) {
+    for(sim in simulations) {
+      plot_prediction(sim, sp, mort_model,
+      data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD))
     }
+  }
   #
 #
+```
+
+
+
+# Sampling time
+
+```{r sampling time, echo = FALSE}
+
+samplingDF <- data.frame()
+
+for(sim in simulations) {
+  for(sp in spIds) {
+    simName <- paste('fit', sim, sp, sep = '_')
+    sumTime <- rowSums(get_elapsed_time(get(simName)))
+    nChain <- length(sumTime)
+    df1 <- data.frame(sim = rep(sim, nChain),
+                     sp = rep(sp, nChain),
+                     time = sumTime)
+    samplingDF <- rbind(samplingDF, df1)
+  }
+}
+
+samplingDF$time <- samplingDF$time/60/60
+```
+
+```{r plot sampling time, echo = FALSE, fig.height = 6, fig.width = 12}
+
+p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
+      geom_boxplot() +
+      #coord_flip() +
+      facet_grid(~sp,
+                labeller = labeller(sim = setNames(c(sim1name,
+                                    sim2name),
+                                    c('sim1', 'sim2')))) +
+      theme_classic() +
+      ylab('Time (h)')
+print(p)
 ```

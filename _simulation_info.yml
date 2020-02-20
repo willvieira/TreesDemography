@@ -7,19 +7,23 @@ vitalRates: ["mort"]
 # Max interation in the MCMC
 maxIter: 15000
 # Number of cores and chains (to be ran in parallel)
-nC: 5
+nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "simulationName"
+simName: "envirScaled"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1", "sim2", "etc..."]
+simulations: ["sim1", "sim2"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - version
+## Mortality test - v1.0
 
-## DESCRIPTION OF THE VERSION
+## Testing whereas I should scale or not the following two enviromental variables:
+## min_temp_coldest_period_lag and tot_pp_period3_lag
+
+# sim1: scaled
+# sim2: not scaled
