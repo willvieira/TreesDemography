@@ -1,0 +1,19 @@
+---
+ title: "Trees demography"
+ subtitle: "Bayesian models to predict trees vital rates"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+# Tests
+
+## Mortality
+
+- Environment scaled ([link](https://willvieira.github.io/TreesDemography/mort/envirScaled.html))
+
+- Bernoulli vectorized ([link](https://willvieira.github.io/TreesDemography/mort/bernVectorized.html))
+
+## Growth
+
+
+## Fecundity
