@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v1.0 - enviroment scaled"
+ subtitle: "Test v2.0 - bernoulli vectorized"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -153,8 +153,8 @@ DT::datatable(divergentDF)
     p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp)) +
          geom_density_ridges_gradient() +
          facet_grid(~sim, scales = ifelse(par %in% c("T_opt", "sigmaT_opt", "P_opt", "sigmaP_opt"), 'free_x', 'fixed'),
-                   labeller = labeller(sim = setNames(c('Sim1: Env scaled',
-                                       'Sim2: Env not scaled'),
+                   labeller = labeller(sim = setNames(c(sim1name,
+                                       sim2name),
                                        c('sim1', 'sim2')))) +
          theme_classic() +
          xlab(par)
