@@ -10,6 +10,7 @@ cat('####### cleaning raw data #######\n')
 ##############################
 # Steps:
   # Load data
+  # Calculate basal area (plot and species level)
   # Remove some problematic species
   # Remove individuals with climate NA
   # Remove character `-` in species_id's
@@ -66,12 +67,54 @@ suppressPackageStartupMessages(library(dplyr))
 
 
 
+
+# calculate basal area total and by species_id
+# remove plots with basal area larger than 400 m2/ha
+
+
+# calculate basal area of plot for all species (BA) and by species_id (BA_sp)
+
+  # First remove plot_ids with more than one measures of plot_size
+  treeData[, ln_plotSize := length(unique(plot_size)), by = plot_id]
+  treeData <- treeData[ln_plotSize == 1]
+  treeData[, ln_plotSize := NULL]
+
+  # individual basal area
+  treeData[, indBA := pi * (dbh^2) / 4000000]
+
+  # plot basal area
+  # calculate plot basal area (BA in m2/ha)
+  treeData[is_dead == 'f', BA := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id)]
+
+  # remove plot_id in which basal area was higher than 400 m2/ha
+  # because there are NA in the BA column, just filter BA < 400 removes the NA rows which I wanna keep
+  # Quick & durty: get all NA and all BA < 400 separeted
+  # Check with treeData[tree_id == 8762761]
+  naBA <- which(is.na(treeData$BA))
+  less400 <- which(treeData$BA <400)
+  treeData <- treeData[sort(c(naBA, less400))]
+
+  # species basal area per plot (BA_sp) as a proxy of seed source
+  treeData[is_dead == 'f', BA_sp := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id, species_id)]
+
+#
+
+
+
 # remove some species_id
 
   # first three species has been measured only once and has therefore no transition
   # fourth one has too few transitions so glm did not converge
   # next five species did not have any mortality event (should I remove?)
-  species_idToRemove = c("181824-ABI-AMA", "NA-CHA-NOO", "183309-PIC-SIT", "194855-JUN-OCC", "18044-THU-PLI", "183400-TSU-HET", "183402-TSU-MER", "183417-LAR-OCC", "26879-PRO-GLA")
+  species_idToRemove = c("181824-ABI-AMA",
+                         "NA-CHA-NOO",
+                         "183309-PIC-SIT",
+                         "194855-JUN-OCC",
+                         "18044-THU-PLI",
+                         "183400-TSU-HET",
+                         "183402-TSU-MER",
+                         "183417-LAR-OCC",
+                         "26879-PRO-GLA")
   treeData = treeData[!(species_id %in% species_idToRemove)]
 
 #
@@ -224,9 +267,6 @@ suppressPackageStartupMessages(library(dplyr))
   mort_dt[, dbh0 := dbh1 - dbhIncr]
   mort_dt[, year0 := year1 - deltaYear]
 
-  # reorganize data frame
-  mort_dt = mort_dt[, c(1:3, 26, 4, 25, 5, 15, 16, 13, 14, 6, 12, 7:11, 17:24)]
-
   # Remove first line of each tree_id as its information is passed for the next line
   mort_dt = mort_dt[!is.na(deltaYear), ]
 
@@ -254,7 +294,7 @@ suppressPackageStartupMessages(library(dplyr))
 
 # Checks (here two tree_ids that should not be in the data base anymore following the above cleaning)
 
-  # this tree_id most have only two lines
+  # this tree_id must have only two lines
   ifelse(dim(mort_dt[tree_id == 8762761])[1] == 2, NA, stop('CKECK FAIL - There was a problem cleaning the data: trees must have only one dead event'))
 
   # tree with more than one dead events
@@ -301,8 +341,17 @@ suppressPackageStartupMessages(library(dplyr))
   treeData = treeData[toKeep == TRUE]
   treeData[, toKeep := NULL]
 
-  fec_dt = treeData[nbMeasure == 1]
+  # get recruitments only
+  #fec_dt = treeData[nbMeasure == 1]
 
+  # calculate number of recruitments/plot/year
+  treeData[, nbRecruit := sum(nbMeasure == 1), by = list(year_measured, plot_id)]
+
+  # calculate recruitment in basal area/plot/year
+  fec_dt <- treeData[, BARecruit := sum(indBA[nbMeasure == 1]) * 1e4/plot_size, by = list(year_measured, plot_id)]
+
+  # remove NAs of BA
+  fec_dt <- fec_dt[!is.na(BA)]
 #
 
 

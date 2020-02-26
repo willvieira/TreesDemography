@@ -93,29 +93,6 @@ set.seed(42)
 
 
 
-## scale TP and PP variables
-
-  scl <- function(x) {
-    (x - min(x))/(max(x) - min(x))
-  }
-
-  mort_dt[, ("min_TP_sc"):= scl(min_temp_coldest_period_lag)]
-  mort_dt[, ("tot_PP3_sc"):= scl(tot_pp_period3_lag)]
-
-  # save scaled info to unscale later
-  maxTP3 <- max(mort_dt$min_temp_coldest_period_lag)
-  minTP3 <- min(mort_dt$min_temp_coldest_period_lag)
-  maxPP3 <- max(mort_dt$tot_pp_period3_lag)
-  minPP3 <- min(mort_dt$tot_pp_period3_lag)
-
-  saveRDS(list(mean_TP = list(maxTP3 = maxTP3, minTP3 = minTP3),
-          tot_PP = list(maxPP3 = maxPP3, minPP3 = minPP3)),
-          "output/scaleInfo_mort.RDS")
-
-##
-
-
-
 ## run the model
 
   model <- stan_model(file = "../../stan/mortality_sim1.stan")
@@ -123,8 +100,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = mort_dt[, .N],
-          T_data = mort_dt$min_TP_sc,
-          P_data = mort_dt$tot_PP3_sc,
+          T_data = mort_dt$min_temp_coldest_period_lag,
+          P_data = mort_dt$tot_pp_period3_lag,
           D_data = mort_dt$dbh0,
           C_data = mort_dt$canopyStatus,
           time_interv = mort_dt$deltaYear,
