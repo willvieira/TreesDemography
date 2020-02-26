@@ -1,0 +1,11 @@
+name: "WillVieira"
+navbar:
+  title: "Trees demography"
+  type: inverse
+  left:
+    - text: "Home"
+      icon: fa-home
+      href: https://willvieira.github.io/TreesDemography/index.html
+  right:
+    - icon: fa-github fa-lg
+      href: https://github.com/willvieira/TreesDemography
