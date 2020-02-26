@@ -350,6 +350,8 @@ suppressPackageStartupMessages(library(dplyr))
   # calculate recruitment in basal area/plot/year
   fec_dt <- treeData[, BARecruit := sum(indBA[nbMeasure == 1]) * 1e4/plot_size, by = list(year_measured, plot_id)]
 
+  # remove NAs of BA
+  fec_dt <- fec_dt[!is.na(BA)]
 #
 
 
