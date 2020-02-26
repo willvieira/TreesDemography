@@ -1,7 +1,6 @@
 name: "WillVieira"
 navbar:
   title: "Trees demography"
-  type: inverse
   left:
     - text: "Home"
       icon: fa-home
@@ -9,3 +8,9 @@ navbar:
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    toc_depth: 2
