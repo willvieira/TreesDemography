@@ -88,10 +88,10 @@ suppressPackageStartupMessages(library(dplyr))
 
   # remove plot_id in which basal area was higher than 400 m2/ha
   # because there are NA in the BA column, just filter BA < 400 removes the NA rows which I wanna keep
-  # Quick & durty: get all NA and all BA < 400 separeted
+  # Quick & dirty: get all NA and all BA < 400 separeted
   # Check with treeData[tree_id == 8762761]
   naBA <- which(is.na(treeData$BA))
-  less400 <- which(treeData$BA <400)
+  less400 <- which(treeData$BA < 400)
   treeData <- treeData[sort(c(naBA, less400))]
 
   # species basal area per plot (BA_sp) as a proxy of seed source
@@ -321,28 +321,59 @@ suppressPackageStartupMessages(library(dplyr))
 
 # fecundity (all individuals entering the population)
 
-  # function to get plot_id in which there is nbMeasure > 1
-  # Because I want to eliminate plots in which have been measured only once
-  # So I do not overestimate individuals "arriving" in the population (nbMeasure == 1)
-  getPlotPlusOne <- function(x) {
-    unique_id <- unique(x)
-    if(length(unique_id) > 1) {
-      return (TRUE)
+  # Remove plot_id with only one year_measured
+  # Number of measures by plot_id
+  treeData[, nbYear_measured := length(unique(year_measured)), by = plot_id]
+  # keep plots with more than one measures (so I can quantify recruitment number)
+  treeData <- treeData[nbYear_measured > 1]
+
+  # NUmber of measures by tree_id
+  treeData[, nbMeasure_treeId := length(unique(year_measured)), by = tree_id]
+
+  # function to define if measurement is a recruit or not
+  isRecruit <- function(year_measured, nbYear_measured, nbMeasure_treeId) {
+
+    # check if tree_id was measured all the time
+    if(nbMeasure_treeId == nbYear_measured)  {
+
+      # if true no measure is a recruit
+      return ( rep(0, nbMeasure_treeId) )
+
+    } else if()
+
+    # check if year is sorted
+    if(identical(year_measured, sort(year_measured))) {
+
+
+      # return vector of 1 for first measure and 0 for the rest of measures
+      if
+      return ( c(1, rep(0, ln - 1)) )
+
     }else {
-      if(unique_id != 1) {
-        return (TRUE)
-      }else {
-        return (FALSE)
-      }
+      stop('year_measured is not sorted')
+    }
+
+  }
+
+  firstMeasure <- function(year_measured) {
+
+    ln <- length(year_measured)
+
+    # check if year is sorted
+    if(identical(year_measured, sort(year_measured))) {
+
+      # return vector of 1 for first measure and 0 for the rest of measures
+      if
+      return ( c(1, rep(0, ln - 1)) )
+
+    }else {
+      stop('year_measured is not sorted')
     }
   }
 
-  treeData[, toKeep := getPlotPlusOne(nbMeasure), by = plot_id]
-  treeData = treeData[toKeep == TRUE]
-  treeData[, toKeep := NULL]
+  treeData[, isRecruit := firstMeasure(year_measured), by = tree_id]
 
-  # get recruitments only
-  #fec_dt = treeData[nbMeasure == 1]
+
 
   # calculate number of recruitments/plot/year
   treeData[, nbRecruit := sum(nbMeasure == 1), by = list(year_measured, plot_id)]
@@ -352,10 +383,31 @@ suppressPackageStartupMessages(library(dplyr))
 
   # remove NAs of BA
   fec_dt <- fec_dt[!is.na(BA)]
-  
+
 #
 
 
+ # TODO
+ # - nbMeasure == 1 for regeneration is really not appropriated. Think in a new column to assign the first measure of an individual
+  # - By tree_id, quantify the number of measuremnts times. Like three times, 1, 2 and 3 for each measurement
+ # - Figure out if it's a good idea to remove NA of BA now
+ # - I believe it it's a good idea to put here the part of the code preparing for the random forest
+ # - organize everything in a transition way, so I can add a delayed measure of BA and BA_sp
+ # - Think about the Dom's problem. Negative correlation between competition and seed source
+ # - Separete random forest by shade torance. I believe it won't be the same predictors driving regeneration
+
+treeData[plot_id == 685863]
+x=treeData[plot_id == 686405]
+
+uY <- unique(x$year_measured)
+x[year_measured == uY[1], isRecruit := 0]
+
+for(count in 2:length(uY))
+{
+  tId <- x[year_measured == uY[count], unique(tree_id)][!x[year_measured == uY[count], unique(tree_id)] %in% x[year_measured == uY[count - 1], unique(tree_id)]]
+  x[year_measured == uY[count] & tree_id %in% tId]$isRecruit <- 1
+  x[year_measured == uY[count] & is.na(isRecruit)] <- 0
+}
 
 ########################
 # For all vital rates
