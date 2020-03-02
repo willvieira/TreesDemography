@@ -12,6 +12,8 @@ navbar:
           href: mort/envirScaled.html
         - text: "Bernoulli vectorized"
           href: mort/bernVectorized.html
+        - text: "Growth rate effect"
+          href: mort/growthRateEffect.html
     - text: "Growth"
       icon: fa-tree
       menu:

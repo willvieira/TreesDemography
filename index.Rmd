@@ -13,6 +13,9 @@
 
 - Bernoulli vectorized ([link](https://willvieira.github.io/TreesDemography/mort/bernVectorized.html))
 
+- Growth rate effect ([link](https://willvieira.github.io/TreesDemography/mort/growthRateEffect.html))
+
+
 ## Growth
 
 
