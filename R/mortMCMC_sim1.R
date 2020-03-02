@@ -102,7 +102,7 @@ set.seed(42)
           N = mort_dt[, .N],
           T_data = mort_dt$min_temp_coldest_period_lag,
           P_data = mort_dt$tot_pp_period3_lag,
-          D_data = mort_dt$dbh0,
+          G_data = mort_dt$growth,
           C_data = mort_dt$canopyStatus,
           time_interv = mort_dt$deltaYear,
           Y = mort_dt$mort)
@@ -118,7 +118,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("lgSq", "M_d", "mortL"))
+                         pars = c("M_d", "mortL"))
 
 ##
 

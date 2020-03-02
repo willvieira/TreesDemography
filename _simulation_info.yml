@@ -11,7 +11,7 @@ nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "bernVectorized"
+simName: "growthRateEffect"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,10 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v2.0
+## Mortality test - v3.0
 
-## Testing if it is possible to vectorize the bernoulli distribution:
+## Test the effect of growth rate instead of size as predictor of mortality rate.
+## Growth rate effect will be tested using two different functions:
 
-# sim1: vectorized
-# sim2: not vectorized
+# sim1: functional reponse type II (https://en.wikipedia.org/wiki/Functional_response)
+# sim2: Generalized logistic function (https://en.wikipedia.org/wiki/Generalised_logistic_function)

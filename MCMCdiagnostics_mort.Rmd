@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v2.0 - bernoulli vectorized"
+ subtitle: "Test v3.0 - growth rate effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -38,8 +38,8 @@ suppressPackageStartupMessages(library(DT))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'Sim1: bernoulli vectorized'
-  sim2name <- 'Sim2: bernoulli not vectorized'
+  sim1name <- 'sim1: functional reponse type II'
+  sim2name <- 'sim2: Generalized logistic function'
 
 #
 
@@ -171,28 +171,44 @@ DT::datatable(divergentDF)
 
   # define functions of the model
     # size effect
-    sizeEffect = function(x, DBHopt, DBHvar) {
-      lgPart <- (log(x/DBHopt)/DBHvar)^2
-      return( exp(-lgPart))
+    growthRateEffect = function(x, sim, out) {
+
+      # sim1: function response type II
+      if(sim == 'sim1')
+      {
+        return( (0.0001 + (out['Alpha', 1] * x)) / (1 + (out['Alpha', 1] * x)) )
+
+      # sim2: Generalized logistic function
+      }else if(sim == 'sim2')
+      {
+        return( out['Lo', 1] + ((1 - out['Lo', 1]) / (1 + exp(-0.5 * (x - out['Mid', 1])))) )
+
+      }else {
+        stop('Sim must be either `sim1` or `sim2`')
+      }
     }
+
     # temperature effect
     tempEffect = function(xtemp, T_opt, sigmaT_opt) {
       return(exp(-0.5*(xtemp - T_opt)^2/sigmaT_opt^2))
     }
+
     # precipitation effect
     precEffect = function(xprec, P_opt, sigmaP_opt) {
       return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
     }
+
     # competition effect
     compEffect = function(canopy, beta) {
       return(canopy + (1 - canopy)*beta)
     }
+
   #
 
   ## PLOT ##
 
   # define x axis
-  sizex = seq(10, 900)
+  growthRate = seq(0, 35, length.out = 100)
   tempx = seq(-35, 20)
   precx = seq(0, 3500)
 
@@ -201,21 +217,21 @@ DT::datatable(divergentDF)
 
   par(mfrow = c(4, 2), xaxs = "i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
-  # plot size effect
+  # plot growth rate effect
   for(sim in simulations) {
     for(sp in 1:length(spIds)) {
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
       # plot
-      if(sp == 1) plot(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]),
-                  type = 'l', ylim = c(0, 1), xlab = 'Size', ylab = 'Size effect',
+      if(sp == 1) plot(growthRate, growthRateEffect(growthRate, sim, out),
+                  type = 'l', ylim = c(0, 1), xlab = 'Growth rate (mm/year)', ylab = 'Growth rate effect',
                   col = spCols[sp],
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
-      points(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]), type = 'l', col = spCols[sp])
+      points(growthRate, growthRateEffect(growthRate, sim, out), type = 'l', col = spCols[sp])
     }
     mtext(ifelse(sim == 'sim1', sim1name, sim2name), side = 3, line = 0)
-    if(sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
+    if(sim == 'sim1') mtext("Growth rate effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
   # plot temp effect
@@ -227,7 +243,7 @@ DT::datatable(divergentDF)
       sigTopt <- out['sigmaT_opt', 1]
 
       if(sp == 1) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
-                  ylim = c(0, 1), xlab = 'Temperature', ylab = 'Temperature effect',
+                  ylim = c(0, 1), xlab = 'Temperature (°C)', ylab = 'Temperature effect',
                   col = spCols[sp],
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
@@ -245,7 +261,7 @@ DT::datatable(divergentDF)
       sigPopt <- out['sigmaP_opt', 1]
 
       if(sp == 1) plot(precx, precEffect(precx, popt, sigPopt), type = 'l',
-                  ylim = c(0, 1), xlab = 'Precipiation', ylab = 'Precipiation effect',
+                  ylim = c(0, 1), xlab = 'Precipiation (mm)', ylab = 'Precipiation effect',
                   col = spCols[sp],
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
@@ -281,13 +297,22 @@ DT::datatable(divergentDF)
 # Plot predictions
   # define model
 
-  mort_model <- function(param, newdata) {
-    lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
+  mort_model <- function(param, sim, newdata) {
+
+    # which function?
+    if(sim == 'sim1')
+    {
+      sizeEffect <- (0.0001 + (param['Alpha'] * newdata$G)) / (1 + (param['Alpha'] * newdata$G))
+
+    }else if(sim == 'sim2')
+    {
+      sizeEffect <- param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (newdata$G - param['Mid']))))
+    }
 
     mort <- 1 / (1 + (param["psi"] * (newdata$CS + (1 - newdata$CS) * param["beta"]) *
                 exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
                 exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-                exp(-lgPart)))
+                sizeEffect))
     mort_df <- cbind(mort, newdata)
   }
 
@@ -296,17 +321,17 @@ DT::datatable(divergentDF)
   newdataT <- data.frame(expand.grid(CS = 1,
                                      TP = seq(-30, 20, length.out = 200),
                                      PP = 1150,
-                                     D = c(100, 300, 500)))
+                                     G = c(5, 10, 20)))
   # Prec
   newdataP <- data.frame(expand.grid(CS = 1,
                                      TP = 1.5,
                                      PP = seq(200, 2500, length.out = 200),
-                                     D = c(100, 300, 500)))
-  # Size
-  newdataD <- data.frame(expand.grid(CS = 1,
+                                     G = c(5, 10, 20)))
+  # growth rate
+  newdataG <- data.frame(expand.grid(CS = 1,
                                      TP = 1.5,
                                      PP = 1150,
-                                     D = seq(10, 900, length.out = 200)))
+                                     G = seq(0, 35, length.out = 200)))
 
 
   # Function in which you give a rstan output (species_id) and it returns the three plots
@@ -315,7 +340,7 @@ DT::datatable(divergentDF)
     # Prepare data
     newdataT <- data[['newdataT']]
     newdataP <- data[['newdataP']]
-    newdataD <- data[['newdataD']]
+    newdataG <- data[['newdataG']]
 
     # simulation
     fit <- get(paste('fit', sim, sp, sep = '_'))
@@ -333,19 +358,19 @@ DT::datatable(divergentDF)
     param_ci90 <- param_summary[-10, 3]
 
     # get predictions
-    mort_meanT <- mort_model(param = param_mean, newdata = newdataT)
-    mort_ci10T <- mort_model(param = param_ci10, newdata = newdataT)
-    mort_ci90T <- mort_model(param = param_ci90, newdata = newdataT)
+    mort_meanT <- mort_model(param = param_mean, sim = sim, newdata = newdataT)
+    mort_ci10T <- mort_model(param = param_ci10, sim = sim, newdata = newdataT)
+    mort_ci90T <- mort_model(param = param_ci90, sim = sim, newdata = newdataT)
 
-    mort_meanP <- mort_model(param = param_mean, newdata = newdataP)
-    mort_ci10P <- mort_model(param = param_ci10, newdata = newdataP)
-    mort_ci90P <- mort_model(param = param_ci90, newdata = newdataP)
+    mort_meanP <- mort_model(param = param_mean, sim = sim, newdata = newdataP)
+    mort_ci10P <- mort_model(param = param_ci10, sim = sim, newdata = newdataP)
+    mort_ci90P <- mort_model(param = param_ci90, sim = sim, newdata = newdataP)
 
-    mort_meanD <- mort_model(param = param_mean, newdata = newdataD)
-    mort_ci10D <- mort_model(param = param_ci10, newdata = newdataD)
-    mort_ci90D <- mort_model(param = param_ci90, newdata = newdataD)
+    mort_meanG <- mort_model(param = param_mean, sim = sim, newdata = newdataG)
+    mort_ci10G <- mort_model(param = param_ci10, sim = sim, newdata = newdataG)
+    mort_ci90G <- mort_model(param = param_ci90, sim = sim, newdata = newdataG)
 
-    size2plot <- unique(newdataT$D)
+    size2plot <- unique(newdataT$G)
     colsize <- rev(RColorBrewer::brewer.pal(length(size2plot) + 1, "PuBuGn"))
 
     if(sim == 'sim1')
@@ -357,10 +382,10 @@ DT::datatable(divergentDF)
     if(sim == 'sim2') axis(2,labels=F)
 
     for(dhp in size2plot) {
-      mu <- subset(mort_meanT, D==dhp)
-      ci10 <- subset(mort_ci10T, D==dhp)
-      ci90 <- subset(mort_ci90T, D==dhp)
-      mycol <- colsize[size2plot==dhp]
+      mu <- subset(mort_meanT, G == dhp)
+      ci10 <- subset(mort_ci10T, G == dhp)
+      ci90 <- subset(mort_ci90T, G == dhp)
+      mycol <- colsize[size2plot == dhp]
 
       lines(mort ~ TP, mu, cex=.5, pch=19, col = mycol)
       polygon(c(mu$TP, rev(mu$TP)),
@@ -368,7 +393,7 @@ DT::datatable(divergentDF)
               col = alpha(mycol, 0.5), border = NA)
     }
     if(sim == 'sim1')
-      legend("topleft", legend=size2plot, title = "Tree DHP",
+      legend("topleft", legend=size2plot, title = "Growth rate",
              fill = colsize[1:3], bty = "n", border = "transparent")
 
      mtext(ifelse(sim == 'sim1', sim1name, sim2name), side = 3, line = 0)
@@ -379,10 +404,10 @@ DT::datatable(divergentDF)
          xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2,labels=F)
     for(dhp in size2plot) {
-      mu <- subset(mort_meanP, D==dhp)
-      ci10 <- subset(mort_ci10P, D==dhp)
-      ci90 <- subset(mort_ci90P, D==dhp)
-      mycol <- colsize[size2plot==dhp]
+      mu <- subset(mort_meanP, G == dhp)
+      ci10 <- subset(mort_ci10P, G == dhp)
+      ci90 <- subset(mort_ci90P, G == dhp)
+      mycol <- colsize[size2plot == dhp]
 
       lines(mort ~ PP, mu, cex=.5, pch=19, col = mycol)
       polygon(c(mu$PP, rev(mu$PP)),
@@ -392,12 +417,12 @@ DT::datatable(divergentDF)
     mtext("P(Mortality)", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
     # Mortality vs size
-    plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
-         xlab = "DHP (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+    plot(mort ~ G, mort_ci10G, type = "n", ylim = c(0, 1),
+         xlab = "Growth rate (mm/year)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2,labels=F)
-    lines(mort ~ D, mort_meanD, cex=.5, pch=19, col = "grey25")
-    polygon(c(mort_meanD$D, rev(mort_meanD$D)),
-              c(mort_ci10D$mort, rev(mort_ci90D$mort)),
+    lines(mort ~ G, mort_meanG, cex=.5, pch=19, col = "grey25")
+    polygon(c(mort_meanG$G, rev(mort_meanG$G)),
+              c(mort_ci10G$mort, rev(mort_ci90G$mort)),
               col = alpha("grey25", 0.1), border = NA)
 
   }
@@ -408,7 +433,7 @@ DT::datatable(divergentDF)
   for(sp in spIds) {
     for(sim in simulations) {
       plot_prediction(sim, sp, mort_model,
-      data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD))
+      data = list(newdataT = newdataT, newdataP = newdataP, newdataG = newdataG))
     }
   }
   #

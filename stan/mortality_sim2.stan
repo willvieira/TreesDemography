@@ -23,7 +23,7 @@ data
 	vector<lower = -35, upper = 10>[N] T_data; // temperature, E data
 	vector<lower = 60, upper = 1700>[N] P_data; // Precipitation, E data
 	vector<lower = 0, upper = 1>[N] C_data; // canopy, E data
-	vector<lower = 0>[N] D_data; // diameter, I data
+	vector<lower = 0, upper = 40>[N] G_data; // diameter, I data
 	vector<lower = 0>[N] time_interv; // time between inventories
 	int Y[N];
 }
@@ -38,23 +38,19 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 0, upper = 3000> P_opt; // Optimum precipitation of each species
 	real<lower = 0, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = 0, upper = 4> beta;
+	real<lower = 0, upper = 4> beta; // competition effect [0 - 1]
 
-	real<lower = 0, upper = 1000> DBHopt;
-	real<lower = 0, upper = 13> DBHvar;
+	real<lower = 0, upper = 1> Lo; // the lower asymptote
+	real<lower = -10, upper = 40> Mid; // place where maximum growth rate is reached
+
 }
 
 transformed parameters
 {
 
 	// define the variables
-	vector[N] lgSq;
 	vector[N] M_d;
 	vector[N] mortL;
-
-	// part of the size effect function
-	for (i in 1:N)
-		lgSq[i] = pow(log(D_data[i]/DBHopt)/DBHvar, 2);
 
 	// complete model
 	M_d =
@@ -67,7 +63,7 @@ transformed parameters
 	.*
 	exp(-0.5*(P_data - P_opt).*(P_data - P_opt)/sigmaP_opt^2)
 	.*
-	exp(-lgSq)));
+	(Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (G_data - Mid)))))));
 
 	// mortality dependent on time interval
 	mortL = mortalityPerYear(N, M_d, time_interv);
@@ -85,11 +81,9 @@ model
 
 	beta ~ gamma(0.7^2/0.2, 0.7/0.2);
 
-	DBHopt ~ normal(200, 200);
-	DBHvar ~ uniform(0, 13);
+	Lo ~ uniform(0, 1);
+	Mid ~ uniform(-10, 40);
 
 	// mortality model
-	for (n in 1:N) {
-		Y[n] ~ bernoulli(mortL[n]);
-	}
+	Y ~ bernoulli(mortL);
 }
