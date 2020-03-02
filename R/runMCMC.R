@@ -55,6 +55,7 @@ cat('####### Sending batch submission MCMC #######\n')
     # for each species_id:
     dir <- 'MCMC/'
 
+    count = 1
     for(sim in simulations)
     {
       for(sp in spIds)
@@ -69,7 +70,8 @@ cat('####### Sending batch submission MCMC #######\n')
         # return to the main directory
         setwd('../../')
 
-        cat('  Submitting batch for', sp, '(', which(spIds == sp), 'of', length(spIds), ')', '\r')
+        cat('  Submitting batch job', count, 'of', length(spIds) * length(sim), '\r')
+        count = count + 1
       }
     }
   }else {
