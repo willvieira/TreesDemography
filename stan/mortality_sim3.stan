@@ -40,6 +40,7 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 
 	real<lower = 0, upper = 2> beta; // competition effect [0 - 1]
 
+	real<lower = 0.2, upper = 2> gamma; // growth rate of logistic function
 	real<lower = -12, upper = 50> Mid; // place where maximum growth rate is reached
 
 }
@@ -62,7 +63,7 @@ transformed parameters
 	.*
 	exp(-0.5*(P_data - P_opt).*(P_data - P_opt)/sigmaP_opt^2)
 	.*
-	((1 ./ (1 + exp(-0.5 * (G_data - Mid)))))));
+	((1 ./ (1 + exp(-gamma * (G_data - Mid)))))));
 
 	// mortality dependent on time interval
 	mortL = mortalityPerYear(N, M_d, time_interv);
@@ -80,6 +81,7 @@ model
 
 	beta ~ gamma(0.7^2/0.2, 0.7/0.2);
 
+	gamma ~ uniform(0.2, 2);
 	Mid ~ uniform(-12, 50);
 
 	// mortality model
