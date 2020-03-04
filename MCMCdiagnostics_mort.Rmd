@@ -1,18 +1,19 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v3.1 - growth rate effect"
+ subtitle: "Test v4.0 - canopy continuous"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Test the effect of growth rate instead of size as predictor of mortality rate.
-### Growth rate effect following the Generalized logistic function
+## Test a continuous measure of canopy position to infer competition
+### Instead of using canopyStatus (TRUE/FALSE), I use here the canopyDistance which is the continuous difference between the tree height and s_star
 
-- sim1: gls with Lo and Mid parameters (the same as v3.0 but with psi and beta with more strict distribution)
-- sim2: gls with Lo fixed at 0 and Mid parameters larger than sim1
-- sim3: gls with Lo fixed at 0, Mid varying larger than sim1, and growth rate (gamma) varying
+Using the [Generalized logistic Function](https://en.wikipedia.org/wiki/Generalised_logistic_function) with positive growth rate only:
 
+- **sim1**: $Upper$ = 1; $Lower$ = 0; $Beta$ = 0.5; $Mid$ varying [-30 - 40]
+- **sim2**: $Upper$ = 1; $Lower$ varying [0 - 1]; $Beta$ = 0.5; $Mid$ varying [-30 - 40]
+- **sim3**: $Upper$ = 1; $Lower$ = varying [0 - 1]; $Beta$ = varying [0.001 - 5]; $Mid$ varying [-30 - 40]
 
 ```{r, echo = F}
 suppressPackageStartupMessages(library(rstan))
@@ -40,9 +41,9 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'sim1: Lo + Mid'
-  sim2name <- 'sim2: Mid'
-  sim3name <- 'sim3: Mid + gamma'
+  sim1name <- 'sim1: Mid'
+  sim2name <- 'sim2: Lo + Mid'
+  sim3name <- 'sim3: Lo + Mid + Beta'
 
 #
 
