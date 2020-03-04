@@ -9,11 +9,11 @@
 
 ## Mortality
 
-- Environment scaled ([link](https://willvieira.github.io/TreesDemography/mort/envirScaled.html))
+- Environment scaled ([link v1.0](https://willvieira.github.io/TreesDemography/mort/envirScaled.html))
 
-- Bernoulli vectorized ([link](https://willvieira.github.io/TreesDemography/mort/bernVectorized.html))
+- Bernoulli vectorized ([link v2.0](https://willvieira.github.io/TreesDemography/mort/bernVectorized.html))
 
-- Growth rate effect ([link](https://willvieira.github.io/TreesDemography/mort/growthRateEffect.html))
+- Growth rate effect ([link v3.0](https://willvieira.github.io/TreesDemography/mort/growthRateEffect.html), [link v3.1](https://willvieira.github.io/TreesDemography/mort/growthRateEffect2.html))
 
 
 ## Growth
