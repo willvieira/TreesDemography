@@ -30,7 +30,7 @@ data
 
 parameters // IMPORTANT: it worth adding constraints, at least to respect the priors, otherwise, a lot of divergence!
 {
-	real<lower = 100, upper = 700> psi; // baseline longevity
+	real<lower = 100, upper = 600> psi; // baseline longevity
 
 	real<lower = -40, upper = 40> T_opt; // Optimum temperature of each species
 	real<lower = 0, upper = 100> sigmaT_opt; // Variance among individuals of optimal T within a species
@@ -38,9 +38,10 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 0, upper = 3000> P_opt; // Optimum precipitation of each species
 	real<lower = 0, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = 0, upper = 4> beta; // competition effect [0 - 1]
+	real<lower = 0, upper = 1> beta; // competition effect [0 - 1]
 
-	real<lower = 0.0001, upper = 3> Alpha; // rate at which effect grows with variable
+	real<lower = 0, upper = 1> Lo; // the lower asymptote
+	real<lower = -12, upper = 50> Mid; // place where maximum growth rate is reached
 
 }
 
@@ -62,7 +63,7 @@ transformed parameters
 	.*
 	exp(-0.5*(P_data - P_opt).*(P_data - P_opt)/sigmaP_opt^2)
 	.*
-	((0.0001 + (Alpha * G_data)) ./ (1 + (Alpha * G_data)))));
+	(Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (G_data - Mid)))))));
 
 	// mortality dependent on time interval
 	mortL = mortalityPerYear(N, M_d, time_interv);
@@ -71,7 +72,7 @@ transformed parameters
 model
 {
 	// Priors
-	psi ~ normal(350, 90);
+	psi ~ normal(350, 150);
 
 	T_opt ~ normal(0, 20);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
@@ -80,7 +81,8 @@ model
 
 	beta ~ gamma(0.7^2/0.2, 0.7/0.2);
 
-	Alpha ~ uniform(0, 3);
+	Lo ~ uniform(0, 1);
+	Mid ~ uniform(-12, 50);
 
 	// mortality model
 	Y ~ bernoulli(mortL);

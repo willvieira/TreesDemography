@@ -70,7 +70,7 @@ cat('####### Sending batch submission MCMC #######\n')
         # return to the main directory
         setwd('../../')
 
-        cat('  Submitting batch job', count, 'of', length(spIds) * length(sim), '\r')
+        cat('  Submitting batch job', count, 'of', length(spIds) * length(simulations), '\r')
         count = count + 1
       }
     }

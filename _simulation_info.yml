@@ -11,19 +11,20 @@ nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "growthRateEffect"
+simName: "growthRateEffect2"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1", "sim2"]
+simulations: ["sim1", "sim2", "sim3"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v3.0
+## Mortality test - v3.1
 
 ## Test the effect of growth rate instead of size as predictor of mortality rate.
-## Growth rate effect will be tested using two different functions:
+## Growth rate effect following the Generalized logistic function
 
-# sim1: functional reponse type II (https://en.wikipedia.org/wiki/Functional_response)
-# sim2: Generalized logistic function (https://en.wikipedia.org/wiki/Generalised_logistic_function)
+# sim1: gls with Lo and Mid parameters (the same as v3.0 but with psi and beta with more strict distribution)
+# sim2: gls with Lo fixed at 0 and Mid parameters larger than sim1
+# sim3: gls with Lo fixed at 0, Mid varying larger than sim1, and growth rate (gamma) varying
