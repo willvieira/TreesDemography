@@ -331,29 +331,29 @@ suppressPackageStartupMessages(library(dplyr))
   treeData[, nbMeasure_treeId := length(unique(year_measured)), by = tree_id]
 
   # function to define if measurement is a recruit or not
-  isRecruit <- function(year_measured, nbYear_measured, nbMeasure_treeId) {
+  isRecruit <- function(year_measured, tree_id) {
 
-    # check if tree_id was measured all the time
-    if(nbMeasure_treeId == nbYear_measured)  {
+    # get nb years and unique
+    uqYear = unique(year_measured)
+    nbYear = length(uqYear)
 
-      # if true no measure is a recruit
-      return ( rep(0, nbMeasure_treeId) )
+    # vector of recruitment - zero for first year because all are recuits
+    recruit <- rep(0, sum(uqYear[1] == year_measured))
+    for(year in 1:nbYear)
+    {
+      nbRecruit <- sum(!(tree_id[which(uqYear[year + 1] == year_measured)] %in%
+                         tree_id[which(uqYear[year] == year_measured)]))
 
-    } else if()
-
-    # check if year is sorted
-    if(identical(year_measured, sort(year_measured))) {
-
-
-      # return vector of 1 for first measure and 0 for the rest of measures
-      if
-      return ( c(1, rep(0, ln - 1)) )
-
-    }else {
-      stop('year_measured is not sorted')
+      print(nbRecruit)
+      print(uqYear[year + 1])
+      year_measured
+      recruit <- append(recruit, rep(nbRecruit, sum(uqYear[year + 1] == year_measured)))
     }
 
+    return(recruit)
   }
+
+  treeData[, nbRecruit := isRecruit(year_measured, tree_id), by = plot_id]
 
   firstMeasure <- function(year_measured) {
 
@@ -398,6 +398,7 @@ suppressPackageStartupMessages(library(dplyr))
 
 treeData[plot_id == 685863]
 x=treeData[plot_id == 686405]
+treeData[plot_id == 674895]
 
 uY <- unique(x$year_measured)
 x[year_measured == uY[1], isRecruit := 0]
