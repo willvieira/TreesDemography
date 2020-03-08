@@ -15,6 +15,7 @@
 
 - Growth rate effect ([link v3.0](https://willvieira.github.io/TreesDemography/mort/growthRateEffect.html), [link v3.1](https://willvieira.github.io/TreesDemography/mort/growthRateEffect2.html))
 
+- canopy continuous ([link v4.0](https://willvieira.github.io/TreesDemography/mort/canopyContinuous.html))
 
 ## Growth
 
