@@ -11,7 +11,7 @@ nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "growthRateEffect2"
+simName: "canopyContinuous"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2", "sim3"]
 
@@ -20,11 +20,13 @@ simulations: ["sim1", "sim2", "sim3"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v3.1
+## Mortality test - v4.0
 
-## Test the effect of growth rate instead of size as predictor of mortality rate.
-## Growth rate effect following the Generalized logistic function
+## Test a continuous measure of canopy position to infer competition
+### Instead of using canopyStatus (TRUE/FALSE), I use here the canopyDistance which is the continuous difference between the tree height and s_star
 
-# sim1: gls with Lo and Mid parameters (the same as v3.0 but with psi and beta with more strict distribution)
-# sim2: gls with Lo fixed at 0 and Mid parameters larger than sim1
-# sim3: gls with Lo fixed at 0, Mid varying larger than sim1, and growth rate (gamma) varying
+# Using the [Generalized logistic Function](https://en.wikipedia.org/wiki/Generalised_logistic_function) with positive growth rate only:
+
+# - sim1: Upper = 1; Lower = 0; Beta = 0.5; Mid varying [-30 - 40]
+# - sim2: Upper = 1; Lower varying [0 - 1]; Beta = 0.5; Mid varying [-30 - 40]
+# - sim3: Upper = 1; Lower = varying [0 - 1]; Beta = varying [0.001 - 5]; Mid varying [-30 - 40]
