@@ -95,12 +95,7 @@ suppressPackageStartupMessages(library(dplyr))
   treeData[, BA := nafill(BA, fill = 0), by = list(year_measured, plot_id)]
 
   # remove plot_id in which basal area was higher than 400 m2/ha
-  # because there are NA in the BA column, just filter BA < 400 removes the NA rows which I wanna keep
-  # Quick & dirty: get all NA and all BA < 400 separeted
-  # Check with treeData[tree_id == 8762761]
-  naBA <- which(is.na(treeData$BA))
-  less400 <- which(treeData$BA < 400)
-  treeData <- treeData[sort(c(naBA, less400))]
+  treeData = treeData[BA < 400]
 
   # species basal area per plot (BA_sp) as a proxy of seed source
   treeData[is_dead == 'f', BA_sp := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id, species_id)]
