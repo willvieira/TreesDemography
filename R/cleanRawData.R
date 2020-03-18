@@ -86,6 +86,14 @@ suppressPackageStartupMessages(library(dplyr))
   # calculate plot basal area (BA in m2/ha)
   treeData[is_dead == 'f', BA := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id)]
 
+  # fill NAs of BA (due to dead trees) with the value from the plot
+  # NAs will still persist in plots where all individuals are dead in a specific year
+  treeData[, BA := nafill(BA, "locf"), by = list(year_measured, plot_id)]
+  treeData[, BA := nafill(BA, "nocb"), by = list(year_measured, plot_id)]
+  # For persistent NA where all individuals of the plot are dead in a year)
+  # That means that there are not competing individuals, so BA is iqual 0
+  treeData[, BA := nafill(BA, fill = 0), by = list(year_measured, plot_id)]
+
   # remove plot_id in which basal area was higher than 400 m2/ha
   # because there are NA in the BA column, just filter BA < 400 removes the NA rows which I wanna keep
   # Quick & dirty: get all NA and all BA < 400 separeted
@@ -96,6 +104,14 @@ suppressPackageStartupMessages(library(dplyr))
 
   # species basal area per plot (BA_sp) as a proxy of seed source
   treeData[is_dead == 'f', BA_sp := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id, species_id)]
+  # fill NAs the same as for BA
+  treeData[, BA_sp := nafill(BA_sp, "locf"), by = list(year_measured, plot_id, species_id)]
+  treeData[, BA_sp := nafill(BA_sp, "nocb"), by = list(year_measured, plot_id, species_id)]
+  treeData[, BA_sp := nafill(BA_sp, fill = 0), by = list(year_measured, plot_id, species_id)]
+
+  # Species relative basal area to overcome the potential opposite response of
+  # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
+  treeData[, relativeBA_sp := BA_sp/BA, by = list(year_measured, plot_id, species_id)]
 
 #
 
