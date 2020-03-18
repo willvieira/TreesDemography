@@ -107,8 +107,8 @@ suppressPackageStartupMessages(library(dplyr))
   # Species relative basal area to overcome the potential opposite response of
   # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
   treeData[, relativeBA_sp := BA_sp/BA, by = list(year_measured, plot_id, species_id)]
-  # 0/0 = NA # TODO correct to transform to 0?
-  treeData[, relativeBA_sp := nafill(relativeBA_sp, fill = 0)]
+  # 0/0 = NA
+  treeData[is.na(relativeBA_sp), relativeBA_sp := 0]
 
 #
 
