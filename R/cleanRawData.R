@@ -343,27 +343,54 @@ suppressPackageStartupMessages(library(dplyr))
   # keep plots with more than one measures (so I can quantify recruitment number)
   treeData <- treeData[nbYear_measured > 1]
 
-  # NUmber of measures by tree_id
+  # Number of measures by tree_id
   treeData[, nbMeasure_treeId := length(unique(year_measured)), by = tree_id]
 
   # function to define if measurement is a recruit or not
-  isRecruit <- function(year_measured, tree_id) {
+  getRecruitment <- function(year_measured, tree_id) {
 
     # get nb years and unique
     uqYear = unique(year_measured)
     nbYear = length(uqYear)
 
-    # vector of recruitment - zero for first year because all are recuits
-    recruit <- rep(0, sum(uqYear[1] == year_measured))
-    for(year in 1:nbYear)
-    {
-      nbRecruit <- sum(!(tree_id[which(uqYear[year + 1] == year_measured)] %in%
-                         tree_id[which(uqYear[year] == year_measured)]))
+    # vector for nb recruitment (values are for plot & year_measured level)
+    nbRecruit <- rep(0, sum(uqYear[1] == year_measured))
+    # vector specifying if is a recruitment for each measure
+    isRecruit <- rep(FALSE, sum(uqYear[1] == year_measured))
 
-      print(nbRecruit)
-      print(uqYear[year + 1])
-      year_measured
-      recruit <- append(recruit, rep(nbRecruit, sum(uqYear[year + 1] == year_measured)))
+    for(year in 1:(nbYear -1))
+    {
+      # which tree_ids are recruit for this year?
+      newRecruit <- !(tree_id[which(uqYear[year + 1] == year_measured)] %in%
+                     tree_id[which(uqYear[year] == year_measured)])
+
+
+      isRecruit <- append(isRecruit, newRecruit)
+      # how many?
+      nbRecruit <- append(nbRecruit, rep(sum(newRecruit), sum(uqYear[year + 1] == year_measured)))
+    }
+
+    return( list(isRecruit, nbRecruit) )
+  }
+
+  treeData[, c('isRecruit', 'nbRecruit') := getRecruitment(year_measured, tree_id), by = plot_id]
+
+  ## some plots
+    # hist(treeData[nbRecruit < 50, unique(nbRecruit), by = plot_id]$V1, breaks = 30)
+    # par(mfrow = c(1, 2))
+    # treeData[dbh < 500, hist(dbh, breaks = 30, col = 'grey')]
+    # treeData[dbh < 500 & isRecruit == T, hist(dbh, breaks = 30, col = 'grey')]
+    #
+    # Does nbRecruit increase with deltaYear?
+    # x = treeData[!is.na(deltaYear)]
+    # xx = x[, list(unique(deltaYear), unique(nbRecruit)), by = list(year_measured, plot_id)]
+    # plot(xx$V1, xx$V2, xlab = 'deltaYear', ylab = 'nbRecruit')
+  ##
+
+  # calculate recruitment in basal area/plot/year
+  treeData[, BARecruit := sum(indBA[isRecruit]) * 1e4/plot_size, by = list(year_measured, plot_id)]
+
+
     }
 
     return(recruit)
