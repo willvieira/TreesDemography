@@ -92,7 +92,7 @@ suppressPackageStartupMessages(library(dplyr))
   treeData[, BA := nafill(BA, "nocb"), by = list(year_measured, plot_id)]
   # For persistent NA where all individuals of the plot are dead in a year)
   # That means that there are not competing individuals, so BA is iqual 0
-  treeData[, BA := nafill(BA, fill = 0), by = list(year_measured, plot_id)]
+  treeData[, BA := nafill(BA, fill = 0)]
 
   # remove plot_id in which basal area was higher than 400 m2/ha
   treeData = treeData[BA < 400]
@@ -102,11 +102,13 @@ suppressPackageStartupMessages(library(dplyr))
   # fill NAs the same as for BA
   treeData[, BA_sp := nafill(BA_sp, "locf"), by = list(year_measured, plot_id, species_id)]
   treeData[, BA_sp := nafill(BA_sp, "nocb"), by = list(year_measured, plot_id, species_id)]
-  treeData[, BA_sp := nafill(BA_sp, fill = 0), by = list(year_measured, plot_id, species_id)]
+  treeData[, BA_sp := nafill(BA_sp, fill = 0)]
 
   # Species relative basal area to overcome the potential opposite response of
   # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
   treeData[, relativeBA_sp := BA_sp/BA, by = list(year_measured, plot_id, species_id)]
+  # 0/0 = NA # TODO correct to transform to 0?
+  treeData[, relativeBA_sp := nafill(relativeBA_sp, fill = 0)]
 
 #
 
