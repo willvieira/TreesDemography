@@ -3,7 +3,7 @@ spIds: ["18032ABIBAL", "19462FAGGRA", "28731ACESAC",
         "28728ACERUB", "19481BETALL", "183295PICGLA",
         "183319PINBAN", "195773POPTRE"]
 # Which vital rates to run
-vitalRates: ["mort"]
+vitalRates: ["growth"]
 # Max interation in the MCMC
 maxIter: 15000
 # Number of cores and chains (to be ran in parallel)
@@ -11,22 +11,15 @@ nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "canopyContinuous"
+simName: "growthBasic"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1", "sim2", "sim3"]
+simulations: ["sim1"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v4.0
+## Growth test - v1.0
 
-## Test a continuous measure of canopy position to infer competition
-### Instead of using canopyStatus (TRUE/FALSE), I use here the canopyDistance which is the continuous difference between the tree height and s_star
-
-# Using the [Generalized logistic Function](https://en.wikipedia.org/wiki/Generalised_logistic_function) with positive growth rate only:
-
-# - sim1: Upper = 1; Lower = 0; Beta = 0.5; Mid varying [-30 - 40]
-# - sim2: Upper = 1; Lower varying [0 - 1]; Beta = 0.5; Mid varying [-30 - 40]
-# - sim3: Upper = 1; Lower = varying [0 - 1]; Beta = varying [0.001 - 5]; Mid varying [-30 - 40]
+## Basic growth rate as a function of canopyStatus (discrete), envir and size

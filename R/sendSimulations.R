@@ -1,4 +1,4 @@
-cat('####### Loading simulations from the server #######\n')
+cat('####### Sending simulations to the server #######\n')
 ###############################
 # Send folder to run simulations on the server
 # Will Vieira
