@@ -15,15 +15,15 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 {
 	real<lower = 0> pdg; // Potential Diameter Growth
 
-	real<lower = 0> T_opt; // Optimum temperature of each species
+	real<lower = -10, upper = 25> T_opt; // Optimum temperature of each species
 	real<lower = 0> sigmaT_opt; // Variance among individuals of optimal T within a species
 
-	real<lower = 0> P_opt; // Optimum precipitation of each species
+	real<lower = 0, upper = 1500 > P_opt; // Optimum precipitation of each species
 	real<lower = 0> sigmaP_opt; // Variance among individuals of optimal P within a species
 
 	real<lower = 0, upper = 1> beta;
 
-	real<lower = 0> Phi_opt;
+	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0> sigmaPhi_opt;
 
 	// real<lower = 0> sigma; // Variance of individuals around there species specific mean
@@ -37,22 +37,21 @@ transformed parameters
 		*
 		(C_data + (1 - C_data) * beta)
 		.*
-		exp(-(T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
+		(0.0001 + exp(-0.5 * (T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
 		.*
-		exp(-(P_data - P_opt) .* (P_data - P_opt)/sigmaP_opt^2)
+		exp(-0.5 * (P_data - P_opt) .* (P_data - P_opt)/sigmaP_opt^2))
 		.*
 		exp(-log(D_data/Phi_opt) .* log(D_data/Phi_opt)/sigmaPhi_opt^2);
 }
 
 model
 {
-	// Priors, hp1 contains their means, hp2 contains their variance
 	pdg ~ gamma(5^2/100.0, 5/100.0);
 
-	T_opt ~ normal(0, 20);
+	T_opt ~ normal(15, 10);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
-	P_opt ~ normal(1500, 700);
-	sigmaP_opt ~ normal(1500, 1000);
+	P_opt ~ normal(550, 300);
+	sigmaP_opt ~ gamma(200^2/20000.0, 200/20000.0);
 
 	beta ~ uniform(0, 1);
 
@@ -63,4 +62,6 @@ model
 
 	// Growth model
 	Y ~ gamma(mu_d .* mu_d ./ sigma_base, mu_d ./ sigma_base);
+
 }
+

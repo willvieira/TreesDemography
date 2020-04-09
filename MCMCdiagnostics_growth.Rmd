@@ -1,19 +1,17 @@
 ---
- title: "MCMC diagnostics - Mortality"
- subtitle: "Test v4.0 - canopy continuous"
+ title: "MCMC diagnostics - Growth"
+ subtitle: "Test v1.0 - Basic growth"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Test a continuous measure of canopy position to infer competition
-### Instead of using canopyStatus (TRUE/FALSE), I use here the canopyDistance which is the continuous difference between the tree height and s_star
+## Test the convergence of basic functions to the growth rate:
 
-Using the [Generalized logistic Function](https://en.wikipedia.org/wiki/Generalised_logistic_function) with positive growth rate only:
-
-- **sim1**: $Upper$ = 1; $Lower$ = 0; $Beta$ = 0.5; $Mid$ varying [-30 - 40]
-- **sim2**: $Upper$ = 1; $Lower$ varying [0 - 1]; $Beta$ = 0.5; $Mid$ varying [-30 - 40]
-- **sim3**: $Upper$ = 1; $Lower$ = varying [0 - 1]; $Beta$ = varying [0.001 - 5]; $Mid$ varying [-30 - 40]
+- **sim1** base line growth rate as a function of:
+  - discrete canopy status [FALSE/TRUE] as competitive effect
+  - gausian function for temperature and precipitation effect
+  - lognormal function for size effect
 
 ```{r, echo = F}
 suppressPackageStartupMessages(library(rstan))
@@ -41,9 +39,9 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'sim1: Mid'
-  sim2name <- 'sim2: Lo + Mid'
-  sim3name <- 'sim3: Lo + Mid + Beta'
+  sim1name <- 'sim1'
+  #sim2name <- ''
+  #sim3name <- ''
 
 #
 
@@ -51,11 +49,12 @@ suppressPackageStartupMessages(library(data.table))
 # Load rStan output and scaleInfo for all species_id
   # get output name for each species_id
   simNames = list.files(path = paste('output', simName, sep = '/'), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
-  output = simNames[grep('mortMCMC', simNames)]
+  output = simNames[grep('growthMCMC', simNames)]
 
   for(sim in simulations) {
     for(sp in spIds) {
-      fileName <- output[grep(paste0(sim, sp), output)]
+      fileName <- output[grep(paste0(#sim,
+      sp), output)]
       assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
     }
   }
@@ -99,9 +98,11 @@ suppressPackageStartupMessages(library(data.table))
        geom_boxplot() +
        coord_flip() +
        facet_grid(~sim,
-                 labeller = labeller(sim = setNames(c(sim1name,
-                                     sim2name, sim3name),
-                                     c('sim1', 'sim2', 'sim3')))) +
+                 labeller = labeller(sim = setNames(c(sim1name),
+                                    #sim2name, sim3name),
+                                     c('sim1'#,
+                                    #sim2', 'sim3'
+                                    )))) +
        theme_classic()
   print(p)
 ```
@@ -158,9 +159,11 @@ DT::datatable(divergentDF)
     p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp)) +
          geom_density_ridges_gradient() +
          facet_grid(~sim, scales = ifelse(par %in% c("T_opt", "sigmaT_opt", "P_opt", "sigmaP_opt"), 'free_x', 'fixed'),
-                   labeller = labeller(sim = setNames(c(sim1name,
-                                       sim2name, sim3name),
-                                       c('sim1', 'sim2', 'sim3')))) +
+                   labeller = labeller(sim = setNames(c(sim1name#,
+                                       #sim2name, sim3name
+                                       ),
+                                       c('sim1'#, 'sim2', 'sim3'
+                                       )))) +
          theme_classic() +
          xlab(par)
     print(p)
@@ -170,19 +173,19 @@ DT::datatable(divergentDF)
 # Data distribution
 
 ```{r organize data, echo = FALSE}
-mort_dt <- readRDS('data/mort_dt.RDS')
-mort_dt <- mort_dt[species_id %in% spIds]
-mort_dt <- mort_dt[, .(species_id, dbh0, min_temp_coldest_period_lag, tot_pp_period3_lag, canopyDistance)]
+growth_dt <- readRDS('data/growth_dt.RDS')
+growth_dt <- growth_dt[species_id %in% spIds]
+growth_dt <- growth_dt[, .(species_id, growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyStatus)]
 
 # transform dt
-mort <- tidyr::gather(data = mort_dt,
-            dbh0, min_temp_coldest_period_lag, tot_pp_period3_lag, canopyDistance,
+growth <- tidyr::gather(data = growth_dt,
+            growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyStatus,
             key = 'var', value = 'value')
-rm(mort_dt)
+rm(growth_dt)
 ```
 
 ```{r plot data distribution, echo = FALSE, message=FALSE, fig.height = 7, fig.width = 10}
-p <- ggplot(data = mort, aes(value, species_id)) +
+p <- ggplot(data = growth, aes(value, species_id)) +
       geom_density_ridges_gradient() +
       facet_grid(~var, scales = 'free_x') + #,
       #          labeller = labeller(sim = setNames(c(sim1name,
@@ -200,14 +203,14 @@ print(p)
 
   # define functions of the model
     # size effect
-    sizeEffect = function(x, DBHopt, DBHvar) {
-      lgPart <- (log(x/DBHopt)/DBHvar)^2
+    sizeEffect = function(x, Phi_opt, sigmaPhi_opt) {
+      lgPart <- (log(x/Phi_opt)/sigmaPhi_opt)^2
       return( exp(-lgPart))
     }
 
     # temperature effect
     tempEffect = function(xtemp, T_opt, sigmaT_opt) {
-      return(exp(-0.5*(xtemp - T_opt)^2/sigmaT_opt^2))
+      return(0.0001 + exp(-0.5*(xtemp - T_opt)^2/sigmaT_opt^2))
     }
 
     # precipitation effect
@@ -216,34 +219,34 @@ print(p)
     }
 
     # competition effect
-    compEffect = function(xcanopy, sim, param) {
+    # compEffect = function(xcanopy, sim, param) {
 
-      if(sim == 'sim1') {
-        Lo = 0
-        Beta = 0.5
-        Mid = param['Mid', 1]
-      }else if(sim == 'sim2') {
-        Lo = param['Lo', 1]
-        Beta = 0.5
-        Mid = param['Mid', 1]
-      }else {
-        Lo = param['Lo', 1]
-        Beta = param['Beta', 1]
-        Mid = param['Mid', 1]
-      }
+    #   if(sim == 'sim1') {
+    #     Lo = 0
+    #     Beta = 0.5
+    #     Mid = param['Mid', 1]
+    #   }else if(sim == 'sim2') {
+    #     Lo = param['Lo', 1]
+    #     Beta = 0.5
+    #     Mid = param['Mid', 1]
+    #   }else {
+    #     Lo = param['Lo', 1]
+    #     Beta = param['Beta', 1]
+    #     Mid = param['Mid', 1]
+    #   }
 
-      return( (Lo + ((1 - Lo) / (1 + exp(-Beta * (xcanopy - Mid))))) )
-    }
+    #   return( (Lo + ((1 - Lo) / (1 + exp(-Beta * (xcanopy - Mid))))) )
+    # }
 
   #
 
   ## PLOT ##
 
   # define x axis
-  sizex = seq(0, 900, 0.5)
-  tempx = seq(-35, 20)
-  precx = seq(0, 3500)
-  canopyDist = seq(-35, 40, length.out = 200)
+  sizex = seq(0, 700, 0.5)
+  tempx = seq(0, 20)
+  precx = seq(0, 800)
+  #canopyDist = seq(-35, 40, length.out = 200)
 
   # species specfic colours
   spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set1"))
@@ -256,12 +259,12 @@ print(p)
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
       # plot
-      if(sp == 1) plot(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]),
+      if(sp == 1) plot(sizex, sizeEffect(sizex, out['Phi_opt', 1], out['sigmaPhi_opt', 1]),
                   type = 'l', ylim = c(0, 1), xlab = 'Size (mm)', ylab = 'Size effect',
                   col = spCols[sp],
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
-      points(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]), type = 'l', col = spCols[sp])
+      points(sizex, sizeEffect(sizex, out['Phi_opt', 1], out['sigmaPhi_opt', 1]), type = 'l', col = spCols[sp])
     }
     mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
     if(sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
@@ -304,25 +307,30 @@ print(p)
   }
 
   # plot canopy effect
-  for(sim in simulations) {
-    for(sp in 1:length(spIds)) {
-      # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+  # for(sim in simulations) {
+  #   for(sp in 1:length(spIds)) {
+  #     # get parameters
+  #     out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
 
-      if(sp == 1) plot(canopyDist, compEffect(canopyDist, sim, param = out), xlim = c(-35, 40),
-      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
-      col = spCols[sp],
-      yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
+  #     if(sp == 1) plot(canopyDist, compEffect(canopyDist, sim, param = out), xlim = c(-35, 40),
+  #     ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
+  #     col = spCols[sp],
+  #     yaxt = ifelse(sim == 'sim1', "s", "n"))
+  #     if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(canopyDist, compEffect(canopyDist, sim, param = out), type = 'l', col = spCols[sp])
-    }
+  #     points(canopyDist, compEffect(canopyDist, sim, param = out), type = 'l', col = spCols[sp])
+  #   }
 
-    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+  #   if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+  # }
+  plot(0, xlim = c(-.5, 3), ylim = c(0, 1), pch = '', xlab = 'canopy status', ylab = 'Canopy effect', xaxt = 'n')
+  axis(1, labels = T, at = c(0, 1))
+  for(sp in 1:length(spIds))
+  {
+    points(0, summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary['beta', 1], pch = 8, col = spCols[sp])
   }
   legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
 ```
-
 
 
 # Predictions
@@ -331,52 +339,55 @@ print(p)
 # Plot predictions
   # define model
 
-  mort_model <- function(param, sim, newdata) {
+  growth_model <- function(param, sim, newdata) {
 
-    # pars depending on simulation
-    if(sim == 'sim1') {
-      Lo = 0
-      Beta = 0.5
-      Mid = param['Mid']
-    }else if(sim == 'sim2') {
-      Lo = param['Lo']
-      Beta = 0.5
-      Mid = param['Mid']
-    }else {
-      Lo = param['Lo']
-      Beta = param['Beta']
-      Mid = param['Mid']
-    }
+    # # pars depending on simulation
+    # if(sim == 'sim1') {
+    #   Lo = 0
+    #   Beta = 0.5
+    #   Mid = param['Mid']
+    # }else if(sim == 'sim2') {
+    #   Lo = param['Lo']
+    #   Beta = 0.5
+    #   Mid = param['Mid']
+    # }else {
+    #   Lo = param['Lo']
+    #   Beta = param['Beta']
+    #   Mid = param['Mid']
+    # }
 
-    lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
+    lgPart <- (log(newdata$D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
-    mort <- 1 / (1 + (param["psi"] *
-                ((Lo + ((1 - Lo) / (1 + exp(-Beta * (newdata$CS - Mid)))))) *
-                exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
-                exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-                exp(-lgPart)))
-    mort_df <- cbind(mort, newdata)
+    mu_d <- param["pdg"] *
+            (newdata$CS + (1 - newdata$CS) * param["beta"]) *
+            exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
+            exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
+            exp(-lgPart)
+    
+    growth <- mu_d
+    
+    growth_dt <- cbind(growth, newdata)
   }
 
   # data frame with fixed data to run the model
   # Temp
   newdataT <- data.frame(expand.grid(CS = 1,
-                                     TP = seq(-30, 20, length.out = 200),
+                                     TP = seq(-30, 20, length.out = 300),
                                      PP = 1150,
                                      D = c(100, 200, 400)))
   # Prec
   newdataP <- data.frame(expand.grid(CS = 1,
                                      TP = 1.5,
-                                     PP = seq(200, 2500, length.out = 200),
+                                     PP = seq(200, 2500, length.out = 300),
                                      D = c(100, 200, 400)))
   # Size
   newdataD <- data.frame(expand.grid(CS = 1,
                                      TP = 1.5,
                                      PP = 1150,
-                                     D = seq(10, 900, length.out = 200)))
+                                     D = seq(10, 900, length.out = 300)))
 
   # Canopy distance
-  newdataC <- data.frame(expand.grid(CS = seq(-35, 40, length.out = 200),
+  newdataC <- data.frame(expand.grid(CS = seq(-35, 40, length.out = 300),
                                      TP = 1.5,
                                      PP = 1150,
                                      D = c(100, 200, 400)))
@@ -407,21 +418,21 @@ print(p)
     param_ci90 <- param_summary[-nRow, 3]
 
     # get predictions
-    mort_meanT <- mort_model(param = param_mean, sim = sim, newdata = newdataT)
-    mort_ci10T <- mort_model(param = param_ci10, sim = sim, newdata = newdataT)
-    mort_ci90T <- mort_model(param = param_ci90, sim = sim, newdata = newdataT)
+    growth_meanT <- growth_model(param = param_mean, sim = sim, newdata = newdataT)
+    growth_ci10T <- growth_model(param = param_ci10, sim = sim, newdata = newdataT)
+    growth_ci90T <- growth_model(param = param_ci90, sim = sim, newdata = newdataT)
 
-    mort_meanP <- mort_model(param = param_mean, sim = sim, newdata = newdataP)
-    mort_ci10P <- mort_model(param = param_ci10, sim = sim, newdata = newdataP)
-    mort_ci90P <- mort_model(param = param_ci90, sim = sim, newdata = newdataP)
+    growth_meanP <- growth_model(param = param_mean, sim = sim, newdata = newdataP)
+    growth_ci10P <- growth_model(param = param_ci10, sim = sim, newdata = newdataP)
+    growth_ci90P <- growth_model(param = param_ci90, sim = sim, newdata = newdataP)
 
-    mort_meanD <- mort_model(param = param_mean, sim = sim, newdata = newdataD)
-    mort_ci10D <- mort_model(param = param_ci10, sim = sim, newdata = newdataD)
-    mort_ci90D <- mort_model(param = param_ci90, sim = sim, newdata = newdataD)
+    growth_meanD <- growth_model(param = param_mean, sim = sim, newdata = newdataD)
+    growth_ci10D <- growth_model(param = param_ci10, sim = sim, newdata = newdataD)
+    growth_ci90D <- growth_model(param = param_ci90, sim = sim, newdata = newdataD)
 
-    mort_meanC <- mort_model(param = param_mean, sim = sim, newdata = newdataC)
-    mort_ci10C <- mort_model(param = param_ci10, sim = sim, newdata = newdataC)
-    mort_ci90C <- mort_model(param = param_ci90, sim = sim, newdata = newdataC)
+    growth_meanC <- growth_model(param = param_mean, sim = sim, newdata = newdataC)
+    growth_ci10C <- growth_model(param = param_ci10, sim = sim, newdata = newdataC)
+    growth_ci90C <- growth_model(param = param_ci90, sim = sim, newdata = newdataC)
 
 
     size2plot <- unique(newdataT$D)
@@ -430,20 +441,20 @@ print(p)
     if(sim == 'sim1')
       par(mfcol = c(4, length(simulations)), xaxs="i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
-    # Mortality vs temperature
-    plot(mort ~ TP, mort_ci10T, type = "n", ylim = c(0, 1),
+    # Growth vs temperature
+    plot(growth ~ TP, growth_ci10T, type = "n", ylim = c(0, 1),
          xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
     if(sim == 'sim2') axis(2,labels=F)
 
     for(dhp in size2plot) {
-      mu <- subset(mort_meanT, D == dhp)
-      ci10 <- subset(mort_ci10T, D == dhp)
-      ci90 <- subset(mort_ci90T, D == dhp)
+      mu <- subset(growth_meanT, D == dhp)
+      ci10 <- subset(growth_ci10T, D == dhp)
+      ci90 <- subset(growth_ci90T, D == dhp)
       mycol <- colsize[size2plot == dhp]
 
-      lines(mort ~ TP, mu, cex=.5, pch=19, col = mycol)
+      lines(growth ~ TP, mu, cex=.5, pch=19, col = mycol)
       polygon(c(mu$TP, rev(mu$TP)),
-              c(ci10$mort, rev(ci90$mort)),
+              c(ci10$growth, rev(ci90$growth)),
               col = alpha(mycol, 0.5), border = NA)
     }
     if(sim == 'sim1')
@@ -453,45 +464,45 @@ print(p)
      mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
      mtext(sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
 
-    # Mortality vs precipitation
-    plot(mort ~ PP, mort_ci10P, type = "n", ylim = c(0, 1),
+    # Growth vs precipitation
+    plot(growth ~ PP, growth_ci10P, type = "n", ylim = c(0, 1),
          xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     for(dhp in size2plot) {
-      mu <- subset(mort_meanP, D == dhp)
-      ci10 <- subset(mort_ci10P, D == dhp)
-      ci90 <- subset(mort_ci90P, D == dhp)
+      mu <- subset(growth_meanP, D == dhp)
+      ci10 <- subset(growth_ci10P, D == dhp)
+      ci90 <- subset(growth_ci90P, D == dhp)
       mycol <- colsize[size2plot == dhp]
 
-      lines(mort ~ PP, mu, cex = .5, pch = 19, col = mycol)
+      lines(growth ~ PP, mu, cex = .5, pch = 19, col = mycol)
       polygon(c(mu$PP, rev(mu$PP)),
-              c(ci10$mort, rev(ci90$mort)),
+              c(ci10$growth, rev(ci90$growth)),
               col = alpha(mycol, 0.5), border = NA)
     }
-    mtext("P(Mortality)", 2, outer = T, las = 0, cex = .8, line = 1.5)
+    mtext("P(Growth)", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
-    # Mortality vs size
-    plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
+    # Growth vs size
+    plot(growth ~ D, growth_ci10D, type = "n", ylim = c(0, 1),
          xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
-    lines(mort ~ D, mort_meanD, cex=.5, pch=19, col = "grey25")
-    polygon(c(mort_meanD$D, rev(mort_meanD$D)),
-              c(mort_ci10D$mort, rev(mort_ci90D$mort)),
+    lines(growth ~ D, growth_meanD, cex=.5, pch=19, col = "grey25")
+    polygon(c(growth_meanD$D, rev(growth_meanD$D)),
+              c(growth_ci10D$growth, rev(growth_ci90D$growth)),
               col = alpha("grey25", 0.1), border = NA)
 
-    # Mortality vs canopy
-    plot(mort ~ CS, mort_ci10C, type = "n", ylim = c(0, 1),
+    # Growth vs canopy
+    plot(growth ~ CS, growth_ci10C, type = "n", ylim = c(0, 1),
          xlab = "Canopy distance from S* (m)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     for(dhp in size2plot) {
-      mu <- subset(mort_meanC, D == dhp)
-      ci10 <- subset(mort_ci10C, D == dhp)
-      ci90 <- subset(mort_ci90C, D == dhp)
+      mu <- subset(growth_meanC, D == dhp)
+      ci10 <- subset(growth_ci10C, D == dhp)
+      ci90 <- subset(growth_ci90C, D == dhp)
       mycol <- colsize[size2plot == dhp]
 
-      lines(mort ~ CS, mu, cex = .5, pch = 19, col = mycol)
+      lines(growth ~ CS, mu, cex = .5, pch = 19, col = mycol)
       polygon(c(mu$CS, rev(mu$CS)),
-              c(ci10$mort, rev(ci90$mort)),
+              c(ci10$growth, rev(ci90$growth)),
               col = alpha(mycol, 0.5), border = NA)
     }
   }
@@ -501,7 +512,7 @@ print(p)
   # plot all species
   for(sp in spIds) {
     for(sim in simulations) {
-      plot_prediction(sim, sp, mort_model,
+      plot_prediction(sim, sp, growth_model,
       data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC))
     }
   }
