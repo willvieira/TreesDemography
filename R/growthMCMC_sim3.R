@@ -40,6 +40,9 @@ set.seed(42)
   # select the species
   growth_dt <- growth_dt[species_id == sp]
 
+  # remove growth rate larget than 99% quantile
+  growth_dt <- growth_dt[growth <= 11.2]
+
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
     deltaS = 10; nbLonClasses = nbLatClasses = 50
@@ -95,7 +98,7 @@ set.seed(42)
 
 ## run the model
 
-  model <- stan_model(file = "../../stan/growth_sim1.stan")
+  model <- stan_model(file = "../../stan/growth_sim3.stan")
 
   ## Data stan
   dataStan <- list(

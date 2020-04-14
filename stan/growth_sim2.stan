@@ -13,7 +13,7 @@ data
 
 parameters // IMPORTANT: it worth adding constraints, at least to respect the priors, otherwise, a lot of divergence!
 {
-	real<lower = 0> pdg; // Potential Diameter Growth
+	real<lower = 0, upper = 30> pdg; // Potential Diameter Growth
 
 	real<lower = -10, upper = 25> T_opt; // Optimum temperature of each species
 	real<lower = 0> sigmaT_opt; // Variance among individuals of optimal T within a species
@@ -21,7 +21,8 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 0, upper = 1500 > P_opt; // Optimum precipitation of each species
 	real<lower = 0> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = 0, upper = 1> beta;
+	real<lower = -30, upper = 40> Mid; // competition effect: Mid of Generalised logistic function
+	real<lower = 0, upper = 1> Lo;
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0> sigmaPhi_opt;
@@ -35,7 +36,7 @@ transformed parameters
 	vector[N] mu_d =
 		pdg
 		*
-		(C_data + (1 - C_data) * beta)
+		(Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (C_data - Mid)))))
 		.*
 		(0.0001 + exp(-0.5 * (T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
 		.*
@@ -46,15 +47,16 @@ transformed parameters
 
 model
 {
-	pdg ~ gamma(5^2/100.0, 5/100.0);
+	pdg ~ gamma(7^2/100.0, 7/100.0);
 
 	T_opt ~ normal(15, 10);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
 	P_opt ~ normal(550, 300);
 	sigmaP_opt ~ gamma(200^2/20000.0, 200/20000.0);
 
-	beta ~ uniform(0, 1);
-
+	Mid ~ normal(0, 20);
+	Lo ~ uniform(0, 1);
+	
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(300^2/100000.0, 300/100000.0);
 

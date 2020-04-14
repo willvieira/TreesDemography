@@ -11,9 +11,9 @@ nC: 4
 # Size of transition measurements to be sampled from the population
 sampleSize: 15000
 # The main folder name
-simName: "growthBasic"
+simName: "optimalGrowth"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1"]
+simulations: ["sim1", "sim2", "sim3"]
 
 
 ##################################
@@ -22,4 +22,9 @@ simulations: ["sim1"]
 
 ## Growth test - v1.0
 
-## Basic growth rate as a function of canopyStatus (discrete), envir and size
+## Basic growth rate as a function of canopyStatus (continuous canopy distance), envir and size
+## Testing the effect of letting the optimal growth rate (pdg parameter) varying or not.
+
+# - sim1: Open pdg [0 - ]
+# - sim2: Closed pdg [0 - 30]
+# - sim3: Fixed pdg for the 99% quantile (= 11.2 mm/year) found in the database (used quantile here to exclude extreme measure errors)

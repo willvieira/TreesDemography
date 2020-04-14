@@ -95,7 +95,7 @@ set.seed(42)
 
 ## run the model
 
-  model <- stan_model(file = "../../stan/growth_sim1.stan")
+  model <- stan_model(file = "../../stan/growth_sim2.stan")
 
   ## Data stan
   dataStan <- list(
