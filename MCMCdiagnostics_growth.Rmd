@@ -39,9 +39,9 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'sim1'
-  #sim2name <- ''
-  #sim3name <- ''
+  sim1name <- 'larger pdg'
+  sim2name <- 'shorter pdg'
+  sim3name <- 'fixed pdg'
 
 #
 
@@ -53,8 +53,7 @@ suppressPackageStartupMessages(library(data.table))
 
   for(sim in simulations) {
     for(sp in spIds) {
-      fileName <- output[grep(paste0(#sim,
-      sp), output)]
+      fileName <- output[grep(paste0(sim, '_', sp), output)]
       assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
     }
   }
@@ -97,11 +96,9 @@ suppressPackageStartupMessages(library(data.table))
   p <- ggplot(data = Rhat, aes(x = sp, y = Rhat)) +
        geom_boxplot() +
        coord_flip() +
-       facet_grid(~sim,
-                 labeller = labeller(sim = setNames(c(sim1name),
-                                    #sim2name, sim3name),
-                                     c('sim1'#,
-                                    #sim2', 'sim3'
+       facet_grid(~sim, scales = 'free_x',
+                 labeller = labeller(sim = setNames(c(sim1name, sim2name, sim3name),
+                                     c('sim1', 'sim2', 'sim3'
                                     )))) +
        theme_classic()
   print(p)
@@ -159,11 +156,8 @@ DT::datatable(divergentDF)
     p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp)) +
          geom_density_ridges_gradient() +
          facet_grid(~sim, scales = ifelse(par %in% c("T_opt", "sigmaT_opt", "P_opt", "sigmaP_opt"), 'free_x', 'fixed'),
-                   labeller = labeller(sim = setNames(c(sim1name#,
-                                       #sim2name, sim3name
-                                       ),
-                                       c('sim1'#, 'sim2', 'sim3'
-                                       )))) +
+                   labeller = labeller(sim = setNames(c(sim1name, sim2name, sim3name),
+                                       c('sim1', 'sim2', 'sim3')))) +
          theme_classic() +
          xlab(par)
     print(p)
@@ -175,11 +169,11 @@ DT::datatable(divergentDF)
 ```{r organize data, echo = FALSE}
 growth_dt <- readRDS('data/growth_dt.RDS')
 growth_dt <- growth_dt[species_id %in% spIds]
-growth_dt <- growth_dt[, .(species_id, growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyStatus)]
+growth_dt <- growth_dt[, .(species_id, growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyDistance)]
 
 # transform dt
 growth <- tidyr::gather(data = growth_dt,
-            growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyStatus,
+            growth, dbh0, mean_temp_period_3_lag, tot_pp_period3_lag, canopyDistance,
             key = 'var', value = 'value')
 rm(growth_dt)
 ```
@@ -219,24 +213,9 @@ print(p)
     }
 
     # competition effect
-    # compEffect = function(xcanopy, sim, param) {
-
-    #   if(sim == 'sim1') {
-    #     Lo = 0
-    #     Beta = 0.5
-    #     Mid = param['Mid', 1]
-    #   }else if(sim == 'sim2') {
-    #     Lo = param['Lo', 1]
-    #     Beta = 0.5
-    #     Mid = param['Mid', 1]
-    #   }else {
-    #     Lo = param['Lo', 1]
-    #     Beta = param['Beta', 1]
-    #     Mid = param['Mid', 1]
-    #   }
-
-    #   return( (Lo + ((1 - Lo) / (1 + exp(-Beta * (xcanopy - Mid))))) )
-    # }
+    compEffect = function(xcanopy, Lo, Mid) {
+      return( (Lo + ((1 - Lo) / (1 + exp(-0.5 * (xcanopy - Mid))))) )
+    }
 
   #
 
@@ -246,7 +225,7 @@ print(p)
   sizex = seq(0, 700, 0.5)
   tempx = seq(0, 20)
   precx = seq(0, 800)
-  #canopyDist = seq(-35, 40, length.out = 200)
+  canopyDist = seq(-35, 40, length.out = 200)
 
   # species specfic colours
   spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set1"))
@@ -307,29 +286,24 @@ print(p)
   }
 
   # plot canopy effect
-  # for(sim in simulations) {
-  #   for(sp in 1:length(spIds)) {
-  #     # get parameters
-  #     out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+  for(sim in simulations) {
+    for(sp in 1:length(spIds)) {
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      Lo <- out['Lo', 1]
+      Mid <- out['Mid', 1]
 
-  #     if(sp == 1) plot(canopyDist, compEffect(canopyDist, sim, param = out), xlim = c(-35, 40),
-  #     ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
-  #     col = spCols[sp],
-  #     yaxt = ifelse(sim == 'sim1', "s", "n"))
-  #     if(sim == 'sim2') axis(2, labels = FALSE)
+      if(sp == 1) plot(canopyDist, compEffect(canopyDist, Lo, Mid), xlim = c(-35, 40),
+      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
+      col = spCols[sp],
+      yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
 
-  #     points(canopyDist, compEffect(canopyDist, sim, param = out), type = 'l', col = spCols[sp])
-  #   }
+      points(canopyDist, compEffect(canopyDist, Lo, Mid), type = 'l', col = spCols[sp])
+    }
 
-  #   if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
-  # }
-  plot(0, xlim = c(-.5, 3), ylim = c(0, 1), pch = '', xlab = 'canopy status', ylab = 'Canopy effect', xaxt = 'n')
-  axis(1, labels = T, at = c(0, 1))
-  for(sp in 1:length(spIds))
-  {
-    points(0, summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary['beta', 1], pch = 8, col = spCols[sp])
+    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
-  legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
 ```
 
 
@@ -341,30 +315,25 @@ print(p)
 
   growth_model <- function(param, sim, newdata) {
 
-    # # pars depending on simulation
-    # if(sim == 'sim1') {
-    #   Lo = 0
-    #   Beta = 0.5
-    #   Mid = param['Mid']
-    # }else if(sim == 'sim2') {
-    #   Lo = param['Lo']
-    #   Beta = 0.5
-    #   Mid = param['Mid']
-    # }else {
-    #   Lo = param['Lo']
-    #   Beta = param['Beta']
-    #   Mid = param['Mid']
-    # }
+    # pars depending on simulation
+    if(sim == 'sim1') {
+      pdg <- param["pdg"]
+    }else if(sim == 'sim2') {
+      pdg <- param["pdg"]
+    }else {
+      pdg <- 11.2
+    }
 
     lgPart <- (log(newdata$D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
-    mu_d <- param["pdg"] *
+    mu_d <- pdg *
             (newdata$CS + (1 - newdata$CS) * param["beta"]) *
             exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
     
     growth <- mu_d
+    print(range(growth))
     
     growth_dt <- cbind(growth, newdata)
   }
