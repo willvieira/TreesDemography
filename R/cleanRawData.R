@@ -33,6 +33,11 @@ cat('####### cleaning raw data #######\n')
       # Calculate canopyStatus and canopyDistance
 
     # For fecundity
+      # Get number of individuals entering the population (by plot_id, year_measured and species_id)
+      # The same but in basal area
+      # Transform the data.table in a transition way (by plot_id, year_measured ad species_id)
+      # Get delayed measure of one measurement for variables at the plot and species level
+        # as recruitment happened (probably) as a function of plot state in the last measure
       # Keep the same species as in the growth filter above
 
   # Filter species_id to keep species with at least 2e4 measurements
@@ -86,16 +91,29 @@ suppressPackageStartupMessages(library(dplyr))
   # calculate plot basal area (BA in m2/ha)
   treeData[is_dead == 'f', BA := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id)]
 
+  # fill NAs of BA (due to dead trees) with the value from the plot
+  # NAs will still persist in plots where all individuals are dead in a specific year
+  treeData[, BA := nafill(BA, "locf"), by = list(year_measured, plot_id)]
+  treeData[, BA := nafill(BA, "nocb"), by = list(year_measured, plot_id)]
+  # For persistent NA where all individuals of the plot are dead in a year)
+  # That means that there are not competing individuals, so BA is iqual 0
+  treeData[, BA := nafill(BA, fill = 0)]
+
   # remove plot_id in which basal area was higher than 400 m2/ha
-  # because there are NA in the BA column, just filter BA < 400 removes the NA rows which I wanna keep
-  # Quick & durty: get all NA and all BA < 400 separeted
-  # Check with treeData[tree_id == 8762761]
-  naBA <- which(is.na(treeData$BA))
-  less400 <- which(treeData$BA <400)
-  treeData <- treeData[sort(c(naBA, less400))]
+  treeData = treeData[BA < 400]
 
   # species basal area per plot (BA_sp) as a proxy of seed source
   treeData[is_dead == 'f', BA_sp := sum(indBA) * 1e4/plot_size, by = list(year_measured, plot_id, species_id)]
+  # fill NAs the same as for BA
+  treeData[, BA_sp := nafill(BA_sp, "locf"), by = list(year_measured, plot_id, species_id)]
+  treeData[, BA_sp := nafill(BA_sp, "nocb"), by = list(year_measured, plot_id, species_id)]
+  treeData[, BA_sp := nafill(BA_sp, fill = 0)]
+
+  # Species relative basal area to overcome the potential opposite response of
+  # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
+  treeData[, relativeBA_sp := BA_sp/BA, by = list(year_measured, plot_id, species_id)]
+  # 0/0 = NA
+  treeData[is.na(relativeBA_sp), relativeBA_sp := 0]
 
 #
 
@@ -321,38 +339,199 @@ suppressPackageStartupMessages(library(dplyr))
 
 # fecundity (all individuals entering the population)
 
-  # function to get plot_id in which there is nbMeasure > 1
-  # Because I want to eliminate plots in which have been measured only once
-  # So I do not overestimate individuals "arriving" in the population (nbMeasure == 1)
-  getPlotPlusOne <- function(x) {
-    unique_id <- unique(x)
-    if(length(unique_id) > 1) {
-      return (TRUE)
-    }else {
-      if(unique_id != 1) {
-        return (TRUE)
-      }else {
-        return (FALSE)
-      }
+  # Remove plot_id with only one year_measured
+  # Number of measures by plot_id
+  treeData[, nbYear_measured := length(unique(year_measured)), by = plot_id]
+  # keep plots with more than one measures (so I can quantify recruitment number)
+  treeData <- treeData[nbYear_measured > 1]
+
+  # Number of measures by tree_id
+  treeData[, nbMeasure_treeId := length(unique(year_measured)), by = tree_id]
+
+  # function to define if measurement is a recruit or not
+  getRecruitment <- function(year_measured, tree_id) {
+
+    # get nb years and unique
+    uqYear = unique(year_measured)
+    nbYear = length(uqYear)
+
+    # vector for nb recruitment (values are for plot & year_measured level)
+    nbRecruit <- rep(0, sum(uqYear[1] == year_measured))
+    # vector specifying if is a recruitment for each measure
+    isRecruit <- rep(FALSE, sum(uqYear[1] == year_measured))
+
+    for(year in 1:(nbYear -1))
+    {
+      # which tree_ids are recruit for this year?
+      newRecruit <- !(tree_id[which(uqYear[year + 1] == year_measured)] %in%
+                     tree_id[which(uqYear[year] == year_measured)])
+
+
+      isRecruit <- append(isRecruit, newRecruit)
+      # how many?
+      nbRecruit <- append(nbRecruit, rep(sum(newRecruit), sum(uqYear[year + 1] == year_measured)))
     }
+
+    return( list(isRecruit, nbRecruit) )
   }
 
-  treeData[, toKeep := getPlotPlusOne(nbMeasure), by = plot_id]
-  treeData = treeData[toKeep == TRUE]
-  treeData[, toKeep := NULL]
+  treeData[, c('isRecruit', 'nbRecruit') := getRecruitment(year_measured, tree_id), by = plot_id]
 
-  # get recruitments only
-  #fec_dt = treeData[nbMeasure == 1]
-
-  # calculate number of recruitments/plot/year
-  treeData[, nbRecruit := sum(nbMeasure == 1), by = list(year_measured, plot_id)]
+  ## some plots
+    # hist(treeData[nbRecruit < 50, unique(nbRecruit), by = plot_id]$V1, breaks = 30)
+    # par(mfrow = c(1, 2))
+    # treeData[dbh < 500, hist(dbh, breaks = 30, col = 'grey')]
+    # treeData[dbh < 500 & isRecruit == T, hist(dbh, breaks = 30, col = 'grey')]
+    #
+    # Does nbRecruit increase with deltaYear?
+    # x = treeData[!is.na(deltaYear)]
+    # xx = x[, list(unique(deltaYear), unique(nbRecruit)), by = list(year_measured, plot_id)]
+    # plot(xx$V1, xx$V2, xlab = 'deltaYear', ylab = 'nbRecruit')
+  ##
 
   # calculate recruitment in basal area/plot/year
-  fec_dt <- treeData[, BARecruit := sum(indBA[nbMeasure == 1]) * 1e4/plot_size, by = list(year_measured, plot_id)]
+  treeData[, BARecruit := sum(indBA[isRecruit]) * 1e4/plot_size, by = list(year_measured, plot_id)]
 
-  # remove NAs of BA
-  fec_dt <- fec_dt[!is.na(BA)]
-#
+
+  fec_dt = treeData[, list(nbRecruit = sum(isRecruit),
+                            latitude = unique(latitude),
+                            longitude = unique(longitude),
+                            mean_temp_period_3_lag = unique(mean_temp_period_3_lag),
+                            min_temp_coldest_period_lag = unique(min_temp_coldest_period_lag),
+                            min_extreme_temp = unique(min_extreme_temp),
+                            tot_annual_pp_lag = unique(tot_annual_pp_lag),
+                            tot_pp_period3_lag = unique(tot_pp_period3_lag),
+                            s_star = unique(s_star),
+                            BA = unique(BA),
+                            BA_sp = unique(BA_sp),
+                            relativeBA_sp = unique(relativeBA_sp)),
+                            by = .(plot_id, year_measured, species_id)]
+
+  # Transfor data table in a transition form
+  # nbRecruit from year0 to year1
+  names(fec_dt)[2] = 'year1'
+  transition_f <- function(year1) {
+
+    uqYear <- unique(year1)
+    year0 <- rep(NA, sum(year1 == uqYear[1]))
+
+    for(y in 2:length(uqYear)) {
+      year0 <- append(year0, rep(uqYear[y - 1], sum(year1 == uqYear[y])))
+    }
+
+    return( year0 )
+  }
+
+  fec_dt[, year0 := transition_f(year1), by = plot_id]
+  fec_dt[, deltaYear := year1 - year0]
+
+
+
+  # delay plot level variables of one measurement
+  # i.e. nbRecruit as a function of last climate/BA/BA_sp etc
+  delayed_plot <- function(year1, vars)
+  {
+
+    uqYear <- unique(year1)
+    lnYear <- length(uqYear)
+
+    # position of values in function of their year measured
+    posL <- list()
+    for(year in 1:lnYear)
+      posL[year] <- list(uqYear[year] == year1)
+
+    # vector with nMeasure by year to repeate value of year before
+    yearRep <- c()
+    for(year in 1:lnYear)
+      yearRep <- append(yearRep, sum(uqYear[year] == year1))
+
+
+    # delayed variable values by one year
+    outList <- list()
+    # -2 because two last variables are sp dependent (another loop after this one)
+    for(var in 1:length(vars)) {
+      uqVar <- c()
+      for(year in 1:lnYear)
+        uqVar <- append(uqVar, unique((vars[[var]][posL[[year]]])))
+
+      uqVar <- c(NA, uqVar[1:(length(uqVar) - 1)])
+
+      outList[var] <- list(rep(uqVar, yearRep))
+    }
+
+      return( outList )
+  }
+
+
+
+  # get delayed measure of one measurement for each plot_id and year_measured
+  fec_dt[, c('mean_temp_period_3_lag_mLag',
+             'min_temp_coldest_period_lag_mLag',
+             'min_extreme_temp_mLag',
+             'tot_annual_pp_lag_mLag',
+             'tot_pp_period3_lag_mLag',
+             's_star_mLag',
+             'BA_mLag') := delayed_plot(year1, vars =
+         list(mean_temp_period_3_lag,
+              min_temp_coldest_period_lag,
+              min_extreme_temp,
+              tot_annual_pp_lag,
+              tot_pp_period3_lag,
+              s_star,
+              BA)), by = plot_id]
+
+
+
+  # Now get delayed values for BA_sp and relativeBA_sp because these
+  # two variables are species dependent
+  delayed_BA_sp <- function(year1, species_id, vars) {
+
+    uqYear <- unique(year1)
+    lnYear <- length(uqYear)
+
+    # position of values in function of their year measured
+    posL <- list()
+    for(year in 1:lnYear)
+      posL[year] <- list(uqYear[year] == year1)
+
+    outList <- list()
+    for(var in 1:length(vars)) {
+
+      varLag <- rep(NA, length(year1))
+      for(year in 1:(lnYear - 1)) {
+
+        uqSpecies_id <- unique(species_id[posL[[year + 1]]])
+
+        for(sp in uqSpecies_id) {
+
+          # get position where sp is present for current and year + 1
+          posSpecies <- species_id[posL[[year + 1]]] == sp
+          posSpecies_lag <- species_id[posL[[year]]] == sp
+
+          # Update dealyed info IF species was present in previous inventory, otherwise is 0
+          if(any(posSpecies_lag)) {
+            # update values in a delayed way
+            varLag[posL[[year + 1]]][posSpecies] <- vars[[var]][posL[[year]]][posSpecies_lag]
+          }else {
+            varLag[posL[[year + 1]]][posSpecies] <- 0
+          }
+        }
+      }
+      outList <- append(outList, list(varLag))
+    }
+
+    return( outList )
+  }
+
+  # get delayed measure of one measurement for each plot_id, year_measured, and species_id
+  fec_dt[, c('BA_sp_mLag',
+             'relativeBA_sp_mLag') := delayed_BA_sp(year1, species_id, vars =
+         list(BA_sp,
+              relativeBA_sp)), by = plot_id]
+
+
+  # drop first year of measurement as now table is a transition way
+  fec_dt = fec_dt[!is.na(deltaYear), ]
 
 
 
@@ -367,14 +546,12 @@ suppressPackageStartupMessages(library(dplyr))
   # get total N by species_id
   growth_dt[, nb := .N, by = species_id]
   mort_dt[, nb := .N, by = species_id]
-  fec_dt[, nb := .N, by = species_id]
 
   # filter species_id with more than 20k measures
   spUnique_growth = unique(growth_dt[nb > 1e4]$species_id)
   spUnique_mort = unique(mort_dt[nb > 1e4]$species_id)
-  spUnique_fec = unique(fec_dt[nb > 1e4]$species_id)
 
-  ls_species <- Reduce(intersect, list(spUnique_growth, spUnique_mort, spUnique_fec))
+  ls_species <- Reduce(intersect, list(spUnique_growth, spUnique_mort))
 
   # keep same species id for all three vital rates
   growth_dt = growth_dt[species_id %in% ls_species]
@@ -384,7 +561,6 @@ suppressPackageStartupMessages(library(dplyr))
   # remove nb column
   growth_dt[, nb := NULL]
   mort_dt[, nb := NULL]
-  fec_dt[, nb := NULL]
 
   # save species_id
   saveRDS(ls_species, file = 'data/spIds.RDS')
