@@ -1,7 +1,6 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ["18032ABIBAL", "19462FAGGRA", "28731ACESAC",
-        "28728ACERUB", "19481BETALL", "183295PICGLA",
-        "183319PINBAN", "195773POPTRE"]
+spIds: ["183319PINBAN", "183302PICMAR", "183375PINRES", "18032ABIBAL",
+        "28731ACESAC", "19049ULMAME", "28728ACERUB", "19408QUERUB"]
 # Which vital rates to run
 vitalRates: ["growth"]
 # Max interation in the MCMC

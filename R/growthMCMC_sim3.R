@@ -106,7 +106,7 @@ set.seed(42)
           T_data = growth_dt$mean_temp_period_3_lag,
           P_data = growth_dt$tot_pp_period3_lag,
           D_data = growth_dt$dbh0,
-          C_data = growth_dt$canopyStatus,
+          C_data = growth_dt$canopyDistance,
           Y = growth_dt$growth)
 
   ## Run
@@ -127,6 +127,6 @@ set.seed(42)
 
 ## save output
 
-  saveRDS(object = out, file = paste0("output/growthMCMC_", sp, "_", format(Sys.time(), "%Y-%m-%d_%T"), ".RDS"))
+  saveRDS(object = out, file = paste0("output/growthMCMC_sim3", sp, "_", format(Sys.time(), "%Y-%m-%d_%T"), ".RDS"))
 
 ##
