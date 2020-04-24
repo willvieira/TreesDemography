@@ -401,6 +401,7 @@ suppressPackageStartupMessages(library(dplyr))
                             min_extreme_temp = unique(min_extreme_temp),
                             tot_annual_pp_lag = unique(tot_annual_pp_lag),
                             tot_pp_period3_lag = unique(tot_pp_period3_lag),
+                            org_db_loc = unique(org_db_loc),
                             s_star = unique(s_star),
                             BA = unique(BA),
                             BA_sp = unique(BA_sp),
