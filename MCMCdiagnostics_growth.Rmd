@@ -53,7 +53,7 @@ suppressPackageStartupMessages(library(data.table))
 
   for(sim in simulations) {
     for(sp in spIds) {
-      fileName <- output[grep(paste0(sim, '_', sp), output)]
+      fileName <- output[grep(paste0(sim, sp), output)]
       assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
     }
   }
@@ -155,7 +155,7 @@ DT::datatable(divergentDF)
   {
     p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp)) +
          geom_density_ridges_gradient() +
-         facet_grid(~sim, scales = ifelse(par %in% c("T_opt", "sigmaT_opt", "P_opt", "sigmaP_opt"), 'free_x', 'fixed'),
+         facet_grid(~sim, scales = ifelse(par %in% c("pdg"), 'free_x', 'fixed'),
                    labeller = labeller(sim = setNames(c(sim1name, sim2name, sim3name),
                                        c('sim1', 'sim2', 'sim3')))) +
          theme_classic() +
