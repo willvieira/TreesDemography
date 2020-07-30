@@ -116,10 +116,12 @@
   # get plot and year combination to calculate S*
   final_dt[, plot_year := paste0(ID_PE, "_", year_measured)]
 
+  # For all dead or harvested individuals, set height to NA as the should not be considered for the S*
+  final_dt[state != 'alive', height := NA]
+  
   #### Calculate competition
   ## Function to calculate s*
   # dbh and species_id are vectors; plotArea a scalar
-  # Trees are sorted by decreasing height
   
   # Function to get allometric parameters
   purves2007_allometries_modif <- purves2007_allometries[, sp := gsub('-', '', sp)]
@@ -141,55 +143,59 @@
     return (ls_allometries)
   }
   
-  canopyHeight_mid = function(height, sp_code, plot_size, C0_C1, plot_year)
+  canopyHeight_mid = function(height, supBound, sp_code, plotArea, C0_C1, plot_year, tolSize = 0.01)
   {
+
+    cat('Plot-year', plot_year, '\r')
+    lastTry = plot_year # to keep a trace in case of error
+
+    supBound = max(supBound)
+    infBound = 0
+    s_star = 0
     sumArea = 0
-    n = length(height)
-    Min = 0
-    Max = n + 1
-    possib = (Max - Min) - 1
-    mid = floor(possib/2) + Min
 
-    # check when only 1 measure
-    if(mid == 0)
-      possib = 0; mid = 2
+    beyondSupBound_ind = supBound < height # Exclude trees taller than supBound (useful for 2nd, 3rd, ... layer computation)
 
-    while (possib > 0)
+    while (supBound - infBound > tolSize)
     {
-      distToTop = height[1:mid] - height[mid]
-      paramsAllometries = getAllometries(sp_code[1:mid])
-      sumArea = sum(heightToCrownArea(height[1:mid], distToTop, paramsAllometries$a, paramsAllometries$b,
+
+      s_star = (supBound + infBound)/2
+      overstorey_ind = s_star <= height
+      indices = overstorey_ind & !beyondSupBound_ind
+      
+      if (!any(indices))
+      {
+        supBound = s_star
+        next;
+      }
+
+      distToTop = height[indices] - s_star
+      paramsAllometries = getAllometries(sp_code[indices])
+      sumArea = sum(heightToCrownArea(height[indices], distToTop, paramsAllometries$a, paramsAllometries$b,
         paramsAllometries$T_param, C0_C1))
       
-      if(sumArea < plot_size)
-      {
-        Min = mid
-        possib = (Max - Min) - 1
-        mid = floor(possib/2) + Min + 1
-      }else {
-        Max = mid
-        possib = (Max - Min) - 1
-        mid = floor(possib/2) + Min + 1
-      }
+      if (sumArea < plotArea)
+        supBound = s_star
+      if (sumArea >= plotArea)
+        infBound = s_star
+
     }
-
-    if (mid == (n + 1)) # i.e., gap in the canopy
-      return (0)
-
-    return (height[mid])
+    return (list(s_star, sumArea))
   }
 
-
-  # Sort by plot id, year (within plot_id), and then decreasing height (within plot AND years)
-  setorderv(final_dt, cols = c("ID_PE", "year_measured", "height"), order = c(1, 1, -1))
-
-  # get s_star
-  final_dt[!is.na(height), s_star :=
-          canopyHeight_mid(height, sp_code3, plot_size = 399.7312, C0_C1, plot_year),
+  # get s_star for considering alive individuals only
+  final_dt[!is.na(height), c('s_star', 'sumArea') :=
+          canopyHeight_mid(height, max(height), sp_code3, plotArea = 399.7312, C0_C1, plot_year),
           by = plot_year]
 
+  # fill NA of s_star due to NA of height
+  final_dt[, s_star := unique(s_star[!is.na(s_star)]), by = plot_year]
+
+  # check if all plot_year have one unique value of s_star
+  if(!all(final_dt[, length(unique(s_star)) == 1, by = plot_year]$V1)) stop('Some plot_year have more than one s_star value')
+
   # Remove provisory columns
-  final_dt[ ,`:=`(sp_code3 = NULL, plot_year = NULL)]
+  final_dt[ ,`:=`(sp_code3 = NULL, plot_year = NULL, sumArea = NULL)]
 
   # Calculate canopyStatus and canopyDistance
   final_dt[, canopyDistance := (height - s_star)]
@@ -200,8 +206,14 @@
   #   geom_histogram(position = "identity", colour = "grey40", bins = 50) +
   #   facet_grid(. ~ ETAGE_ARB, labeller = 
   #              labeller(ETAGE_ARB = c(V = 'Veteran', D = 'Dominant', C = 'Codominant', I = 'Intermediate', O = 'Oppressed')))
+  # quartz()
+  # ggplot(final_dt[!is.na(ETAGE_ARB) & s_star > 5], aes(x = canopyDistance)) +
+  #   geom_histogram(position = "identity", colour = "grey40", bins = 50) +
+  #   facet_grid(. ~ ETAGE_ARB, labeller = 
+  #              labeller(ETAGE_ARB = c(V = 'Veteran', D = 'Dominant', C = 'Codominant', I = 'Intermediate', O = 'Oppressed')))
 
-  # ggplot(final_dt[!is.na(ENSOLEIL) & s_star != 0], aes(x = canopyDistance)) +
+
+  # ggplot(final_dt[!is.na(ENSOLEIL) & s_star > 5], aes(x = canopyDistance)) +
   #   geom_histogram(position = "identity", colour = "grey40", bins = 50) +
   #   facet_grid(. ~ ENSOLEIL, labeller = 
   #              labeller(ENSOLEIL = c('1' = 'Très ensoleillé', '2' = 'Moyennement ensoleillé', '3' = 'Peu ensoleillé', '4' = 'Non ensoleillé')))
