@@ -267,8 +267,9 @@ final_dt <- readRDS('data/quebec/treeDataQuebec_all.RDS')
 
     # merge with recruit
     names(outDT)[which(names(outDT) %in% c('year0', 'sp_code2'))] <- c('sp_code', 'year_measured')
-
     recruit = merge(recruit, outDT, by = c('ID_PE', 'year_measured', 'sp_code'))
+    recruit[, sp_code2 := sp_code]
+    recruit[, sp_code := NULL]
     
     # remove column
     final_dt[, meanCanopyDistance := NULL]
