@@ -124,6 +124,16 @@
 
 
 
+# Add delayed growth rate as possible proxy of mortality risk
+# i.e. the growth rate of the measure before
+  
+  # 'leading' shift as year is in descreasing order
+  mort_dt[, growth_lag := shift(growth, 1L, type = 'lead'), by = tree_id]
+
+#
+
+
+
 # Save all
 
   if(!dir.exists('data/quebec/')) dir.create('data/quebec')
