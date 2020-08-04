@@ -217,7 +217,7 @@ final_dt <- readRDS('data/quebec/treeDataQuebec_all.RDS')
 
     # Here for each plot-year, I get the composition of adult trees from the previous measurement
     # I also get the climate, pertubation and non enviroment variables from the last measurement
-    outDT <- final_dt[0, c(1, 74:75, 9, 12:68, 70:72, 82, 85, 78)]
+    outDT <- final_dt[0, c(1, 74:75, 9, 12:68, 70:72, 85, 78)]
     for(plot in plots)
     {
         # Unique years
@@ -226,7 +226,7 @@ final_dt <- readRDS('data/quebec/treeDataQuebec_all.RDS')
         for(year in 1:(length(years) - 1))
         {
             # get plot-year information from adult data base
-            plotYearDT <- unique(final_dt[ID_PE == plot & year0 == years[year], c(1, 74:75, 9, 12:68, 70:72, 82, 85)], by = 'sp_code2')
+            plotYearDT <- unique(final_dt[ID_PE == plot & year0 == years[year], c(1, 74:75, 9, 12:68, 70:72, 85)], by = 'sp_code2')
             
             # Some years have been removed previously, so check if it is still there, ignore year otherwise
             # So there will be less plot-year information in the output
