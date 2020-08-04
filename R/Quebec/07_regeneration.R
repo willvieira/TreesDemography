@@ -17,21 +17,6 @@
 #   - Calculate NB_SEMIS by plot - year and species_id
 ##############################
 
-# TODO Temporary start
-
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(rgdal))
-suppressPackageStartupMessages(library(sf))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(plyr))
-suppressPackageStartupMessages(library(rgeos))
-suppressPackageStartupMessages(library(data.table))
-spCodeFile <- "rawData/ref_spCode.csv"
-sps_code <- read.csv2(spCodeFile)
-final_dt <- readRDS('data/quebec/treeDataQuebec_all.RDS')
-
-#
-
 
 # Data description
 
