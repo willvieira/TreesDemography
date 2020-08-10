@@ -13,7 +13,7 @@ data
 
 parameters // IMPORTANT: it worth adding constraints, at least to respect the priors, otherwise, a lot of divergence!
 {
-	real<lower = 0, upper = 30> pdg; // Potential Diameter Growth
+	real<lower = 0, upper = 100> pdg; // Potential Diameter Growth
 
 	real<lower = -10, upper = 25> T_opt; // Optimum temperature of each species
 	real<lower = 0> sigmaT_opt; // Variance among individuals of optimal T within a species
@@ -47,7 +47,7 @@ transformed parameters
 
 model
 {
-	pdg ~ gamma(7^2/100.0, 7/100.0);
+	pdg ~ gamma(2^2/10.0, 2/10.0);
 
 	T_opt ~ normal(15, 10);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);

@@ -32,7 +32,7 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 transformed parameters
 {
 	vector[N] mu_d =
-		11.2
+		4
 		*
 		(Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (C_data - Mid)))))
 		.*

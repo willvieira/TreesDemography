@@ -25,5 +25,5 @@ simulations: ["sim1", "sim2", "sim3"]
 ## Testing the effect of letting the optimal growth rate (pdg parameter) varying or not.
 
 # - sim1: Open pdg [0 - ]
-# - sim2: Closed pdg [0 - 30]
-# - sim3: Fixed pdg for the 99% quantile (= 11.2 mm/year) found in the database (used quantile here to exclude extreme measure errors)
+# - sim2: Closed pdg [0 - 100]
+# - sim3: Fixed pdg to 4 cm/year

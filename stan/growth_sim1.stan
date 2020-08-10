@@ -47,7 +47,7 @@ transformed parameters
 
 model
 {
-	pdg ~ gamma(7^2/100.0, 7/100.0);
+	pdg ~ gamma(2^2/10.0, 2/10.0);
 
 	T_opt ~ normal(15, 10);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
