@@ -82,7 +82,7 @@ cat('####### Creating species folder to run MCMC #######\n')
           linesToAdd = c(paste0('   sp <- \'', sp, '\''),
                          paste0('   maxIter <- ', maxIter),
                          paste0('   nCores <- nChains <- ', nC),
-                         paste0('   ', vital, '_dt <- readRDS(\'../../data/', vital, '_dt.RDS\')'),
+                         paste0('   ', vital, '_dt <- readRDS(\'../../data/quebec/', vital, '_dt.RDS\')'),
                          paste0('   sampleSize <- ', sampleSize))
 
           # read file
@@ -99,8 +99,8 @@ cat('####### Creating species folder to run MCMC #######\n')
           bash <- paste0("#!/bin/bash
 
 #SBATCH --account=def-dgravel
-#SBATCH -t 4-20:00:00
-#SBATCH --mem-per-cpu=2500M
+#SBATCH -t 3-20:00:00
+#SBATCH --mem-per-cpu=3500M
 #SBATCH --ntasks=", nC, "
 #SBATCH --job-name=", vital, sp, "
 #SBATCH --mail-user=willian.vieira@usherbrooke.ca

@@ -38,11 +38,20 @@ set.seed(42)
 ##  begin stratified sampling (thanks Amaēl for sharing)
 
   # select the species
-  mort_dt <- mort_dt[species_id == sp]
+  mort_dt <- mort_dt[sp_code2 == sp]
+
+  # get latitude and longitude from SHAPE list
+  getCoord <- function(SHAPE, coord = 1) {
+      n <- length(SHAPE)
+      xy <- unique(unlist(SHAPE))
+      return (rep(xy[coord], n))
+  }
+  mort_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
+  mort_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
   if(mort_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
-    deltaS = 10; nbLonClasses = nbLatClasses = 50
+    deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaC = 5
 
     # Size classes
     sizeClass = seq(from = min(mort_dt$dbh0), to = max(mort_dt$dbh0) + deltaS, by = deltaS)
@@ -63,14 +72,23 @@ set.seed(42)
   	for (i in 1:(nbLatClasses - 1))
   		mort_dt[ latClass[i] <= latitude & latitude < latClass[i + 1], latInt := i]
 
+    # canopyDistance classes
+    canopyClass = seq(from = min(mort_dt$canopyDistance), to = max(mort_dt$canopyDistance) + deltaC, by = deltaC)
+    nbCanopyClass = length(canopyClass) - 1
+
+  	for (i in 1:nbCanopyClass)
+  		mort_dt[ canopyClass[i] <= canopyDistance & canopyDistance < canopyClass[i + 1], canopyInt := i]
+
   	# Derive frequencies
   	freqDBH = mort_dt[, table(sizeInt)]/mort_dt[, .N]
   	freqLon = mort_dt[, table(lonInt)]/mort_dt[, .N]
   	freqLat = mort_dt[, table(latInt)]/mort_dt[, .N]
+    freqCan = mort_dt[, table(canopyInt)]/mort_dt[, .N]
 
   	ls_sizeInt = mort_dt[, unique(sizeInt)]
   	ls_lonInt = mort_dt[, unique(lonInt)]
   	ls_latInt = mort_dt[, unique(latInt)]
+    ls_canInt = mort_dt[, unique(canopyInt)]
 
   	for (s in ls_sizeInt)
   		mort_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
@@ -81,7 +99,10 @@ set.seed(42)
   	for (lt in ls_latInt)
   		mort_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
 
-  	mort_dt[, proba := proba_s*proba_L*proba_l]
+    for (c in ls_canInt)
+  		mort_dt[canopyInt == c, proba_c := freqCan[as.character(c)]]
+
+  	mort_dt[, proba := proba_s*proba_L*proba_l*proba_c]
 
   	sampledIndices = sample(x = 1:mort_dt[,.N], size = sampleSize, replace = FALSE, prob = mort_dt$proba)
 
@@ -100,8 +121,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = mort_dt[, .N],
-          T_data = mort_dt$min_temp_coldest_period_lag,
-          P_data = mort_dt$tot_pp_period3_lag,
+          T_data = mort_dt$value5_bio60_01,
+          P_data = mort_dt$value5_bio60_12,
           D_data = mort_dt$dbh0,
           C_data = mort_dt$BA,
           time_interv = mort_dt$deltaYear,
