@@ -13,22 +13,22 @@ data
 
 parameters // IMPORTANT: it worth adding constraints, at least to respect the priors, otherwise, a lot of divergence!
 {
-	real<lower = 0> pdg; // Potential Diameter Growth
+	real<lower = 0, upper = 100> pdg; // Potential Diameter Growth
 
-	real<lower = -10, upper = 25> T_opt; // Optimum temperature of each species
-	real<lower = 0> sigmaT_opt; // Variance among individuals of optimal T within a species
+	real<lower = -8, upper = 25> T_opt; // Optimum temperature of each species
+	real<lower = 0.2, upper = 20> sigmaT_opt; // Variance among individuals of optimal T within a species
 
-	real<lower = 0, upper = 1500 > P_opt; // Optimum precipitation of each species
-	real<lower = 0> sigmaP_opt; // Variance among individuals of optimal P within a species
+	real<lower = 500, upper = 1700 > P_opt; // Optimum precipitation of each species
+	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = -30, upper = 40> Mid; // competition effect: Mid of Generalised logistic function
+	real<lower = -16, upper = 35> Mid; // competition effect: Mid of Generalised logistic function
 	real<lower = 0, upper = 1> Lo;
 
 	real<lower = 0, upper = 850> Phi_opt;
-	real<lower = 0> sigmaPhi_opt;
+	real<lower = 0, upper = 15> sigmaPhi_opt;
 
 	// real<lower = 0> sigma; // Variance of individuals around there species specific mean
-	real<lower = 0> sigma_base;
+	real<lower = 0, upper = 12> sigma_base;
 }
 
 transformed parameters
@@ -49,18 +49,18 @@ model
 {
 	pdg ~ gamma(2^2/10.0, 2/10.0);
 
-	T_opt ~ normal(15, 10);
+	T_opt ~ normal(6, 8);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
-	P_opt ~ normal(550, 300);
-	sigmaP_opt ~ gamma(200^2/20000.0, 200/20000.0);
+	P_opt ~ normal(1000, 350);
+	sigmaP_opt ~ gamma(250^2/20000.0, 250/20000.0);
 
 	Mid ~ normal(0, 20);
 	Lo ~ uniform(0, 1);
 	
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
-	sigmaPhi_opt ~ gamma(300^2/100000.0, 300/100000.0);
+	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
 
-	sigma_base ~ pareto_type_2(0.01, 10, 2.4); // growth_dt[, var(growth)] = 2.6
+	sigma_base ~ gamma(2.6^2/5, 2.6/5); // growth_dt[, var(growth)] = 2.6
 
 	// Growth model
 	Y ~ gamma(mu_d .* mu_d ./ sigma_base, mu_d ./ sigma_base);
