@@ -38,11 +38,20 @@ set.seed(42)
 ## begin stratified sampling (thanks Amaēl for sharing)
 
   # select the species
-  growth_dt <- growth_dt[species_id == sp]
+  growth_dt <- growth_dt[sp_code2 == sp]
+
+  # get latitude and longitude from SHAPE list
+  getCoord <- function(SHAPE, coord = 1) {
+      n <- length(SHAPE)
+      xy <- unique(unlist(SHAPE))
+      return (rep(xy[coord], n))
+  }
+  growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
+  growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
-    deltaS = 10; nbLonClasses = nbLatClasses = 50
+    deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaC = 5
 
     # Size classes
     sizeClass = seq(from = min(growth_dt$dbh0), to = max(growth_dt$dbh0) + deltaS, by = deltaS)
@@ -63,14 +72,23 @@ set.seed(42)
   	for (i in 1:(nbLatClasses - 1))
   		growth_dt[ latClass[i] <= latitude & latitude < latClass[i + 1], latInt := i]
 
+    # canopyDistance classes
+    canopyClass = seq(from = min(growth_dt$canopyDistance), to = max(growth_dt$canopyDistance) + deltaC, by = deltaC)
+    nbCanopyClass = length(canopyClass) - 1
+
+  	for (i in 1:nbCanopyClass)
+  		growth_dt[ canopyClass[i] <= canopyDistance & canopyDistance < canopyClass[i + 1], canopyInt := i]
+
   	# Derive frequencies
   	freqDBH = growth_dt[, table(sizeInt)]/growth_dt[, .N]
   	freqLon = growth_dt[, table(lonInt)]/growth_dt[, .N]
   	freqLat = growth_dt[, table(latInt)]/growth_dt[, .N]
+    freqCan = growth_dt[, table(canopyInt)]/growth_dt[, .N]
 
   	ls_sizeInt = growth_dt[, unique(sizeInt)]
   	ls_lonInt = growth_dt[, unique(lonInt)]
   	ls_latInt = growth_dt[, unique(latInt)]
+    ls_canInt = growth_dt[, unique(canopyInt)]
 
   	for (s in ls_sizeInt)
   		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
@@ -81,7 +99,10 @@ set.seed(42)
   	for (lt in ls_latInt)
   		growth_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
 
-  	growth_dt[, proba := proba_s*proba_L*proba_l]
+    for (c in ls_canInt)
+  		growth_dt[canopyInt == c, proba_c := freqCan[as.character(c)]]
+
+  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_c]
 
   	sampledIndices = sample(x = 1:growth_dt[,.N], size = sampleSize, replace = FALSE, prob = growth_dt$proba)
 
@@ -100,8 +121,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = growth_dt[, .N],
-          T_data = growth_dt$mean_temp_period_3_lag,
-          P_data = growth_dt$tot_pp_period3_lag,
+          T_data = growth_dt$value5_bio60_01,
+          P_data = growth_dt$value5_bio60_12,
           D_data = growth_dt$dbh0,
           C_data = growth_dt$canopyDistance,
           Y = growth_dt$growth)

@@ -1,18 +1,19 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ["183319PINBAN", "183302PICMAR", "183375PINRES", "18032ABIBAL",
-        "28731ACESAC", "19049ULMAME", "28728ACERUB", "19408QUERUB"]
+spIds: ["THUOCC", "BETPAP", "PICGLA", "BETALL",
+        "ACERUB", "ABIBAL", "PICMAR", "POPTRE",
+        "ACESAC", "PINBAN"]
 # Which vital rates to run
 vitalRates: ["growth"]
 # Max interation in the MCMC
-maxIter: 15000
+maxIter: 5000
 # Number of cores and chains (to be ran in parallel)
-nC: 4
+nC: 3
 # Size of transition measurements to be sampled from the population
-sampleSize: 15000
+sampleSize: 7000
 # The main folder name
-simName: "optimalGrowth"
+simName: "competition"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1", "sim2", "sim3"]
+simulations: ["sim1", "sim2"]
 
 
 ##################################
@@ -21,9 +22,7 @@ simulations: ["sim1", "sim2", "sim3"]
 
 ## Growth test - v1.0
 
-## Basic growth rate as a function of canopyStatus (continuous canopy distance), envir and size
-## Testing the effect of letting the optimal growth rate (pdg parameter) varying or not.
+## Test the difference between using canopyDistance or Basal area as competition variables
 
-# - sim1: Open pdg [0 - ]
-# - sim2: Closed pdg [0 - 100]
-# - sim3: Fixed pdg to 4 cm/year
+# - sim1: canopyDistance
+# - sim2: Basal area
