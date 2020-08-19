@@ -19,8 +19,10 @@
 
 - Basal area ([link v5.0](https://willvieira.github.io/TreesDemography/mort/basalArea.html))
 
+- Constrained parameters ([link v6.0](https://willvieira.github.io/TreesDemography/mort/constrainedPars.html))
+
 ## Growth
 
-- Competition (canopy distance vs basal area) ([link v1.0](https://willvieira.github.io/TreesDemography/growth/competition.html)))
+- Competition (canopy distance vs basal area - [link v1.0](https://willvieira.github.io/TreesDemography/growth/competition.html))
 
 ## Fecundity
