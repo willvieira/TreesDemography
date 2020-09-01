@@ -359,8 +359,8 @@ print(p)
     }else {
       means <- smooth.spline(rgamma(length(mu_d), mu_d^2/param["sigma_base"], mu_d/param["sigma_base"]), spar = 0.2)$y
       means[means < 0] = 0.0001 # mooth generates negative values but gamma dist does not allow negative values
-      lower <- qgamma(.95, (mu_d^2/param["sigma_base"])*means, mu_d/param["sigma_base"], lower.tail = FALSE)
-      upper <- qgamma(.95, (mu_d^2/param["sigma_base"])*means, mu_d/param["sigma_base"])
+      lower <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"], lower.tail = FALSE)
+      upper <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"])
       growth <- data.frame(means = means, lower = lower, upper = upper)
     }
     
