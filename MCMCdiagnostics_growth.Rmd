@@ -212,7 +212,7 @@ print(p)
     compEffectCanopy = function(xcanopy, Lo, Mid) {
       return( (Lo + ((1 - Lo) / (1 + exp(-0.5 * (xcanopy - Mid))))) )
     }
-    
+
     compEffectBA = function(xBA, Lo, beta) {
       return( (Lo + ((1 - Lo) / (1 + exp(-beta * (xBA - 20))))) )
     }
@@ -352,7 +352,7 @@ print(p)
             exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
-    
+
     if(!indVar)
     {
       growth <- mu_d
@@ -363,7 +363,7 @@ print(p)
       upper <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"])
       growth <- data.frame(means = means, lower = lower, upper = upper)
     }
-    
+
     return( cbind(growth, newdata) )
   }
 
@@ -443,7 +443,7 @@ print(p)
         legend("topleft", legend = cd2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
                 fill = colcd[1:3], bty = "n", border = "transparent")
       }
-        
+
       mtext(ifelse(indVar, 'ind variation', 'par variation'), side = 3, line = 0.3, cex = 1)
       if(!indVar) mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0.7, at = max(newdataT$TP), cex = 1.1)
       if(!indVar) mtext(sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
@@ -498,7 +498,7 @@ print(p)
         growth_ci90D <- DF[, c(3, 4:7)]
         names(growth_meanD)[1] <- names(growth_ci10D)[1] <- names(growth_ci90D)[1] <- 'growth'
       }
-      
+
       plot(growth ~ D, growth_ci10D, type = "n", ylim = c(0, 4),
           xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
@@ -531,7 +531,7 @@ print(p)
         growth_ci90C <- DF[, c(3, 4:7)]
         names(growth_meanC)[1] <- names(growth_ci10C)[1] <- names(growth_ci90C)[1] <- 'growth'
       }
-      
+
       plot(growth ~ CD, growth_ci10C, type = "n", ylim = c(0, 4),
           xlab = ifelse(sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
@@ -610,7 +610,151 @@ print(p)
 #
 ```
 
+# Out-of-bag predictions
 
+```{r organize data by sp for OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
+  # create a list of data.table objects for each spIds
+  # For each data.table, we will get all rows that were not used in the fitting stan model
+  # I have to do it as the sampleIndices where saved when the data frame was already filtered for the specific sp
+
+  oob_list <- list()
+  for(sp in spIds)
+  {
+    # sp specific db
+    db <- growth_dt[sp_code2 == sp]
+
+    # load rows used for stan fit
+    sampledIndices <- readRDS(paste0('sampleOut/growth_', sp, '.RDS'))
+
+    db <- db[!sampledIndices, ]
+
+    oob_list[[sp]] <- db
+  }
+```
+
+```{r calculate OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
+
+  # growth model
+  growth_model2 <- function(param, sim, D, TP, PP, C, BA, indVar = FALSE)
+  {
+
+    lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
+
+    # competition function depending on simulation
+    if(sim == 'sim1') {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-0.5 * (C - param["Mid"])))))
+    }else {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+    }
+
+    mu_d <- param["pdg"] *
+            competition *
+            exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
+            exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
+            exp(-lgPart)
+
+    if(!indVar)
+    {
+      growth <- mu_d
+    }else {
+      means <- smooth.spline(rgamma(length(mu_d), mu_d^2/param["sigma_base"], mu_d/param["sigma_base"]), spar = 0.2)$y
+      means[means < 0] = 0.0001 # mooth generates negative values but gamma dist does not allow negative values
+      lower <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"], lower.tail = FALSE)
+      upper <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"])
+      growth <- list(means = means, lower = lower, upper = upper)
+    }
+
+    return( growth )
+  }
+
+  for(sp in spIds)
+  {
+    for(sim in simulations)
+    {
+      # get params
+      fit <- get(paste('fit', sim, sp, sep = '_'))
+      posterior <- rstan::extract(fit)
+
+      param_summary <- summary(fit, probs = c(0.1, 0.9))$summary
+      rownames(param_summary) <- names(posterior)
+      param_summary <- param_summary[, -c(2:3)]
+
+      nRow <- nrow(param_summary)
+      param_mean <- param_summary[-nRow, 1]
+      param_ci10 <- param_summary[-nRow, 2]
+      param_ci90 <- param_summary[-nRow, 3]
+
+      if(sim == 'sim1')
+      {
+        # get deterministic growth rate
+        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+
+        # get growth rate with individual variation
+        oob_list[[sp]][, c('Gvar_mean_sim1', 'Gvar_ci10_sim1', 'Gvar_ci90_sim1') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+      }else{
+          # get deterministic growth rate
+        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+
+        # get growth rate with individual variation
+        oob_list[[sp]][, c('Gvar_mean_sim2', 'Gvar_ci10_sim2', 'Gvar_ci90_sim2') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+      }
+    }
+  }
+
+  oob_growth <- do.call(rbind, oob_list)
+  rm(oob_list, db, sampledIndices)
+
+```
+
+```{r plot OOB predictions,echo=FALSE,fig.height = 8, fig.width = 12}
+
+  for(sp in spIds)
+  {
+    # axis limites
+    xyLim <- oob_growth[sp_code2 == sp, range(growth)]
+
+    par(mfcol = c(2, length(simulations)), xaxs = "i", las = 1, mar = c(4, 4, 1, 1), oma = c(7, 5, 7, .5), mgp = c(1, 2.5, 0), tck = -.008, cex.lab = 4, cex.axis = 4, cex = 0.3)
+    for(sim in simulations)
+    {
+      if(sim == 'sim1') {
+        db <- oob_growth[sp_code2 == sp, c(2, 8:13)]
+      }else{
+        db <- oob_growth[sp_code2 == sp, c(2, 14:19)]
+      }
+      # sample 10% of data
+      db <- db[sample(1:nrow(db), floor(nrow(db) * 0.1))]
+
+      # plot deterministic growth
+      plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
+      axis(1, labels = NA)
+      abline(0, 1)
+      segments(db$growth - 0.01, db[[3]], db$growth + 0.01, db[[3]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[4]], db$growth + 0.01, db[[4]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[3]], db$growth, db[[4]], col = rgb(0, 0, 0, 0.2)) # vertica
+      
+      # plot gorwth with individual variation
+      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
+      axis(2, labels = NA)
+      abline(0, 1)
+
+      segments(db$growth - 0.01, db[[6]], db$growth + 0.01, db[[6]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[7]], db$growth + 0.01, db[[7]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[6]], db$growth, db[[7]], col = rgb(0, 0, 0, 0.2)) # vertica
+      
+
+      # text
+      mtext(sp, 3, outer = TRUE, cex = 1, line = 2.5)
+      mtext('Deterministic growth', 3, outer = TRUE, cex = 1, line = -0.5)
+      mtext('Ind variable growth', 3, outer = TRUE, cex = 1, line = -60)
+      mtext('Growth rate (mm/y)', 1, outer = TRUE, line = 1.3, cex = 1)
+      mtext('Predicted growth rate (mm/y)', 2, las = 0, outer = TRUE, line = 2.2, cex = 1)
+    }
+  }
+```
 
 # Sampling time
 
