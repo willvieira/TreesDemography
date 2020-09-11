@@ -11,7 +11,7 @@
 - **sim1**: canopyDistance
 - **sim2**: Basal area (BA)
 
-```{r, echo = F}
+```{r, echo = F, message=FALSE}
 suppressPackageStartupMessages(library(rstan))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(ggplot2))
@@ -755,6 +755,112 @@ print(p)
     }
   }
 ```
+
+# Mean squared error (MSE) of out-of-bag predictions
+
+```{r calculate MSE, echo = FALSE}
+
+  #################################
+  # Get X random values from posterior distribution to get a distribution of MSE (mean squared error)
+  #################################
+
+  # growth model
+  growth_model3 <- function(param, sim, D, TP, PP, C, BA, indVar = FALSE)
+  {
+
+    lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
+
+    # competition function depending on simulation
+    if(sim == 'sim1') {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-0.5 * (C - param["Mid"])))))
+    }else {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+    }
+
+    mu_d <- param["pdg"] *
+            competition *
+            exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
+            exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
+            exp(-lgPart)
+
+    if(!indVar)
+    {
+      growth <- mu_d
+    }else {
+      growth <- rgamma(length(mu_d), mu_d^2/param["sigma_base"], mu_d/param["sigma_base"])
+    }
+
+    return( growth )
+  }
+
+  MSE_dt <- setDT(data.frame(sp = character(), sim = integer(), MSE_det = logical(), MSE_var = numeric()))
+  sampleN <- 500
+
+  for(sp in spIds)
+  {
+    
+    db <- oob_growth[sp_code2 == sp, .(growth, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA)]
+
+    for(sim in simulations)
+    {
+      # get params
+      fit <- get(paste('fit', sim, sp, sep = '_'))
+      posterior <- rstan::extract(fit)
+      
+      # sample X random values from posterior dist
+      params <- lapply(posterior, function(x) sample(x, sampleN))
+
+      MSE_det <- MSE_var <- numeric(sampleN)
+      for(i in 1:sampleN)
+      {
+        # get pars for one sample
+        parsI <- unlist(lapply(params, `[[`, i))
+
+        if(sim == 'sim1')
+        {
+          # get deterministic growth rate
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+          # get growth rate with individual variation
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+        }else{
+            # get deterministic growth rate
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+          # get growth rate with individual variation
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+        }
+
+        # calculate MSE
+        MSE_det[i] <- mean(db[, (growth - g_det_pred)^2])
+        MSE_var[i] <- mean(db[, (growth - g_var_pred)^2])
+      }
+
+      # update main dt
+      MSE_dt <- rbind(MSE_dt, data.frame(sp = rep(sp, sampleN), sim = rep(sim, sampleN), MSE_det = MSE_det, MSE_var = MSE_var))
+    }
+  }
+```
+
+```{r plot MSE,echo=FALSE,fig.height = 8, fig.width = 12, warning=FALSE}
+
+  # For deterministic growth
+  ggplot(MSE_dt) + 
+    geom_density(aes( x = MSE_det, colour = sim, fill = sim), alpha = 0.5) +
+    facet_wrap(~ sp, scales = c('free_y')) +
+    theme_classic() +
+    xlim(0.5, 9) +
+    ggtitle('Deterministic growth') +
+    xlab('MSE')
+
+  # For ind variation growth
+  ggplot(MSE_dt) + 
+    geom_density(aes( x = MSE_var, colour = sim, fill = sim), alpha = 0.5) +
+    facet_wrap(~ sp, scales = c('free_y')) +
+    theme_classic() +
+    xlim(.5, 9) +
+    ggtitle('Ind variable growth') +
+    xlab('MSE')
+```
+
 
 # Sampling time
 
