@@ -18,13 +18,15 @@ navbar:
           href: mort/growthRateEffect2.html
         - text: "Canopy continuous"
           href: mort/canopyContinuous.html
+        - text: "Basal area"
+          href: mort/basalArea.html
+        - text: "Constrained parameters"
+          href: mort/constrainedPars.html
     - text: "Growth"
       icon: fa-tree
       menu:
-        - text: "Test1"
-          href: growth/test1.html
-        - text: "Test2"
-          href: growth/test2.html
+        - text: "Competition"
+          href: growth/competition.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography
