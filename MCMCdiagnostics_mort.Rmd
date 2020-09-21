@@ -1,19 +1,15 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v5.0 - basal area"
+ subtitle: "Test v6.0 - constrained parameters"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Test a continuous measure of basal area to infer competition
-### Instead of using capony distance, I use here the plot basal area
+## Use the size, temperature, precipitation and canopy distance with constrained parameters and priors distribution
+### Test if constrained parameters and priors return faster and more acurate parameters distribution
 
-Using the [Generalized logistic Function](https://en.wikipedia.org/wiki/Generalised_logistic_function) with positive growth rate only:
-
-- **sim1**: $Upper$ = 1; $Lower$ = varying [0 - 1]; $Beta$ = -0.5; $Mid$ varying [0 - 360]
-- **sim2**: $Upper$ = varying [0 - 1]; $Lower$ = 0; $Beta$ = -0.5; $Mid$ varying [0 - 360]
-- **sim3**: lognorm distribution with optimal [0 - 200] and variance [0 - 5] **FAILED** as there are plots with basal area = 0
+- **sim1**: The only simulation.
 
 ```{r, echo = F}
 suppressPackageStartupMessages(library(rstan))
@@ -21,6 +17,7 @@ suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(data.table))
@@ -41,9 +38,9 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'sim1: Lo + Mid'
-  sim2name <- 'sim2: Upper + Mid'
-  sim3name <- 'Failled (using sim2)'
+  sim1name <- 'sim1: constrained parameters'
+  sim2name <- ''
+  sim3name <- ''
 
 #
 
@@ -172,19 +169,18 @@ DT::datatable(divergentDF)
 # Data distribution
 
 ```{r organize data, echo = FALSE}
-mort_dt <- readRDS('data/mort_dt.RDS')
-mort_dt <- mort_dt[species_id %in% spIds]
-mort_dt <- mort_dt[, .(species_id, mort, dbh0, min_temp_coldest_period_lag, tot_pp_period3_lag, BA)]
+mort_dt <- readRDS('data/quebec/mort_dt.RDS')
+mort_dt <- mort_dt[sp_code2 %in% spIds]
+mort_dt <- mort_dt[, .(sp_code2, mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance)]
 
 # transform dt
 mort <- tidyr::gather(data = mort_dt,
-            mort, dbh0, min_temp_coldest_period_lag, tot_pp_period3_lag, BA,
+            mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance,
             key = 'var', value = 'value')
-rm(mort_dt)
 ```
 
 ```{r plot data distribution, echo = FALSE, message=FALSE, fig.height = 7, fig.width = 10}
-p <- ggplot(data = mort, aes(value, species_id)) +
+p <- ggplot(data = mort, aes(value, sp_code2)) +
       geom_density_ridges_gradient() +
       facet_grid(~var, scales = 'free_x') + #,
       #          labeller = labeller(sim = setNames(c(sim1name,
@@ -197,7 +193,9 @@ print(p)
 
 # Size, temperature, precipitation and competition effect
 
-```{r, echo = F, fig.height = 11, fig.width = 9}
+## Survival functions
+
+```{r, echo = F, fig.height = 11, fig.width = 4}
 # Plot of size, temperature, precipitation and competition effect
 
   # define functions of the model
@@ -218,24 +216,8 @@ print(p)
     }
 
     # competition effect
-    compEffect = function(xBA, sim, param) {
-      if(sim == 'sim1') {
-        Lo = param['Lo', 1]
-        Upper = 1
-        Beta = -0.5
-        Mid = param['Mid', 1]
-      }else if(sim == 'sim2') {
-        Lo = 0
-        Upper = param['Upper', 1]
-        Beta = -0.5
-        Mid = param['Mid', 1]
-      }else {
-        Lo = 0
-        Upper = param['Upper', 1]
-        Beta = -0.5
-        Mid = param['Mid', 1]
-      }
-      return( (Lo + ((Upper - Lo) / (1 + exp(-Beta * (xBA - Mid))))) )
+    compEffect = function(xcanopy, param) {
+      return( (param['Lo', 1] + ((1 - param['Lo', 1]) / (1 + exp(-0.5 * (xcanopy - param['Mid', 1]))))) )
     }
 
   #
@@ -243,13 +225,13 @@ print(p)
   ## PLOT ##
 
   # define x axis
-  sizex = seq(0, 900, 0.5)
-  tempx = seq(-35, 20)
-  precx = seq(0, 3500)
-  BAx = seq(0, 400, 0.5)
+  sizex = seq(91, 700, 0.5)
+  tempx = seq(-8, 25)
+  precx = seq(500, 1700)
+  canopyDist = seq(-40, 50, length.out = 200)
 
   # species specfic colours
-  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set1"))
+  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
 
   par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
@@ -312,13 +294,13 @@ print(p)
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
 
-      if(sp == 1) plot(BAx, compEffect(BAx, sim, param = out),
-      ylim = c(0, 1), type = 'l', xlab = 'Basal area', ylab = 'Competition effect',
+      if(sp == 1) plot(canopyDist, compEffect(canopyDist, param = out),
+      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance from S* (m)', ylab = 'Competition effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(BAx, compEffect(BAx, sim, param = out), type = 'l', col = spCols[sp])
+      points(canopyDist, compEffect(canopyDist, param = out), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
@@ -334,30 +316,12 @@ print(p)
 # Plot predictions
   # define model
 
-  mort_model <- function(param, sim, newdata) {
+  mort_model <- function(param, sim = NULL, newdata) {
 
-    # pars depending on simulation
-    if(sim == 'sim1') {
-      Lo = param['Lo']
-      Upper = 1
-      Beta = -0.5
-      Mid = param['Mid']
-    }else if(sim == 'sim2') {
-      Lo = 0
-      Upper = param['Upper']
-      Beta = -0.5
-      Mid = param['Mid']
-    }else {
-      Lo = 0
-      Upper = param['Upper']
-      Beta = -0.5
-      Mid = param['Mid']
-    }
- 
     lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
 
     mort <- 1 / (1 + (param["psi"] *
-                ((Lo + ((Upper - Lo) / (1 + exp(-Beta * (newdata$BA - Mid)))))) *
+                ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (newdata$CD - param['Mid'])))))) *
                 exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
                 exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
                 exp(-lgPart)))
@@ -366,23 +330,23 @@ print(p)
 
   # data frame with fixed data to run the model
   # Temp
-  newdataT <- data.frame(expand.grid(BA = 1,
-                                     TP = seq(-30, 20, length.out = 200),
+  newdataT <- data.frame(expand.grid(CD = 10,
+                                     TP = seq(-10, 15, length.out = 200),
                                      PP = 1150,
                                      D = c(100, 200, 400)))
   # Prec
-  newdataP <- data.frame(expand.grid(BA = 1,
+  newdataP <- data.frame(expand.grid(CD = 10,
                                      TP = 1.5,
                                      PP = seq(200, 2500, length.out = 200),
                                      D = c(100, 200, 400)))
   # Size
-  newdataD <- data.frame(expand.grid(BA = 1,
+  newdataD <- data.frame(expand.grid(CD = 10,
                                      TP = 1.5,
                                      PP = 1150,
                                      D = seq(10, 900, length.out = 200)))
 
   # Canopy distance
-  newdataC <- data.frame(expand.grid(BA = seq(0, 400, 0.5),
+  newdataC <- data.frame(expand.grid(CD = seq(-35, 40, length.out = 200),
                                      TP = 1.5,
                                      PP = 1150,
                                      D = c(100, 200, 400)))
@@ -456,6 +420,9 @@ print(p)
       legend("topleft", legend = size2plot, title = "Size",
              fill = colsize[1:3], bty = "n", border = "transparent")
 
+    # data range
+    abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_01)], col = 'grey', lty = 2)
+
      mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
      mtext(sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
 
@@ -476,6 +443,9 @@ print(p)
     }
     mtext("P(Mortality)", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
+    # data range
+    abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_12)], col = 'grey', lty = 2)
+    
     # Mortality vs size
     plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
          xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
@@ -485,8 +455,11 @@ print(p)
               c(mort_ci10D$mort, rev(mort_ci90D$mort)),
               col = alpha("grey25", 0.1), border = NA)
 
+    # data range
+    abline(v = mort_dt[sp_code2 == sp, range(dbh0)], col = 'grey', lty = 2)
+
     # Mortality vs canopy
-    plot(mort ~ BA, mort_ci10C, type = "n", ylim = c(0, 1),
+    plot(mort ~ CD, mort_ci10C, type = "n", ylim = c(0, 1),
          xlab = "Canopy distance from S* (m)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     for(dhp in size2plot) {
@@ -495,15 +468,18 @@ print(p)
       ci90 <- subset(mort_ci90C, D == dhp)
       mycol <- colsize[size2plot == dhp]
 
-      lines(mort ~ BA, mu, cex = .5, pch = 19, col = mycol)
-      polygon(c(mu$BA, rev(mu$BA)),
+      lines(mort ~ CD, mu, cex = .5, pch = 19, col = mycol)
+      polygon(c(mu$CD, rev(mu$CD)),
               c(ci10$mort, rev(ci90$mort)),
               col = alpha(mycol, 0.5), border = NA)
     }
+    # data range
+    abline(v = mort_dt[sp_code2 == sp, range(canopyDistance)], col = 'grey', lty = 2)
+
   }
   ```
 
-  ```{r plot predictions,echo=FALSE,fig.height = 12, fig.width = 9}
+  ```{r plot predictions,echo=FALSE,fig.height = 12, fig.width = 4}
   # plot all species
   for(sp in spIds) {
     for(sim in simulations) {
@@ -515,6 +491,118 @@ print(p)
 #
 ```
 
+
+# Out-of-bag accuracy
+
+Using four different metrics:
+
+- **Sensitivity** measures the percentage of dead trees that are identified as dead
+- **Specificity** measures the percentage of alive trees that are correctly identified as alive
+- **Accuracy** is the ratio of number of correct predictions to the total of predictions
+- **Accuracy balanced** considers unbalanced accuracy predictions of positive and negative events (sensitivity and specificity)
+
+```{r organize data by sp for OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
+  # create a list of data.table objects for each spIds
+  # For each data.table, we will get all rows that were not used in the fitting stan model
+  # I have to do it as the sampleIndices where saved when the data frame was already filtered for the specific sp
+
+  oob_list <- list()
+  for(sp in spIds)
+  {
+    # sp specific db
+    db <- mort_dt[sp_code2 == sp]
+
+    # load rows used for stan fit
+    sampledIndices <- readRDS(paste0('sampleOut/mort_', sp, '.RDS'))
+
+    db <- db[!sampledIndices, ]
+
+    oob_list[[sp]] <- db
+  }
+```
+
+```{r calculate OOB predictions and confusion matrix, echo=FALSE,fig.height = 12, fig.width = 12}
+
+  # growth model
+  
+  mort_model2 <- function(param, sim, D, TP, PP, C)
+  {
+
+    lgPart <- (log(D/param["DBHopt"])/param["DBHvar"])^2
+
+    mort <- 1 / (1 + (param["psi"] *
+                ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (C - param['Mid'])))))) *
+                exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
+                exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
+                exp(-lgPart)))
+    
+    return( mort )
+
+  }
+
+  acc_dt <- data.table(sp = character(),
+                       Acc = numeric(),
+                       Sensitivity = numeric(),
+                       Specificity = numeric(),
+                       AccCorrected = numeric())
+  sampleN <- 300
+  count <- 0; totalN <- sampleN * length(sim) * length(spIds)
+
+  for(sp in spIds)
+  {
+    db <- oob_list[[sp]]
+
+    for(sim in simulations)
+    {
+      # get params
+      fit <- get(paste('fit', sim, sp, sep = '_'))
+      posterior <- rstan::extract(fit)
+      params <- lapply(posterior, sample, size = sampleN)
+      
+      Acc <- Sensitivity <- Specificity <- AccCorrected <- numeric(sampleN)
+      for(i in 1:sampleN)
+      {
+        pars <- unlist(lapply(params, `[[`, i))
+        # get deterministic growth rate
+        db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_model2(param = pars, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance))]
+
+        TP <- db[mort == 1 & mort_pred == 1, .N]
+        TN <- db[mort == 0 & mort_pred == 0, .N]
+        FN <- db[mort == 0 & mort_pred == 1, .N]
+        FP <- db[mort == 1 & mort_pred == 0, .N]
+
+        Acc[i] <- (TP + TN)/(TP + TN + FP + FN)
+        Sensitivity[i] <- TP/(TP + FN)
+        Specificity[i] <- TN/(FP + TN)
+        AccCorrected[i] <- (Sensitivity[i] + Specificity[i])/2
+
+      }      
+      acc_dt <- rbind(acc_dt, data.table(sp = rep(sp, sampleN), Acc = Acc, Sensitivity = Sensitivity, Specificity = Specificity, AccCorrected = AccCorrected))
+    }
+    oob_list[[sp]] <- db
+  }
+
+  rm(oob_list, db, sampledIndices)
+
+```
+
+```{r plot confusion matrix,echo=FALSE,message=FALSE,fig.height = 12, fig.width = 8}
+
+  p1 <- ggplot(acc_dt, aes(Acc, sp)) +
+          geom_density_ridges_gradient() +
+          xlab('Accuracy (%)')
+  p2 <- ggplot(acc_dt, aes(AccCorrected, sp)) +
+          geom_density_ridges_gradient() +
+          xlab('Accuracy corrected (%)')
+  
+  p3 <- ggplot(acc_dt, aes(Sensitivity, sp)) +
+          geom_density_ridges_gradient()
+  p4 <- ggplot(acc_dt, aes(Specificity, sp)) +
+          geom_density_ridges_gradient()
+
+  gridExtra::grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+
+```
 
 
 # Sampling time
