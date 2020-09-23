@@ -22,6 +22,8 @@ navbar:
           href: mort/basalArea.html
         - text: "Constrained parameters"
           href: mort/constrainedPars.html
+        - text: "Competition"
+          href: mort/competition.html
     - text: "Growth"
       icon: fa-tree
       menu:
