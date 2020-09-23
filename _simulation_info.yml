@@ -11,19 +11,18 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: 7000
 # The main folder name
-simName: "constrainedPars"
+simName: "Competition"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1"]
+simulations: ["sim1", "sim2"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v6.0
+## Mortality test - v7.0
 
-## Test if constrained parameters work better
-# Simulations:
-# - Sim1: One simulation only with constrained parameters
-# - Sim2:
-# - Sim3:
+## Test the difference between using canopyDistance or Basal area as competition variables
+
+# - sim1: canopyDistance
+# - sim2: Basal area

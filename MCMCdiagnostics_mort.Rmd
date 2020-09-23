@@ -1,23 +1,22 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v6.0 - constrained parameters"
+ subtitle: "Test v7.0 - Competition"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Use the size, temperature, precipitation and canopy distance with constrained parameters and priors distribution
-### Test if constrained parameters and priors return faster and more acurate parameters distribution
+## Compare model convergence using two different variables to predict the competition effect:
 
-- **sim1**: The only simulation.
+- **sim1**: Canopy distance ($height - S*$)
+- **sim2**: Basal area
 
-```{r, echo = F}
+```{r, echo = F,warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggridges))
-suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(data.table))
@@ -38,8 +37,8 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'sim1: constrained parameters'
-  sim2name <- ''
+  sim1name <- 'sim1: canopy distance'
+  sim2name <- 'sim2: basal area'
   sim3name <- ''
 
 #
@@ -171,11 +170,11 @@ DT::datatable(divergentDF)
 ```{r organize data, echo = FALSE}
 mort_dt <- readRDS('data/quebec/mort_dt.RDS')
 mort_dt <- mort_dt[sp_code2 %in% spIds]
-mort_dt <- mort_dt[, .(sp_code2, mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance)]
+mort_dt <- mort_dt[, .(sp_code2, mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA)]
 
 # transform dt
 mort <- tidyr::gather(data = mort_dt,
-            mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance,
+            mort, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA,
             key = 'var', value = 'value')
 ```
 
@@ -195,7 +194,7 @@ print(p)
 
 ## Survival functions
 
-```{r, echo = F, fig.height = 11, fig.width = 4}
+```{r function effects, echo = F, fig.height = 11, fig.width = 9}
 # Plot of size, temperature, precipitation and competition effect
 
   # define functions of the model
@@ -216,8 +215,14 @@ print(p)
     }
 
     # competition effect
-    compEffect = function(xcanopy, param) {
-      return( (param['Lo', 1] + ((1 - param['Lo', 1]) / (1 + exp(-0.5 * (xcanopy - param['Mid', 1]))))) )
+    compEffect = function(xcanopy, param, sim) {
+      if(sim == 'sim1') {
+        compEff <- (param['Lo', 1] + ((1 - param['Lo', 1]) / (1 + exp(-0.5 * (xcanopy - param['Mid', 1])))))
+      }else{
+        compEff <- (param['Lo', 1] + ((1 - param['Lo', 1]) / (1 + exp(-param['beta', 1] * (xcanopy - 20)))))
+      }
+      
+      return( compEff )
     }
 
   #
@@ -229,11 +234,12 @@ print(p)
   tempx = seq(-8, 25)
   precx = seq(500, 1700)
   canopyDist = seq(-40, 50, length.out = 200)
+  BAx = seq(0, 80, 0.1)
 
   # species specfic colours
   spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
 
-  par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
+  par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
   # plot size effect
   for(sim in simulations) {
@@ -288,68 +294,69 @@ print(p)
     if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
-  # plot canopy effect
-  for(sim in simulations) {
+  # plot canopyDistance effect
+  for(sim in simulations[1]) {
     for(sp in 1:length(spIds)) {
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
 
-      if(sp == 1) plot(canopyDist, compEffect(canopyDist, param = out),
+      if(sp == 1) plot(canopyDist, compEffect(canopyDist, param = out, sim = sim),
       ylim = c(0, 1), type = 'l', xlab = 'Canopy distance from S* (m)', ylab = 'Competition effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(canopyDist, compEffect(canopyDist, param = out), type = 'l', col = spCols[sp])
+      points(canopyDist, compEffect(canopyDist, param = out, sim = sim), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
   legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
+
+  # plot basal area effect
+  for(sim in simulations[2]) {
+    for(sp in 1:length(spIds)) {
+      # get parameters
+      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+
+      if(sp == 1) plot(BAx, compEffect(BAx, param = out, sim = sim),
+      ylim = c(0, 1), type = 'l', xlab = 'Basal area (m2/ha)', ylab = 'Competition effect',
+      col = spCols[sp],
+      yaxt = ifelse(sim == 'sim1', "s", "n"))
+      if(sim == 'sim2') axis(2, labels = FALSE)
+
+      points(BAx, compEffect(BAx, param = out, sim = sim), type = 'l', col = spCols[sp])
+    }
+
+    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+  }
 ```
 
 
 
 # Predictions
 
-```{r, echo = F}
+```{r prediction functions, echo = F,fig.width = 9}
 # Plot predictions
   # define model
 
-  mort_model <- function(param, sim = NULL, newdata) {
+  mort_model <- function(param, sim, newdata) {
+
+    if(sim == 'sim1') {
+      compEffect <- ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (newdata$CD - param['Mid']))))))
+    }else {
+      compEffect <- ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-param['beta'] * (newdata$CD - 20))))))
+    }
 
     lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
 
     mort <- 1 / (1 + (param["psi"] *
-                ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (newdata$CD - param['Mid'])))))) *
+                compEffect *
                 exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
                 exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
                 exp(-lgPart)))
     mort_df <- cbind(mort, newdata)
   }
-
-  # data frame with fixed data to run the model
-  # Temp
-  newdataT <- data.frame(expand.grid(CD = 10,
-                                     TP = seq(-10, 15, length.out = 200),
-                                     PP = 1150,
-                                     D = c(100, 200, 400)))
-  # Prec
-  newdataP <- data.frame(expand.grid(CD = 10,
-                                     TP = 1.5,
-                                     PP = seq(200, 2500, length.out = 200),
-                                     D = c(100, 200, 400)))
-  # Size
-  newdataD <- data.frame(expand.grid(CD = 10,
-                                     TP = 1.5,
-                                     PP = 1150,
-                                     D = seq(10, 900, length.out = 200)))
-
-  # Canopy distance
-  newdataC <- data.frame(expand.grid(CD = seq(-35, 40, length.out = 200),
-                                     TP = 1.5,
-                                     PP = 1150,
-                                     D = c(100, 200, 400)))
 
   # Function in which you give a rstan output (species_id) and it returns the three plots
   plot_prediction <- function(sim, sp, model, data) {
@@ -394,8 +401,8 @@ print(p)
     mort_ci90C <- mort_model(param = param_ci90, sim = sim, newdata = newdataC)
 
 
-    size2plot <- unique(newdataT$D)
-    colsize <- rev(RColorBrewer::brewer.pal(length(size2plot) + 1, "PuBuGn"))
+    cd2plot <- unique(newdataT$CD)
+    colcd <- rev(RColorBrewer::brewer.pal(length(cd2plot) + 1, "PuBuGn"))
 
     if(sim == 'sim1')
       par(mfcol = c(4, length(simulations)), xaxs="i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
@@ -405,20 +412,19 @@ print(p)
          xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
     if(sim == 'sim2') axis(2,labels=F)
 
-    for(dhp in size2plot) {
-      mu <- subset(mort_meanT, D == dhp)
-      ci10 <- subset(mort_ci10T, D == dhp)
-      ci90 <- subset(mort_ci90T, D == dhp)
-      mycol <- colsize[size2plot == dhp]
+    for(cd in cd2plot) {
+      mu <- subset(mort_meanT, CD == cd)
+      ci10 <- subset(mort_ci10T, CD == cd)
+      ci90 <- subset(mort_ci90T, CD == cd)
+      mycol <- colcd[cd2plot == cd]
 
       lines(mort ~ TP, mu, cex=.5, pch=19, col = mycol)
       polygon(c(mu$TP, rev(mu$TP)),
               c(ci10$mort, rev(ci90$mort)),
               col = alpha(mycol, 0.5), border = NA)
     }
-    if(sim == 'sim1')
-      legend("topleft", legend = size2plot, title = "Size",
-             fill = colsize[1:3], bty = "n", border = "transparent")
+    legend("topleft", legend = cd2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
+            fill = colcd[1:3], bty = "n", border = "transparent")
 
     # data range
     abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_01)], col = 'grey', lty = 2)
@@ -430,11 +436,11 @@ print(p)
     plot(mort ~ PP, mort_ci10P, type = "n", ylim = c(0, 1),
          xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
-    for(dhp in size2plot) {
-      mu <- subset(mort_meanP, D == dhp)
-      ci10 <- subset(mort_ci10P, D == dhp)
-      ci90 <- subset(mort_ci90P, D == dhp)
-      mycol <- colsize[size2plot == dhp]
+    for(cd in cd2plot) {
+      mu <- subset(mort_meanP, CD == cd)
+      ci10 <- subset(mort_ci10P, CD == cd)
+      ci90 <- subset(mort_ci90P, CD == cd)
+      mycol <- colcd[cd2plot == cd]
 
       lines(mort ~ PP, mu, cex = .5, pch = 19, col = mycol)
       polygon(c(mu$PP, rev(mu$PP)),
@@ -450,39 +456,89 @@ print(p)
     plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
          xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
-    lines(mort ~ D, mort_meanD, cex=.5, pch=19, col = "grey25")
-    polygon(c(mort_meanD$D, rev(mort_meanD$D)),
-              c(mort_ci10D$mort, rev(mort_ci90D$mort)),
-              col = alpha("grey25", 0.1), border = NA)
+    for(cd in cd2plot) {
+      mu <- subset(mort_meanD, CD == cd)
+      ci10 <- subset(mort_ci10D, CD == cd)
+      ci90 <- subset(mort_ci90D, CD == cd)
+      mycol <- colcd[cd2plot == cd]
+
+      lines(mort ~ D, mu, cex = .5, pch = 19, col = mycol)
+      polygon(c(mu$D, rev(mu$D)),
+              c(ci10$mort, rev(ci90$mort)),
+              col = alpha(mycol, 0.5), border = NA)
+    }
 
     # data range
     abline(v = mort_dt[sp_code2 == sp, range(dbh0)], col = 'grey', lty = 2)
 
-    # Mortality vs canopy
+    # Mortality vs competition
     plot(mort ~ CD, mort_ci10C, type = "n", ylim = c(0, 1),
-         xlab = "Canopy distance from S* (m)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+         xlab = ifelse(sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
-    for(dhp in size2plot) {
-      mu <- subset(mort_meanC, D == dhp)
-      ci10 <- subset(mort_ci10C, D == dhp)
-      ci90 <- subset(mort_ci90C, D == dhp)
-      mycol <- colsize[size2plot == dhp]
-
-      lines(mort ~ CD, mu, cex = .5, pch = 19, col = mycol)
-      polygon(c(mu$CD, rev(mu$CD)),
-              c(ci10$mort, rev(ci90$mort)),
+    lines(mort ~ CD, mort_meanC, cex = .5, pch = 19, col = mycol)
+      polygon(c(mort_meanC$CD, rev(mort_meanC$CD)),
+              c(mort_ci10C$mort, rev(mort_ci90C$mort)),
               col = alpha(mycol, 0.5), border = NA)
-    }
-    # data range
-    abline(v = mort_dt[sp_code2 == sp, range(canopyDistance)], col = 'grey', lty = 2)
 
+    # add data range
+    if(sim == 'sim1')
+    {
+      abline(v = mort_dt[sp_code2 == sp, range(canopyDistance)], col = 'grey', lty = 2)
+    }else{
+      abline(v = mort_dt[sp_code2 == sp, range(BA)], col = 'grey', lty = 2)
+    }  
   }
   ```
 
-  ```{r plot predictions,echo=FALSE,fig.height = 12, fig.width = 4}
+  ```{r plot predictions,echo=FALSE,fig.height = 12, fig.width = 8}
   # plot all species
   for(sp in spIds) {
     for(sim in simulations) {
+      #generate data depending on the simulation
+      if(sim == 'sim1') {
+        # Temp
+        newdataT <- data.frame(expand.grid(CD = c(-10, 0, 10),
+                                          TP = seq(-10, 25, length.out = 300),
+                                          PP = 1000,
+                                          D = 200))
+      # Prec
+        newdataP <- data.frame(expand.grid(CD = c(-10, 0, 10),
+                                          TP = 4,
+                                          PP = seq(250, 1800, length.out = 300),
+                                          D = 200))
+        # Size
+        newdataD <- data.frame(expand.grid(CD = c(-10, 0, 10),
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = seq(0, 1200, length.out = 300)))
+        # Canopy distance
+        newdataC <- data.frame(expand.grid(CD = seq(-35, 40, length.out = 300),
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = 200))
+      }else {
+        # Temp
+        newdataT <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                          TP = seq(-10, 25, length.out = 300),
+                                          PP = 1000,
+                                          D = 200))
+        # Prec
+        newdataP <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                          TP = 4,
+                                          PP = seq(250, 1800, length.out = 300),
+                                          D = 200))
+        # Size
+        newdataD <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = seq(0, 1200, length.out = 300)))
+        # Canopy distance
+        newdataC <- data.frame(expand.grid(CD = seq(0, 100, length.out = 300),
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = 200))
+      }
+
       plot_prediction(sim, sp, mort_model,
       data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC))
     }
@@ -528,10 +584,17 @@ Using four different metrics:
   mort_model2 <- function(param, sim, D, TP, PP, C)
   {
 
+    if(sim == 'sim1') {
+      compEffect <- ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (C - param['Mid']))))))
+    }else {
+      compEffect <- ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-param['beta'] * (C - 20))))))
+    }
+
+
     lgPart <- (log(D/param["DBHopt"])/param["DBHvar"])^2
 
     mort <- 1 / (1 + (param["psi"] *
-                ((param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.5 * (C - param['Mid'])))))) *
+                compEffect *
                 exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
                 exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
                 exp(-lgPart)))
@@ -541,6 +604,7 @@ Using four different metrics:
   }
 
   acc_dt <- data.table(sp = character(),
+                       sim = character(),
                        Acc = numeric(),
                        Sensitivity = numeric(),
                        Specificity = numeric(),
@@ -563,8 +627,12 @@ Using four different metrics:
       for(i in 1:sampleN)
       {
         pars <- unlist(lapply(params, `[[`, i))
-        # get deterministic growth rate
-        db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_model2(param = pars, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance))]
+        # get mortality
+        if(sim == 'sim1') {
+          db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_model2(param = pars, sim = sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance))]
+        }else {
+          db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_model2(param = pars, sim = sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = BA))]
+        }
 
         TP <- db[mort == 1 & mort_pred == 1, .N]
         TN <- db[mort == 0 & mort_pred == 0, .N]
@@ -577,7 +645,7 @@ Using four different metrics:
         AccCorrected[i] <- (Sensitivity[i] + Specificity[i])/2
 
       }      
-      acc_dt <- rbind(acc_dt, data.table(sp = rep(sp, sampleN), Acc = Acc, Sensitivity = Sensitivity, Specificity = Specificity, AccCorrected = AccCorrected))
+      acc_dt <- rbind(acc_dt, data.table(sp = rep(sp, sampleN), sim = rep(sim, sampleN), Acc = Acc, Sensitivity = Sensitivity, Specificity = Specificity, AccCorrected = AccCorrected))
     }
     oob_list[[sp]] <- db
   }
@@ -586,24 +654,45 @@ Using four different metrics:
 
 ```
 
-```{r plot confusion matrix,echo=FALSE,message=FALSE,fig.height = 12, fig.width = 8}
+```{r plot confusion matrix,echo=FALSE,message=FALSE,warning=FALSE,fig.height = 12, fig.width = 8}
 
-  p1 <- ggplot(acc_dt, aes(Acc, sp)) +
-          geom_density_ridges_gradient() +
-          xlab('Accuracy (%)')
-  p2 <- ggplot(acc_dt, aes(AccCorrected, sp)) +
-          geom_density_ridges_gradient() +
+  p1 <- ggplot(acc_dt) +
+          geom_density_ridges(aes(Acc, sp, colour = sim, fill = sim), alpha = 0.4) +
+          xlab('Accuracy (%)') +
+          theme(legend.position = 'none')
+  p2 <- ggplot(acc_dt) +
+          geom_density_ridges(aes(AccCorrected, sp, colour = sim, fill = sim), alpha = 0.4) +
           xlab('Accuracy corrected (%)')
   
-  p3 <- ggplot(acc_dt, aes(Sensitivity, sp)) +
-          geom_density_ridges_gradient()
-  p4 <- ggplot(acc_dt, aes(Specificity, sp)) +
-          geom_density_ridges_gradient()
+  p3 <- ggplot(acc_dt) +
+          geom_density_ridges(aes(Sensitivity, sp, colour = sim, fill = sim), alpha = 0.4) +
+          theme(legend.position = 'none')
+  p4 <- ggplot(acc_dt) +
+          geom_density_ridges(aes(Specificity, sp, colour = sim, fill = sim), alpha = 0.4)
 
-  gridExtra::grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+  ggpubr::ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2, common.legend = TRUE, legend = 'bottom')
 
 ```
 
+```{r plot sensitivity vs specificity,echo=FALSE,message=FALSE,warning=FALSE,fig.height = 6, fig.width = 8}
+  # Summarize data
+  acc_summary <- acc_dt %>%
+                 dplyr::group_by(sp, sim) %>%
+                 dplyr::summarise(mean_sens = mean(Sensitivity),
+                           sd_sens = sd(Sensitivity),
+                           mean_spec = mean(Specificity),
+                           sd_spec = sd(Specificity))
+
+  ggplot(acc_summary, aes(x = mean_sens, y = mean_spec)) +
+    geom_pointrange(aes(xmin = mean_sens-sd_sens, xmax = mean_sens+sd_sens), shape = 20, size = 0.3) +
+    geom_pointrange(aes(ymin = mean_spec-sd_spec, ymax = mean_spec+sd_spec), shape = 20, size = 0.3) +
+    xlab('Sensitivity (%)') +
+    ylab('Specificity (%)') +
+    geom_text(aes(label = sp), hjust = -.2, vjust = -.5, size = 2) +
+    facet_grid(~sim, labeller = labeller(sim = setNames(c(sim1name,
+                                         sim2name, sim3name),
+                                         c('sim1', 'sim2', 'sim3'))))
+```
 
 # Sampling time
 

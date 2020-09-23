@@ -21,7 +21,7 @@ data
 	// Vector data
 	vector<lower = -10, upper = 20>[N] T_data; // temperature, E data
 	vector<lower = 60, upper = 1700>[N] P_data; // Precipitation, E data
-	vector<lower = -40, upper = 50>[N] C_data; // canopy, E data
+	vector<lower = 0, upper = 100>[N] C_data; // canopy, E data
 	vector<lower = 0, upper = 1200>[N] D_data; // diameter, I data
 	vector<lower = 0>[N] time_interv; // time between inventories
 	int Y[N];
@@ -37,8 +37,8 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 150, upper = 1900> P_opt; // Optimum precipitation of each species
 	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = -30, upper = 40> Mid; // competition effect: Mid of Generalised logistic function
-	real<lower = 0, upper = 1> Lo;
+	real<lower = -0.5, upper = -0.05> beta; // growth rate of Generalised logistic function
+	real<lower = 0, upper = 0.9> Lo;
 
 	real<lower = 0, upper = 850> DBHopt;
 	real<lower = 0, upper = 12> DBHvar;
@@ -61,7 +61,7 @@ transformed parameters
 	1 ./ (1 + (
 	psi
 	*
-	(Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (C_data - Mid)))))
+	(Lo + ((1 - Lo) ./ (1 + exp(-beta * (C_data - 20)))))
 	.*
 	(0.0001 + exp(-0.5*(T_data - T_opt).*(T_data - T_opt)/sigmaT_opt^2)
 	.*
@@ -83,7 +83,7 @@ model
 	P_opt ~ normal(1000, 350);
 	sigmaP_opt ~ gamma(250^2/20000.0, 250/20000.0);
 
-	Mid ~ normal(0, 20);
+	beta ~ uniform(-0.5, -0.05);
 	Lo ~ uniform(0, 1);
 
 	DBHopt ~ gamma(200^2/10000.0, 200/10000.0);
