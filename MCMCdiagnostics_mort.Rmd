@@ -579,8 +579,6 @@ Using four different metrics:
 
 ```{r calculate OOB predictions and confusion matrix, echo=FALSE,fig.height = 12, fig.width = 12}
 
-  # growth model
-  
   mort_model2 <- function(param, sim, D, TP, PP, C)
   {
 
@@ -656,19 +654,71 @@ Using four different metrics:
 
 ```{r plot confusion matrix,echo=FALSE,message=FALSE,warning=FALSE,fig.height = 12, fig.width = 8}
 
+  # load random forest output
+  rf_dt <- readRDS('data/quebec/randomForest_mort.RDS')
+  rf_dt <- rf_dt[rev(spIds), on = "sp"] # reorder to match spIds order
+  rf_dt$RandomForest <- plyr::revalue(rf_dt$model, c('1' = 'sim1', '2' = 'sim2', 'Full' = 'sim_full'))
+
   p1 <- ggplot(acc_dt) +
           geom_density_ridges(aes(Acc, sp, colour = sim, fill = sim), alpha = 0.4) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "red", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "#4aaab0", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "black", alpha = 0.6) +
           xlab('Accuracy (%)') +
-          theme(legend.position = 'none')
+          xlim(0.65, .91) +
+          theme(legend.position = 'none') +
+          theme_classic() +
+          scale_y_discrete(limits = spIds)
+
   p2 <- ggplot(acc_dt) +
           geom_density_ridges(aes(AccCorrected, sp, colour = sim, fill = sim), alpha = 0.4) +
-          xlab('Accuracy corrected (%)')
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "red", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "#4aaab0", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "black", alpha = 0.6) +
+          xlab('Accuracy corrected (%)') +
+          theme_classic() +
+          scale_y_discrete(limits = spIds)
   
   p3 <- ggplot(acc_dt) +
           geom_density_ridges(aes(Sensitivity, sp, colour = sim, fill = sim), alpha = 0.4) +
-          theme(legend.position = 'none')
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "red", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "#4aaab0", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "black", alpha = 0.6) +
+          theme(legend.position = 'none') +
+          theme_classic() +
+          scale_y_discrete(limits = spIds)
+
   p4 <- ggplot(acc_dt) +
-          geom_density_ridges(aes(Specificity, sp, colour = sim, fill = sim), alpha = 0.4)
+          geom_density_ridges(aes(Specificity, sp, colour = sim, fill = sim), alpha = 0.4) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "red", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "#4aaab0", alpha = 0.6) +
+          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "black", alpha = 0.6) +
+          theme_classic() +
+          scale_y_discrete(limits = spIds)
 
   ggpubr::ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2, common.legend = TRUE, legend = 'bottom')
 
