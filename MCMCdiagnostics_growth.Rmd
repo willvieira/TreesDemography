@@ -758,6 +758,9 @@ print(p)
 
 # Mean squared error (MSE) of out-of-bag predictions
 
+Density distribution draws from the posterior distribution ($n = 500$) can be compared with the MSE values using the random forest methods (vertical bars).
+Furthermore, I added the `sim_full` MSE when running the random forest with all non-correlated variables to get the maximum explicability from data.
+
 ```{r calculate MSE, echo = FALSE}
 
   #################################
@@ -793,7 +796,7 @@ print(p)
     return( growth )
   }
 
-  MSE_dt <- setDT(data.frame(sp = character(), sim = integer(), MSE_det = logical(), MSE_var = numeric()))
+  MSE_dt <- setDT(data.frame(sp = character(), sim = integer(), MSE_det = logical(), MSE_var = numeric(), r2 = numeric()))
   sampleN <- 500
 
   for(sp in spIds)
@@ -810,7 +813,7 @@ print(p)
       # sample X random values from posterior dist
       params <- lapply(posterior, function(x) sample(x, sampleN))
 
-      MSE_det <- MSE_var <- numeric(sampleN)
+      MSE_det <- MSE_var <- r2 <- numeric(sampleN)
       for(i in 1:sampleN)
       {
         # get pars for one sample
@@ -832,30 +835,42 @@ print(p)
         # calculate MSE
         MSE_det[i] <- mean(db[, (growth - g_det_pred)^2])
         MSE_var[i] <- mean(db[, (growth - g_var_pred)^2])
+
+        # Calculate R2 (Gelman et al 2018)
+        # Doing for det_growth only as it considers the sigma_base parameter in the R2 equation
+        
+        # Variance of modelled predictive means
+        varPred <- db[, var(g_det_pred)]
+        # Variance of modelled residual
+        var_res <- parsI['sigma_base']
+        # Rsquared = varPred/(varPred + var_res)        
+        r2[i] <- varPred/(varPred + var_res)
+
       }
 
       # update main dt
-      MSE_dt <- rbind(MSE_dt, data.frame(sp = rep(sp, sampleN), sim = rep(sim, sampleN), MSE_det = MSE_det, MSE_var = MSE_var))
+      MSE_dt <- rbind(MSE_dt, data.frame(sp = rep(sp, sampleN), sim = rep(sim, sampleN), MSE_det = MSE_det, MSE_var = MSE_var, r2 = r2))
     }
   }
+
 ```
 
 ```{r plot MSE,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
   
   # load random forest MSE information
-  MSE <- readRDS('data/quebec/randomForest_growth.RDS')
-  MSE$RandomForest <- plyr::revalue(MSE$model, c('MSE1' = 'sim1', 'MSE2' = 'sim2', 'MSE_full' = 'sim_full'))
-
+  rf_dt <- readRDS('data/quebec/randomForest_growth.RDS')
+  rf_dt$RandomForest <- plyr::revalue(rf_dt$model, c('m1' = 'sim1', 'm2' = 'sim2', 'mFull' = 'sim_full'))
+  
   # For deterministic growth
   ggplot(data = MSE_dt, aes(MSE_det, sp, fill = sim, colour = sim)) + 
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
                                       yend = (length(sp):1) + .8),
                color = "red", alpha = 0.6) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
                                   yend = (length(sp):1) + .8),
             color = "#4aaab0", alpha = 0.6) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
                                   yend = (length(sp):1) + .8),
             color = "black", alpha = 0.6) +
     xlim(0.5, 7.6) +
@@ -866,25 +881,53 @@ print(p)
 
 
   # For ind variation growth
-  ggplot(data = MSE_dt, aes(MSE_var, sp, fill = sim, colour = sim)) + 
-    geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
-                                      yend = (length(sp):1) + .8),
-               color = "red", alpha = 0.6) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "#4aaab0", alpha = 0.6) +
-    geom_segment(data = subset(MSE, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = value, xend = value, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "black", alpha = 0.6) +
-    xlim(0.5, 7.6) +
-    theme_classic() +
-    ggtitle('Ind variable growth') +
-    xlab('MSE') +
-    scale_y_discrete(limits = rev(spIds))
+    ggplot(data = MSE_dt, aes(MSE_var, sp, fill = sim, colour = sim)) + 
+      geom_density_ridges(alpha = 0.4, scale= 1.8) +
+      geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
+                                        yend = (length(sp):1) + .8),
+                color = "red", alpha = 0.6) +
+      geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
+                                    yend = (length(sp):1) + .8),
+              color = "#4aaab0", alpha = 0.6) +
+      geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = MSE, xend = MSE, y = length(sp):1,
+                                    yend = (length(sp):1) + .8),
+              color = "black", alpha = 0.6) +
+      xlim(0.5, 7.6) +
+      theme_classic() +
+      ggtitle('Ind variable growth') +
+      xlab('MSE') +
+      scale_y_discrete(limits = rev(spIds))
 
 ```
 
+
+# Rsquared
+
+Rsquared values draw from the posterior distribution is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
+Like MSE, the $R^{2}$ can be compared with the ones from the random forest using the same variables along with the full model (`sim_full`). However, the $R^{2}$ of the random forest is calculated using the classical equation.
+
+```{r plot Rsquared,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+  
+  # load random forest MSE information
+
+  # For deterministic growth
+  ggplot(data = MSE_dt, aes(r2, sp, fill = sim, colour = sim)) + 
+    geom_density_ridges(alpha = 0.4, scale= 1.8) +
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = Rsquared, xend = Rsquared, y = length(sp):1,
+                                      yend = (length(sp):1) + .8),
+               color = "red", alpha = 0.6) +
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = Rsquared, xend = Rsquared, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "#4aaab0", alpha = 0.6) +
+    geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = Rsquared, xend = Rsquared, y = length(sp):1,
+                                  yend = (length(sp):1) + .8),
+            color = "black", alpha = 0.6) +
+    xlim(0, 0.64) +
+    theme_classic() +
+    xlab('Rsquared') +
+    scale_y_discrete(limits = rev(spIds))
+
+```
 
 # Sampling time
 

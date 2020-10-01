@@ -20,6 +20,7 @@
 
 library(data.table)
 library(ranger)
+library(tidyverse)
 set.seed(0.0)
 
 
@@ -143,19 +144,40 @@ set.seed(0.0)
 
 # Calculate Mean Squared Error of predictions
 
-
     growthPred_m1 <- do.call("rbind", predModel1_ls)
     growthPred_m2 <- do.call("rbind", predModel2_ls)
     growthPred_mFull <- do.call("rbind", predModelFull_ls)
 
-    # mean squared error by species_id
+    # squared error
     growthPred_m1[, sqErr := (growth - pred)^2]
     growthPred_m2[, sqErr := (growth - pred)^2]
     growthPred_mFull[, sqErr := (growth - pred)^2]
 
-    MSE <- setNames(growthPred_m1[, mean(sqErr), by = sp_code2], c('sp', 'MSE1'))
-    MSE$MSE2 <- growthPred_m2[, mean(sqErr), by = sp_code2][, 2]
-    MSE$MSE_full <- growthPred_mFull[, mean(sqErr), by = sp_code2][, 2]
+    # growth variance (total variation)
+    growthPred_m1[, gVar := (growth - mean(growth))^2]
+    growthPred_m2[, gVar := (growth - mean(growth))^2]
+    growthPred_mFull[, gVar := (growth - mean(growth))^2]
+
+    # Mean Squared Error (MSE)
+    out_df <- setNames(growthPred_m1[, mean(sqErr), by = sp_code2], c('sp', 'MSE_m1'))
+    out_df$MSE_m2 <- growthPred_m2[, mean(sqErr), by = sp_code2][, 2]
+    out_df$MSE_mFull <- growthPred_mFull[, mean(sqErr), by = sp_code2][, 2]
+
+    # Rsquared
+    out_df$Rsquared_m1 <- growthPred_m1[, 1-(sum(sqErr)/sum(gVar)), by = sp_code2][, 2]
+    out_df$Rsquared_m2 <- growthPred_m2[, 1-(sum(sqErr)/sum(gVar)), by = sp_code2][, 2]
+    out_df$Rsquared_mFull <- growthPred_mFull[, 1-(sum(sqErr)/sum(gVar)), by = sp_code2][, 2]
+
+    # Long format
+    MSE_lg <- tidyr::pivot_longer(MSE[, -(5:7)], names_prefix = 'MSE_',
+                                  cols = c('MSE_m1', 'MSE_m2', 'MSE_mFull'),
+                                  names_to = 'model', values_to = 'MSE')
+    
+    out_lg <- MSE[, -(2:4)] %>%
+                tidyr::pivot_longer(names_prefix = 'Rsquared_',
+                                    cols = c('Rsquared_m1', 'Rsquared_m2', 'Rsquared_mFull'),
+                                    names_to = 'model', values_to = 'Rsquared') %>%
+                dplyr::left_join(MSE_lg, by = c('sp', 'model'))
 
 #
 
@@ -163,10 +185,11 @@ set.seed(0.0)
 
 # Plots
 
-    MSE_lg <- tidyr::pivot_longer(MSE, cols = c('MSE1', 'MSE2', 'MSE_full'), names_to = 'model')
-    
     library(ggplot2)    
-    ggplot(MSE_lg, aes(y = sp, x = value, fill = model, colour = model)) +
+    ggplot(out_lg, aes(y = sp, x = Rsquared, fill = model, colour = model)) +
+        geom_point()
+    quartz()
+    ggplot(out_lg, aes(y = sp, x = MSE, fill = model, colour = model)) +
         geom_point()
 
 #
@@ -176,11 +199,6 @@ set.seed(0.0)
 
 # Save
 
-    saveRDS(MSE_lg, 'data/quebec/randomForest_growth.RDS')
+    saveRDS(out_lg, 'data/quebec/randomForest_growth.RDS')
 
 #
-
-
-
-# TODO
-# - Calculate R2 for both Bayesian and Random forest
