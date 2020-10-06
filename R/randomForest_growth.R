@@ -169,11 +169,11 @@ set.seed(0.0)
     out_df$Rsquared_mFull <- growthPred_mFull[, 1-(sum(sqErr)/sum(gVar)), by = sp_code2][, 2]
 
     # Long format
-    MSE_lg <- tidyr::pivot_longer(MSE[, -(5:7)], names_prefix = 'MSE_',
+    MSE_lg <- tidyr::pivot_longer(out_df[, -(5:7)], names_prefix = 'MSE_',
                                   cols = c('MSE_m1', 'MSE_m2', 'MSE_mFull'),
                                   names_to = 'model', values_to = 'MSE')
     
-    out_lg <- MSE[, -(2:4)] %>%
+    out_lg <- out_df[, -(2:4)] %>%
                 tidyr::pivot_longer(names_prefix = 'Rsquared_',
                                     cols = c('Rsquared_m1', 'Rsquared_m2', 'Rsquared_mFull'),
                                     names_to = 'model', values_to = 'Rsquared') %>%
