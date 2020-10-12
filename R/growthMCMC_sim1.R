@@ -49,6 +49,10 @@ set.seed(42)
   growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
   growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
+  for(sp in sp_ids)
+  {
+  growth_dt <- g[sp_code2 == sp]
+
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
     deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaC = 5
@@ -72,23 +76,23 @@ set.seed(42)
   	for (i in 1:(nbLatClasses - 1))
   		growth_dt[ latClass[i] <= latitude & latitude < latClass[i + 1], latInt := i]
 
-    # canopyDistance classes
-    canopyClass = seq(from = min(growth_dt$canopyDistance), to = max(growth_dt$canopyDistance) + deltaC, by = deltaC)
-    nbCanopyClass = length(canopyClass) - 1
+    # BA classes
+    BAClass = seq(from = min(growth_dt$BA), to = max(growth_dt$BA) + deltaC, by = deltaC)
+    nbBAClass = length(BAClass) - 1
 
-  	for (i in 1:nbCanopyClass)
-  		growth_dt[ canopyClass[i] <= canopyDistance & canopyDistance < canopyClass[i + 1], canopyInt := i]
+  	for (i in 1:nbBAClass)
+  		growth_dt[ BAClass[i] <= BA & BA < BAClass[i + 1], BAInt := i]
 
   	# Derive frequencies
   	freqDBH = growth_dt[, table(sizeInt)]/growth_dt[, .N]
   	freqLon = growth_dt[, table(lonInt)]/growth_dt[, .N]
   	freqLat = growth_dt[, table(latInt)]/growth_dt[, .N]
-    freqCan = growth_dt[, table(canopyInt)]/growth_dt[, .N]
+    freqBA = growth_dt[, table(BAInt)]/growth_dt[, .N]
 
   	ls_sizeInt = growth_dt[, unique(sizeInt)]
   	ls_lonInt = growth_dt[, unique(lonInt)]
   	ls_latInt = growth_dt[, unique(latInt)]
-    ls_canInt = growth_dt[, unique(canopyInt)]
+    ls_BAInt = growth_dt[, unique(BAInt)]
 
   	for (s in ls_sizeInt)
   		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
@@ -99,15 +103,18 @@ set.seed(42)
   	for (lt in ls_latInt)
   		growth_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
 
-    for (c in ls_canInt)
-  		growth_dt[canopyInt == c, proba_c := freqCan[as.character(c)]]
+    for (b in ls_BAInt)
+  		growth_dt[BAInt == b, proba_b := freqBA[as.character(b)]]
 
-  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_c]
+  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_b]
 
   	sampledIndices = sample(x = 1:growth_dt[,.N], size = sampleSize, replace = FALSE, prob = growth_dt$proba)
 
     # get samples values
     growth_dt = growth_dt[sampledIndices, ]
+
+  }
+  growth = rbind(growth, growth_dt[, -(86:94)])
   }
 
 ##
@@ -124,7 +131,7 @@ set.seed(42)
           T_data = growth_dt$value5_bio60_01,
           P_data = growth_dt$value5_bio60_12,
           D_data = growth_dt$dbh0,
-          C_data = growth_dt$canopyDistance,
+          C_data = growth_dt$BA,
           Y = growth_dt$growth)
 
   ## Run

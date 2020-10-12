@@ -41,12 +41,53 @@ set.seed(0.0)
     growth[is.na(PERTURB2), PERTURB2 := 'notDisturbed']
     growth[is.na(ORIGINE2), ORIGINE2 := 'notDisturbed']
     
+    # Calculate relative basal area (BA_ind/sum(BA_ind) for each plot-year)
+    growth[, sumBA := BA * 399.7312/1e4, by = list(ID_PE, year0)]
+    growth[, relativeBA_ind := indBA/sumBA]
+    growth[, sumBA := NULL]
+     
     # select species ids with at least 2000 measures
     sp_ids <- growth[, .N, by = sp_code2][N > 10000, sp_code2]
 
     # laod data sample ID to separate between fit and predict data
     for(sp in sp_ids)
         assign(paste0('sampleFit_', sp), readRDS(paste0('sampleOut/growth_', sp, '.RDS')))
+
+#
+
+
+
+# Quick viz
+
+    # Growht vs temp
+    ggplot(growth[sp_code2 %in% sp_ids],
+        aes(value5_bio60_01, growth, fill = value5_bio60_12, color = value5_bio60_12)) +
+        geom_point(alpha = 0.5, size = 0.4) +
+        facet_wrap(~ sp_code2) + geom_rug(col = rgb(0, 0, 0, alpha = .01))
+
+    # Growht vs prec
+    ggplot(growth[sp_code2 %in% sp_ids],
+        aes(value5_bio60_12, growth, fill = value5_bio60_01, color = value5_bio60_01)) +
+        geom_point(alpha = 0.5, size = 0.4) +
+        facet_wrap(~ sp_code2) + geom_rug(col = rgb(0, 0, 0, alpha = .01))
+
+    # Growht vs size
+    ggplot(growth[sp_code2 %in% sp_ids],
+        aes(dbh0, growth, fill = canopyDistance, color = canopyDistance)) +
+        geom_point(alpha = 0.5, size = 0.4) +
+        facet_wrap(~ sp_code2) + geom_rug(col = rgb(0, 0, 0, alpha = .01))
+
+    # Growht vs canopyDistance
+    ggplot(growth[sp_code2 %in% sp_ids],
+        aes(canopyDistance, growth, fill = dbh0, color = dbh0)) +
+        geom_point(alpha = 0.5, size = 0.4) +
+        facet_wrap(~ sp_code2) + geom_rug(col = rgb(0, 0, 0, alpha = .01))
+
+    # Growth vs BA
+    ggplot(growth[sp_code2 %in% sp_ids],
+        aes(BA, growth, fill = dbh0, color = dbh0)) +
+        geom_point(alpha = 0.5, size = 0.4) +
+        facet_wrap(~ sp_code2) + geom_rug(col = rgb(0, 0, 0, alpha = .01))
 
 #
 
@@ -87,24 +128,27 @@ set.seed(0.0)
 
         # run RF for model 1
         db <- growth[sp_code2 == sp, varsToKeep1, with = FALSE]
-        db <- db[sampleID, ]
-        rf <- ranger(growth ~ ., data = na.omit(db))
+        #db <- db[sampleID, ]
+        rf <- ranger(growth ~ ., data = na.omit(db), importance = 'impurity_corrected')
         rfModel1_ls[[sp]] <- rf
         
         # run RF for model 2
         db <- growth[sp_code2 == sp, varsToKeep2, with = FALSE]
-        db <- db[sampleID, ]
-        rf <- ranger(growth ~ ., data = na.omit(db))
+        #db <- db[sampleID, ]
+        rf <- ranger(growth ~ ., data = na.omit(db), importance = 'impurity_corrected')
         rfModel2_ls[[sp]] <- rf
 
         # run RF for model full
         db <- growth[sp_code2 == sp, setdiff(names(growth), varsToRm), with = FALSE]
-        db <- db[sampleID, ]
-        rf <- ranger(growth ~ ., data = na.omit(db))
+        #db <- db[sampleID, ]
+        rf <- ranger(growth ~ ., data = na.omit(db), importance = 'impurity_corrected')
         rfModelFull_ls[[sp]] <- rf
 
         cat('   Running for species', which(sp == sp_ids), 'of', length(sp_ids), '\r')
     }
+
+    lapply(rfModelFull_ls, function(x) knitr::kable(sort(importance(x)/max(importance(x)), decreasing = T)))
+
 
 #
 

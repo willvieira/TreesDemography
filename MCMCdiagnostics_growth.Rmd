@@ -1,15 +1,15 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v1.0 - Basic growth"
+ subtitle: "Test v2.0 - Improve competition (basal area) function"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Compare the convergence of the model using two different variables to predict the competition effect:
+## Compare the convergence of the model using two different set of parameters for the competition effect using Basal area:
 
-- **sim1**: canopyDistance
-- **sim2**: Basal area (BA)
+- **sim1**: $lower$ and $beta$ parameters varying; $mid = 20$, $upper = 1$
+- **sim2**: $lower$ and $mid$ varying; $beta = 0.3$, $upper = 1$
 
 ```{r, echo = F, message=FALSE}
 suppressPackageStartupMessages(library(rstan))
@@ -37,8 +37,8 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'canopyDistance'
-  sim2name <- 'Basal area'
+  sim1name <- 'Varying beta'
+  sim2name <- 'Fixed beta'
 
 #
 
@@ -166,11 +166,11 @@ DT::datatable(divergentDF)
 ```{r organize data, echo = FALSE}
 growth_dt <- readRDS('data/quebec/growth_dt.RDS')
 growth_dt <- growth_dt[sp_code2 %in% spIds]
-growth_dt <- growth_dt[, .(sp_code2, growth, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA)]
+growth_dt <- growth_dt[, .(sp_code2, growth, dbh0, value5_bio60_01, value5_bio60_12, BA)]
 
 # transform dt
 growth <- tidyr::gather(data = growth_dt,
-            growth, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA,
+            growth, dbh0, value5_bio60_01, value5_bio60_12, BA,
             key = 'var', value = 'value')
 ```
 
@@ -208,13 +208,8 @@ print(p)
       return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
     }
 
-    # competition effect
-    compEffectCanopy = function(xcanopy, Lo, Mid) {
-      return( (Lo + ((1 - Lo) / (1 + exp(-0.5 * (xcanopy - Mid))))) )
-    }
-
-    compEffectBA = function(xBA, Lo, beta) {
-      return( (Lo + ((1 - Lo) / (1 + exp(-beta * (xBA - 20))))) )
+    compEffectBA = function(xBA, Lo, beta, mid) {
+      return( (Lo + ((1 - Lo) / (1 + exp(-beta * (xBA - mid))))) )
     }
 
   #
@@ -225,7 +220,6 @@ print(p)
   sizex = seq(91, 700, 0.5)
   tempx = seq(-8, 25)
   precx = seq(500, 1700)
-  canopyDist = seq(-40, 50, length.out = 200)
   BAx = seq(0, 80, 0.1)
 
   # species specfic colours
@@ -286,46 +280,33 @@ print(p)
     if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
-  # plot canopyDistance effect
-  for(sim in simulations[1]) {
+  # plot BA effect
+  for(sim in simulations) {
     for(sp in 1:length(spIds)) {
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
       Lo <- out['Lo', 1]
-      Mid <- out['Mid', 1]
+      if(sim == 'sim1') {
+        beta <- out['beta', 1]
+        mid <- 20
+      }else{
+        mid <- out['mid', 1]
+        beta <- -0.3
+      }
 
-      if(sp == 1) plot(canopyDist, compEffectCanopy(canopyDist, Lo, Mid), xlim = c(-35, 40),
+      if(sp == 1) plot(BAx, compEffectBA(BAx, Lo, beta, mid), xlim = c(0, 80),
       ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(canopyDist, compEffectCanopy(canopyDist, Lo, Mid), type = 'l', col = spCols[sp])
+      points(BAx, compEffectBA(BAx, Lo, beta, mid), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
   legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n')
 
-  # plot BA effect
-  for(sim in simulations[2]) {
-    for(sp in 1:length(spIds)) {
-      # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
-      Lo <- out['Lo', 1]
-      beta <- out['beta', 1]
-
-      if(sp == 1) plot(BAx, compEffectBA(BAx, Lo, beta), xlim = c(0, 80),
-      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
-      col = spCols[sp],
-      yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
-
-      points(BAx, compEffectBA(BAx, Lo, beta), type = 'l', col = spCols[sp])
-    }
-
-    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
-  }
 ```
 
 
@@ -342,9 +323,9 @@ print(p)
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-0.5 * (newdata$CD - param["Mid"])))))
-    }else {
       competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (newdata$CD - 20)))))
+    }else {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (newdata$CD - param["mid"])))))
     }
 
     mu_d <- param["pdg"] *
@@ -533,7 +514,7 @@ print(p)
       }
 
       plot(growth ~ CD, growth_ci10C, type = "n", ylim = c(0, 4),
-          xlab = ifelse(sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+          xlab = "Basal area (m²/ha)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
       lines(growth ~ CD, growth_meanC, cex = .5, pch = 19, col = mycol)
       polygon(c(growth_meanC$CD, rev(growth_meanC$CD)),
@@ -541,13 +522,7 @@ print(p)
               col = alpha("grey25", 0.1), border = NA)
 
       # add data range
-      if(sim == 'sim1')
-      {
-        abline(v = growth_dt[sp_code2 == sp, range(canopyDistance)], col = 'grey', lty = 2)
-      }else{
-        abline(v = growth_dt[sp_code2 == sp, range(BA)], col = 'grey', lty = 2)
-      }
-
+      abline(v = growth_dt[sp_code2 == sp, range(BA)], col = 'grey', lty = 2)
     }
   }
   ```
@@ -557,51 +532,28 @@ print(p)
   for(sp in spIds) {
     for(sim in simulations) {
       # fixed data for prediction depending on competition variable
-      if(sim == 'sim1')
-      {
-        newdataT <- data.frame(expand.grid(CD = c(-10, 0, 10),
-                                          TP = seq(-10, 25, length.out = 300),
-                                          PP = 1000,
-                                          D = 200))
-        # Prec
-        newdataP <- data.frame(expand.grid(CD = c(-10, 0, 10),
-                                          TP = 4,
-                                          PP = seq(250, 1800, length.out = 300),
-                                          D = 200))
-        # Size
-        newdataD <- data.frame(expand.grid(CD = c(-10, 0, 10),
-                                          TP = 4,
-                                          PP = 1000,
-                                          D = seq(0, 1200, length.out = 300)))
+      # Temp
+      newdataT <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                        TP = seq(-10, 25, length.out = 300),
+                                        PP = 1000,
+                                        D = 200))
+      # Prec
+      newdataP <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                        TP = 4,
+                                        PP = seq(250, 1800, length.out = 300),
+                                        D = 200))
+      # Size
+      newdataD <- data.frame(expand.grid(CD = c(5, 20, 40),
+                                        TP = 4,
+                                        PP = 1000,
+                                        D = seq(0, 1200, length.out = 300)))
 
-        # Canopy distance
-        newdataC <- data.frame(expand.grid(CD = seq(-35, 40, length.out = 300),
-                                          TP = 4,
-                                          PP = 1000,
-                                          D = 200))
-      }else {
-        # Temp
-        newdataT <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                          TP = seq(-10, 25, length.out = 300),
-                                          PP = 1000,
-                                          D = 200))
-        # Prec
-        newdataP <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                          TP = 4,
-                                          PP = seq(250, 1800, length.out = 300),
-                                          D = 200))
-        # Size
-        newdataD <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                          TP = 4,
-                                          PP = 1000,
-                                          D = seq(0, 1200, length.out = 300)))
-
-        # Canopy distance
-        newdataC <- data.frame(expand.grid(CD = seq(0, 100, length.out = 300),
-                                          TP = 4,
-                                          PP = 1000,
-                                          D = 200))
-      }
+      # Basal area
+      newdataC <- data.frame(expand.grid(CD = seq(0, 100, length.out = 300),
+                                        TP = 4,
+                                        PP = 1000,
+                                        D = 200))
+      
       plot_prediction(sim, sp, growth_model,
       data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC))
     }
@@ -635,16 +587,16 @@ print(p)
 ```{r calculate OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
 
   # growth model
-  growth_model2 <- function(param, sim, D, TP, PP, C, BA, indVar = FALSE)
+  growth_model2 <- function(param, sim, D, TP, PP, BA, indVar = FALSE)
   {
 
     lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-0.5 * (C - param["Mid"])))))
-    }else {
       competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+    }else {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (BA - param["mid"])))))
     }
 
     mu_d <- param["pdg"] *
@@ -687,20 +639,20 @@ print(p)
       if(sim == 'sim1')
       {
         # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
 
         # get growth rate with individual variation
-        oob_list[[sp]][, c('Gvar_mean_sim1', 'Gvar_ci10_sim1', 'Gvar_ci90_sim1') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+        oob_list[[sp]][, c('Gvar_mean_sim1', 'Gvar_ci10_sim1', 'Gvar_ci90_sim1') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = TRUE)]
       }else{
           # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
 
         # get growth rate with individual variation
-        oob_list[[sp]][, c('Gvar_mean_sim2', 'Gvar_ci10_sim2', 'Gvar_ci90_sim2') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+        oob_list[[sp]][, c('Gvar_mean_sim2', 'Gvar_ci10_sim2', 'Gvar_ci90_sim2') := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = TRUE)]
       }
     }
   }
@@ -720,11 +672,8 @@ print(p)
     par(mfcol = c(2, length(simulations)), xaxs = "i", las = 1, mar = c(4, 4, 1, 1), oma = c(7, 5, 7, .5), mgp = c(1, 2.5, 0), tck = -.008, cex.lab = 4, cex.axis = 4, cex = 0.3)
     for(sim in simulations)
     {
-      if(sim == 'sim1') {
-        db <- oob_growth[sp_code2 == sp, c(2, 8:13)]
-      }else{
-        db <- oob_growth[sp_code2 == sp, c(2, 14:19)]
-      }
+      db <- oob_growth[sp_code2 == sp, c(2, grep(sim, names(oob_growth))), with = FALSE]
+      
       # sample 10% of data
       db <- db[sample(1:nrow(db), floor(nrow(db) * 0.1))]
 
@@ -768,16 +717,16 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
   #################################
 
   # growth model
-  growth_model3 <- function(param, sim, D, TP, PP, C, BA, indVar = FALSE)
+  growth_model3 <- function(param, sim, D, TP, PP, BA, indVar = FALSE)
   {
 
     lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-0.5 * (C - param["Mid"])))))
-    }else {
       competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+    }else {
+      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (BA - param["mid"])))))
     }
 
     mu_d <- param["pdg"] *
@@ -802,7 +751,7 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
   for(sp in spIds)
   {
     
-    db <- oob_growth[sp_code2 == sp, .(growth, dbh0, value5_bio60_01, value5_bio60_12, canopyDistance, BA)]
+    db <- oob_growth[sp_code2 == sp, .(growth, dbh0, value5_bio60_01, value5_bio60_12, BA)]
 
     for(sim in simulations)
     {
@@ -822,14 +771,14 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
         if(sim == 'sim1')
         {
           # get deterministic growth rate
-          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
           # get growth rate with individual variation
-          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = TRUE)]
         }else{
             # get deterministic growth rate
-          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = FALSE)]
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = FALSE)]
           # get growth rate with individual variation
-          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = canopyDistance, BA = BA, indVar = TRUE)]
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, indVar = TRUE)]
         }
 
         # calculate MSE
