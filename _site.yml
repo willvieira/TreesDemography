@@ -29,6 +29,8 @@ navbar:
       menu:
         - text: "Competition"
           href: growth/competition.html
+        - text: "Parameters set (comp)"
+          href: growth/ba_pars.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography

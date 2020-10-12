@@ -27,4 +27,6 @@
 
 - Competition (canopy distance vs basal area - [link v1.0](https://willvieira.github.io/TreesDemography/growth/competition.html))
 
+- Competition (different parameters set) - [link v2.0](https://willvieira.github.io/TreesDemography/growth/ba_pars.html))
+
 ## Fecundity
