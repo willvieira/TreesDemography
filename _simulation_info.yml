@@ -11,7 +11,7 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: 7000
 # The main folder name
-simName: "ba_pars"
+simName: "linearVShalf"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,9 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v2.0
+## Growth test - v3.0
 
-## Change varying parameters for the competition function
+## Try other functions to the competition effect: linear function vs Half-normal distribution
 
-# - sim1: lower and beta varying; mid = 20, upper = 1
-# - sim2: lower and mid varying; beta = 0.3
+# - sim1: Linear function with intercept fixed at 1 and slope varying [-0.0001, 0.015]
+# - sim2: Half-normal function with sigma varying [0, 1]

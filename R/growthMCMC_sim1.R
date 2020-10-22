@@ -49,10 +49,6 @@ set.seed(42)
   growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
   growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
-  for(sp in sp_ids)
-  {
-  growth_dt <- g[sp_code2 == sp]
-
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
     deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaC = 5
@@ -113,8 +109,6 @@ set.seed(42)
     # get samples values
     growth_dt = growth_dt[sampledIndices, ]
 
-  }
-  growth = rbind(growth, growth_dt[, -(86:94)])
   }
 
 ##

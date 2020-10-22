@@ -1,17 +1,17 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v2.0 - Improve competition (basal area) function"
+ subtitle: "Test v3.0 - Test two different functions for competition (basal area)"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Compare the convergence of the model using two different set of parameters for the competition effect using Basal area:
+## Compare the convergence of the model using two different functions for the competition effect using Basal area:
 
-- **sim1**: $lower$ and $beta$ parameters varying; $mid = 20$, $upper = 1$
-- **sim2**: $lower$ and $mid$ varying; $beta = 0.3$, $upper = 1$
+- **sim1**: Linear function with intercept fixed at 1 and slope varying [-0.0001, 0.015]
+- **sim2**: Modified half-normal function with sigma varying [0, 1]
 
-```{r, echo = F, message=FALSE}
+```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(ggplot2))
@@ -37,8 +37,8 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'Varying beta'
-  sim2name <- 'Fixed beta'
+  sim1name <- 'Linear'
+  sim2name <- 'Half-normal'
 
 #
 
@@ -208,8 +208,12 @@ print(p)
       return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
     }
 
-    compEffectBA = function(xBA, Lo, beta, mid) {
-      return( (Lo + ((1 - Lo) / (1 + exp(-beta * (xBA - mid))))) )
+    compEffect = function(xBA, beta, sigma_C, sim) {
+      if(sim == 'sim1') {
+        return( beta * xBA + 1 )
+      }else{
+        return( exp(-((xBA^2)/2 * sigma_C^2)) )
+      }
     }
 
   #
@@ -285,22 +289,21 @@ print(p)
     for(sp in 1:length(spIds)) {
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
-      Lo <- out['Lo', 1]
       if(sim == 'sim1') {
         beta <- out['beta', 1]
-        mid <- 20
+        sigma_C <- NULL
       }else{
-        mid <- out['mid', 1]
-        beta <- -0.3
+        sigma_C <- out['sigma_C', 1]
+        beta <- NULL
       }
 
-      if(sp == 1) plot(BAx, compEffectBA(BAx, Lo, beta, mid), xlim = c(0, 80),
+      if(sp == 1) plot(BAx, compEffect(BAx, beta, sigma_C, sim), xlim = c(0, 80),
       ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(BAx, compEffectBA(BAx, Lo, beta, mid), type = 'l', col = spCols[sp])
+      points(BAx, compEffect(BAx, beta, sigma_C, sim), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
@@ -323,9 +326,9 @@ print(p)
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (newdata$CD - 20)))))
+      competition <- newdata$BA * param["beta"] + 1
     }else {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (newdata$CD - param["mid"])))))
+      competition <- exp(-((newdata$BA^2)/2*param["sigma_C"]^2))
     }
 
     mu_d <- param["pdg"] *
@@ -334,15 +337,16 @@ print(p)
             exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
 
+    # TODO FIX IT - model 1 was formulated wrong
+    mu_d[mu_d < 0] = 0.000001
+
     if(!indVar)
     {
       growth <- mu_d
     }else {
-      means <- smooth.spline(rgamma(length(mu_d), mu_d^2/param["sigma_base"], mu_d/param["sigma_base"]), spar = 0.2)$y
-      means[means < 0] = 0.0001 # mooth generates negative values but gamma dist does not allow negative values
-      lower <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"], lower.tail = FALSE)
-      upper <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"])
-      growth <- data.frame(means = means, lower = lower, upper = upper)
+      lower <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"], lower.tail = FALSE)
+      upper <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"])
+      growth <- data.frame(means = mu_d, lower = lower, upper = upper)
     }
 
     return( cbind(growth, newdata) )
@@ -373,9 +377,9 @@ print(p)
     param_ci10 <- param_summary[-nRow, 2]
     param_ci90 <- param_summary[-nRow, 3]
 
-    cd2plot <- unique(newdataT$CD)
-    colcd <- rev(RColorBrewer::brewer.pal(length(cd2plot) + 1, "PuBuGn"))
-    colcd_indVar <- rev(RColorBrewer::brewer.pal(length(cd2plot) + 1, "Greens"))
+    ba2plot <- unique(newdataT$BA)
+    colba <- rev(RColorBrewer::brewer.pal(length(ba2plot) + 1, "PuBuGn"))
+    colba_indVar <- rev(RColorBrewer::brewer.pal(length(ba2plot) + 1, "Greens"))
 
     if(sim == 'sim1')
       par(mfcol = c(4, length(simulations) * 2), xaxs="i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
@@ -402,11 +406,11 @@ print(p)
           xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2,labels=F)
 
-      for(cd in cd2plot) {
-        mu <- subset(growth_meanT, CD == cd)
-        ci10 <- subset(growth_ci10T, CD == cd)
-        ci90 <- subset(growth_ci90T, CD == cd)
-        mycol <- ifelse(indVar, colcd_indVar[cd2plot == cd], colcd[cd2plot == cd])
+      for(ba in ba2plot) {
+        mu <- subset(growth_meanT, BA == ba)
+        ci10 <- subset(growth_ci10T, BA == ba)
+        ci90 <- subset(growth_ci90T, BA == ba)
+        mycol <- ifelse(indVar, colba_indVar[ba2plot == ba], colba[ba2plot == ba])
 
         lines(growth ~ TP, mu, cex=.5, pch=19, col = mycol)
         polygon(c(mu$TP, rev(mu$TP)),
@@ -418,11 +422,11 @@ print(p)
 
       if(indVar)
       {
-        legend("topleft", legend = cd2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
-                fill = colcd_indVar[1:3], bty = "n", border = "transparent")
+        legend("topleft", legend = ba2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
+                fill = colba_indVar[1:3], bty = "n", border = "transparent")
       }else{
-        legend("topleft", legend = cd2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
-                fill = colcd[1:3], bty = "n", border = "transparent")
+        legend("topleft", legend = ba2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
+                fill = colba[1:3], bty = "n", border = "transparent")
       }
 
       mtext(ifelse(indVar, 'ind variation', 'par variation'), side = 3, line = 0.3, cex = 1)
@@ -448,11 +452,11 @@ print(p)
       plot(growth ~ PP, growth_ci90P, type = "n", ylim = c(0, 4),
           xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
-      for(cd in cd2plot) {
-        mu <- subset(growth_meanP, CD == cd)
-        ci10 <- subset(growth_ci10P, CD == cd)
-        ci90 <- subset(growth_ci90P, CD == cd)
-        mycol <- ifelse(indVar, colcd_indVar[cd2plot == cd], colcd[cd2plot == cd])
+      for(ba in ba2plot) {
+        mu <- subset(growth_meanP, BA == ba)
+        ci10 <- subset(growth_ci10P, BA == ba)
+        ci90 <- subset(growth_ci90P, BA == ba)
+        mycol <- ifelse(indVar, colba_indVar[ba2plot == ba], colba[ba2plot == ba])
 
         lines(growth ~ PP, mu, cex = .5, pch = 19, col = mycol)
         polygon(c(mu$PP, rev(mu$PP)),
@@ -483,11 +487,11 @@ print(p)
       plot(growth ~ D, growth_ci10D, type = "n", ylim = c(0, 4),
           xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
-      for(cd in cd2plot) {
-        mu <- subset(growth_meanD, CD == cd)
-        ci10 <- subset(growth_ci10D, CD == cd)
-        ci90 <- subset(growth_ci90D, CD == cd)
-        mycol <- ifelse(indVar, colcd_indVar[cd2plot == cd], colcd[cd2plot == cd])
+      for(ba in ba2plot) {
+        mu <- subset(growth_meanD, BA == ba)
+        ci10 <- subset(growth_ci10D, BA == ba)
+        ci90 <- subset(growth_ci90D, BA == ba)
+        mycol <- ifelse(indVar, colba_indVar[ba2plot == ba], colba[ba2plot == ba])
 
         lines(growth ~ D, mu, cex = .5, pch = 19, col = mycol)
         polygon(c(mu$D, rev(mu$D)),
@@ -497,7 +501,7 @@ print(p)
       # add data range
       abline(v = growth_dt[sp_code2 == sp, range(dbh0)], col = 'grey', lty = 2)
 
-      # Growth vs canopy
+      # Growth vs Basal area
 
       # get predictions
       if(!indVar)
@@ -513,11 +517,11 @@ print(p)
         names(growth_meanC)[1] <- names(growth_ci10C)[1] <- names(growth_ci90C)[1] <- 'growth'
       }
 
-      plot(growth ~ CD, growth_ci10C, type = "n", ylim = c(0, 4),
+      plot(growth ~ BA, growth_ci10C, type = "n", ylim = c(0, 4),
           xlab = "Basal area (m²/ha)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
-      lines(growth ~ CD, growth_meanC, cex = .5, pch = 19, col = mycol)
-      polygon(c(growth_meanC$CD, rev(growth_meanC$CD)),
+      lines(growth ~ BA, growth_meanC, cex = .5, pch = 19, col = mycol)
+      polygon(c(growth_meanC$BA, rev(growth_meanC$BA)),
               c(growth_ci10C$growth, rev(growth_ci90C$growth)),
               col = alpha("grey25", 0.1), border = NA)
 
@@ -533,23 +537,23 @@ print(p)
     for(sim in simulations) {
       # fixed data for prediction depending on competition variable
       # Temp
-      newdataT <- data.frame(expand.grid(CD = c(5, 20, 40),
+      newdataT <- data.frame(expand.grid(BA = c(5, 20, 40),
                                         TP = seq(-10, 25, length.out = 300),
                                         PP = 1000,
                                         D = 200))
       # Prec
-      newdataP <- data.frame(expand.grid(CD = c(5, 20, 40),
+      newdataP <- data.frame(expand.grid(BA = c(5, 20, 40),
                                         TP = 4,
                                         PP = seq(250, 1800, length.out = 300),
                                         D = 200))
       # Size
-      newdataD <- data.frame(expand.grid(CD = c(5, 20, 40),
+      newdataD <- data.frame(expand.grid(BA = c(5, 20, 40),
                                         TP = 4,
                                         PP = 1000,
                                         D = seq(0, 1200, length.out = 300)))
 
       # Basal area
-      newdataC <- data.frame(expand.grid(CD = seq(0, 100, length.out = 300),
+      newdataC <- data.frame(expand.grid(BA = seq(0, 100, length.out = 300),
                                         TP = 4,
                                         PP = 1000,
                                         D = 200))
@@ -563,6 +567,8 @@ print(p)
 ```
 
 # Out-of-bag predictions
+
+To compare the model efficiency, we plot the 1:1, and the regression line from `lm(pred_growth ~ real_growth)` for both Bayesian and random forest methods as reference.
 
 ```{r organize data by sp for OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
   # create a list of data.table objects for each spIds
@@ -594,9 +600,9 @@ print(p)
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+      competition <- param["beta"] * BA + 1
     }else {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (BA - param["mid"])))))
+      competition <- exp(-((BA^2)/2 * param["sigma_C"]^2))
     }
 
     mu_d <- param["pdg"] *
@@ -605,15 +611,16 @@ print(p)
             exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
 
+    # TODO FIX IT
+    mu_d[mu_d < 0] = 0.000001
+
     if(!indVar)
     {
       growth <- mu_d
     }else {
-      means <- smooth.spline(rgamma(length(mu_d), mu_d^2/param["sigma_base"], mu_d/param["sigma_base"]), spar = 0.2)$y
-      means[means < 0] = 0.0001 # mooth generates negative values but gamma dist does not allow negative values
-      lower <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"], lower.tail = FALSE)
-      upper <- qgamma(.95, (means^2/param["sigma_base"]), means/param["sigma_base"])
-      growth <- list(means = means, lower = lower, upper = upper)
+      lower <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"], lower.tail = FALSE)
+      upper <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"])
+      growth <- list(means = mu_d, lower = lower, upper = upper)
     }
 
     return( growth )
@@ -664,6 +671,9 @@ print(p)
 
 ```{r plot OOB predictions,echo=FALSE,fig.height = 8, fig.width = 12}
 
+  # load random forest fitted curve of real vs predicted growth
+  predCurveRF <- readRDS('data/quebec/randomForest_predCurve.RDS')
+
   for(sp in spIds)
   {
     # axis limites
@@ -672,10 +682,10 @@ print(p)
     par(mfcol = c(2, length(simulations)), xaxs = "i", las = 1, mar = c(4, 4, 1, 1), oma = c(7, 5, 7, .5), mgp = c(1, 2.5, 0), tck = -.008, cex.lab = 4, cex.axis = 4, cex = 0.3)
     for(sim in simulations)
     {
-      db <- oob_growth[sp_code2 == sp, c(2, grep(sim, names(oob_growth))), with = FALSE]
+      dbAll <- oob_growth[sp_code2 == sp, c(2, grep(sim, names(oob_growth))), with = FALSE]
       
       # sample 10% of data
-      db <- db[sample(1:nrow(db), floor(nrow(db) * 0.1))]
+      db <- dbAll[sample(1:nrow(dbAll), floor(nrow(dbAll) * 0.1))]
 
       # plot deterministic growth
       plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
@@ -684,16 +694,19 @@ print(p)
       segments(db$growth - 0.01, db[[3]], db$growth + 0.01, db[[3]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth - 0.01, db[[4]], db$growth + 0.01, db[[4]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth , db[[3]], db$growth, db[[4]], col = rgb(0, 0, 0, 0.2)) # vertica
-      
+      abline(lm(get(paste0('Gdet_mean_', sim)) ~ growth, data = dbAll), lty = 2)
+      abline(predCurveRF[[sp]][3, 'Intercept'], predCurveRF[[sp]][3, 'Slope'], lty = 3)
+      if(sim == 'sim1') legend('topleft', legend = c('1:1 line', 'lm() from Bayesian', 'lm() from randomForest'), lty = c(1, 2, 3), cex = 3, bty = 'n')
+
       # plot gorwth with individual variation
       plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(2, labels = NA)
       abline(0, 1)
-
       segments(db$growth - 0.01, db[[6]], db$growth + 0.01, db[[6]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth - 0.01, db[[7]], db$growth + 0.01, db[[7]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth , db[[6]], db$growth, db[[7]], col = rgb(0, 0, 0, 0.2)) # vertica
-      
+      abline(lm(get(paste0('Gvar_mean_', sim)) ~ growth, data = dbAll), lty = 2)
+      abline(predCurveRF[[sp]][3, 'Intercept'], predCurveRF[[sp]][3, 'Slope'], lty = 3)
 
       # text
       mtext(sp, 3, outer = TRUE, cex = 1, line = 2.5)
@@ -724,9 +737,9 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(-param["beta"] * (BA - 20)))))
+      competition <- param["beta"] * BA + 1
     }else {
-      competition <- (param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.3 * (BA - param["mid"])))))
+      competition <- exp(-((BA^2)/2 * param["sigma_C"]^2))
     }
 
     mu_d <- param["pdg"] *
@@ -734,6 +747,9 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
             exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
+
+    # TODO FIX IT
+    mu_d[mu_d < 0] = 0.000001
 
     if(!indVar)
     {
