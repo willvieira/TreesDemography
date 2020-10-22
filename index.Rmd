@@ -29,4 +29,6 @@
 
 - Competition (different parameters set) - [link v2.0](https://willvieira.github.io/TreesDemography/growth/ba_pars.html))
 
+- Competition function (linear vs half-normal function) - [link v3.0](https://willvieira.github.io/TreesDemography/growth/linearVShalf.html))
+
 ## Fecundity
