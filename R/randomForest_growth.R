@@ -298,7 +298,10 @@ set.seed(0.0)
 
         DF <- data.frame(model = c('model1', 'model2', 'modelFull'),
                          Intercept = c(md1$coefficients[[1]], md2$coefficients[[1]], mdFull$coefficients[[1]]),
-                         Slope = c(md1$coefficients[[2]], md2$coefficients[[2]], mdFull$coefficients[[2]]))
+                         Slope = c(md1$coefficients[[2]], md2$coefficients[[2]], mdFull$coefficients[[2]]),
+                         R2 = c(summary(md1)[['r.squared']], summary(md2)[['r.squared']], summary(mdFull)[['r.squared']]),
+                         realR2 = c(rfModel1_ls[[sp]]$r.squared, rfModel2_ls[[sp]]$r.squared, rfModelFull_ls[[sp]]$r.squared))
+
 
         curveModel_ls[[sp]] <- DF
     }
