@@ -6,7 +6,8 @@ data
 	// Vector data
 	vector[N] T_data; // temperature, E data
 	vector<lower = 0>[N] P_data; // Precipitation, E data
-	vector<lower = 0, upper = 100>[N] C_data; // BA
+	vector<lower = 0, upper = 100>[N] BA_data; // Basal area
+	vector<lower = -40, upper = 50>[N] CD_data; // canopyDistance
 	vector<lower = 0>[N] D_data; // diameter, I data
 	vector<lower = 0>[N] Y; // response var, not 'logarithmised'
 }
@@ -21,7 +22,9 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 500, upper = 1700 > P_opt; // Optimum precipitation of each species
 	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = -0.015, upper = -0.0001> beta; // competition effect: Mid of Generalised logistic function
+	real<lower = 0, upper = 1> sigma_C;
+	real<lower = -10, upper = 20> Mid;
+	real<lower = 0, upper = 1> Lo;
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0, upper = 15> sigmaPhi_opt;
@@ -35,7 +38,7 @@ transformed parameters
 	vector[N] mu_d =
 		pdg
 		*
-		(C_data * beta + 1)
+		(0.5 * (exp(-(BA_data .* BA_data)/2 * (sigma_C * sigma_C))) + 0.5 * (Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (CD_data - Mid))))))
 		.*
 		(0.0001 + exp(-0.5 * (T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
 		.*
@@ -53,7 +56,9 @@ model
 	P_opt ~ normal(1000, 350);
 	sigmaP_opt ~ gamma(250^2/20000.0, 250/20000.0);
 
-	beta ~ uniform(-0.015, -0.0001);
+	sigma_C ~ uniform(0, 1);
+	Mid ~ normal(2, 8);
+	Lo ~ uniform(0, 1);
 	
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
@@ -64,4 +69,3 @@ model
 	Y ~ gamma(mu_d .* mu_d ./ sigma_base, mu_d ./ sigma_base);
 
 }
-

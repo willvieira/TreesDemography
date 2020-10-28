@@ -11,7 +11,7 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: 7000
 # The main folder name
-simName: "linearVShalf"
+simName: "BAandCD"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,13 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v3.0
+## Growth test - v4.0
 
-## Try other functions to the competition effect: linear function vs Half-normal distribution
+## Try two complementary function for the competition effect: Basal area for plot competition and canopyDistance for individual competition
+## The idea is that even if you're in a dense plot, if you're big enough you won't be as much sensible than small individuals
 
-# - sim1: Linear function with intercept fixed at 1 and slope varying [-0.0001, 0.015]
-# - sim2: Half-normal function with sigma varying [0, 1]
+# The difference between the two following simulations is that one will split the competition effect between BA and canopyDistance
+# while the other will add a second competition effect (so we'll have five effects on baseline growth instead of four)
+
+# - sim1: split competition effect between BA and canopyDistance [pdg * (0.5 * BA + 0.5 * canopyDistance)]
+# - sim2: Aditional competition effect with canopyDistance [pdg * BA * canopyDistance]

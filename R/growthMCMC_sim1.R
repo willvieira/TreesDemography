@@ -125,7 +125,8 @@ set.seed(42)
           T_data = growth_dt$value5_bio60_01,
           P_data = growth_dt$value5_bio60_12,
           D_data = growth_dt$dbh0,
-          C_data = growth_dt$BA,
+          BA_data = growth_dt$BA,
+          CD_data = growth_dt$canopyDistance,
           Y = growth_dt$growth)
 
   ## Run
