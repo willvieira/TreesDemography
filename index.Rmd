@@ -27,8 +27,10 @@
 
 - Competition (canopy distance vs basal area - [link v1.0](https://willvieira.github.io/TreesDemography/growth/competition.html))
 
-- Competition (different parameters set) - [link v2.0](https://willvieira.github.io/TreesDemography/growth/ba_pars.html))
+- Competition (different parameters set - [link v2.0](https://willvieira.github.io/TreesDemography/growth/ba_pars.html))
 
-- Competition function (linear vs half-normal function) - [link v3.0](https://willvieira.github.io/TreesDemography/growth/linearVShalf.html))
+- Competition function (linear vs half-normal function - [link v3.0](https://willvieira.github.io/TreesDemography/growth/linearVShalf.html))
+
+- Competition function as a function of both Basal area and canopyDistance ([link v4.0](https://willvieira.github.io/TreesDemography/growth/BAandCD.html))
 
 ## Fecundity

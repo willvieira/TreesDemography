@@ -33,6 +33,8 @@ navbar:
           href: growth/ba_pars.html
         - text: "Comp function (linear vs half-normal)"
           href: growth/linearVShalf.html
+        - text: "BasalArea and canopyDistance (comp)"
+          href: growth/BAandCD.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography
