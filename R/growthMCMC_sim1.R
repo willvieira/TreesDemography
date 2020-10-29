@@ -21,15 +21,15 @@ set.seed(42)
 ## Get arguments about simulation and data
 
   # species_id
-
+sp = 'ACESAC'
   # max interation
-
+maxIter = 2500
   # number of cores and chains
-
+nChains = nCores = 3
   # load database
-
+growth_dt = readRDS('data/quebec/growth_dt.RDS')
   # sample size
-
+sampleSize = 4000
 
 ##
 
@@ -140,7 +140,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("mu_d"))
+                         pars = c("mu_d", "canopyDistEffect"))
 
 ##
 

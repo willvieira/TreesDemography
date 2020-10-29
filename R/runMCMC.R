@@ -41,7 +41,7 @@ cat('####### Sending batch submission MCMC #######\n')
 
 ## Source R codes to clean data and create folders to run simulations
 
-  source('R/cleanRawData.R')
+  #source('R/cleanRawData.R')
   source('R/createFolderToRun.R')
 
 ##

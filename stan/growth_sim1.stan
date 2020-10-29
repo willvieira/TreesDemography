@@ -23,8 +23,7 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
 	real<lower = 0, upper = 1> sigma_C;
-	real<lower = -10, upper = 20> Mid;
-	real<lower = 0, upper = 1> Lo;
+	real<lower = -8, upper = 15> Mid;
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0, upper = 15> sigmaPhi_opt;
@@ -35,10 +34,13 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 
 transformed parameters
 {
+	// CanopyDistance effect to decide whether BA matters or not
+	vector[N] canopyDistEffect = (0 + ((1 - 0) ./ (1 + exp(-0.2 * (CD_data - Mid)))));
+
 	vector[N] mu_d =
 		pdg
 		*
-		(0.5 * (exp(-(BA_data .* BA_data)/2 * (sigma_C * sigma_C))) + 0.5 * (Lo + ((1 - Lo) ./ (1 + exp(-0.5 * (CD_data - Mid))))))
+		(canopyDistEffect + ((1 - canopyDistEffect) .* exp(-(BA_data .* BA_data)/2 * (sigma_C * sigma_C))))
 		.*
 		(0.0001 + exp(-0.5 * (T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
 		.*
@@ -58,7 +60,6 @@ model
 
 	sigma_C ~ uniform(0, 1);
 	Mid ~ normal(2, 8);
-	Lo ~ uniform(0, 1);
 	
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);

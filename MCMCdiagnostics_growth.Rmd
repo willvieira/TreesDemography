@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v4.0 - Test two complementary function for the competition effect: Basal area for plot competition and canopyDistance for individual competition"
+ subtitle: "Test v5.0 - Test two complementary function for the competition effect: Basal area for plot competition and canopyDistance for individual competition"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -8,8 +8,8 @@
 
 ## Compare the convergence of the model using two complementary functions for the competition effect using basal area and canopyDistnce:
 
-- **sim1**: split competition effect between BA and canopyDistance [pdg * (0.5 * BA + 0.5 * canopyDistance)]
-- **sim2**: Aditional competition effect with canopyDistance [pdg * BA * canopyDistance]
+- sim1: sigmoid function [upper = 1; lower = 0; beta = 0.20; Mid varying [-8, 15]]
+- sim2: sigmoid function [upper = 1; lower = 0; beta = varying [0.1- 0.9]; Mid varying [-8, 25]]
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
@@ -37,8 +37,8 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'Splitted competition'
-  sim2name <- 'Aditinal competition'
+  sim1name <- 'Fixed beta'
+  sim2name <- 'Varying beta'
 
 #
 
@@ -163,7 +163,7 @@ DT::datatable(divergentDF)
 ```{r organize data, echo = FALSE}
 growth_dt <- readRDS('data/quebec/growth_dt.RDS')
 growth_dt <- growth_dt[sp_code2 %in% spIds]
-growth_dt <- growth_dt[, .(sp_code2, growth, dbh0, value5_bio60_01, value5_bio60_12, BA, canopyDistance)]
+growth_dt <- growth_dt[, .(sp_code2, growth, dbh0, dbh1, deltaYear, value5_bio60_01, value5_bio60_12, BA, canopyDistance)]
 
 # transform dt
 growth <- tidyr::gather(data = growth_dt,
@@ -205,11 +205,21 @@ print(p)
       return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
     }
 
-    compEffect = function(xBA, xCD, sigma_C, Mid, Lo, sim) {
+    compEffect = function(xBA, xCD, sigma_C, Mid, beta, sim) {
       if(sim == 'sim1') {
-        return((0.5 * exp(-((xBA^2)/2 * sigma_C^2)) + 0.5 * (Lo + ((1 - Lo)/(1 + exp(-0.5 * (xCD - Mid)))))))
+        canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-0.2 * (xCD - Mid)))))     
+        return( canopyDistanceEffect + ((1 - canopyDistanceEffect) * exp(-((xBA^2)/2 * sigma_C^2))) )
       }else{
-        return(exp(-((xBA^2)/2 * sigma_C^2)) * (Lo + ((1 - Lo)/(1 + exp(-0.5 * (xCD - Mid))))))
+        canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-beta * (xCD - Mid)))))     
+        return( canopyDistanceEffect + ((1 - canopyDistanceEffect) * exp(-((xBA^2)/2 * sigma_C^2))) )
+      }
+    }
+
+    canopyDistanceEffect = function(xCD, Mid, beta, sim) {
+      if(sim == 'sim1') {
+        return( (0 + ((1 - 0)/(1 + exp(-0.2 * (xCD - Mid))))) )
+      }else{
+        return( (0 + ((1 - 0)/(1 + exp(-beta * (xCD - Mid))))) )
       }
     }
 
@@ -289,15 +299,19 @@ print(p)
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
       sigma_C <- out['sigma_C', 1]
       Mid <- out['Mid', 1]
-      Lo <- out['Lo', 1]
+      if(sim == 'sim1') {
+        beta <- NULL
+      }else {
+        beta <- out['beta', 1]
+      }
 
-      if(sp == 1) plot(BAx, compEffect(BAx, xCD = 0, sigma_C, Mid, Lo, sim), xlim = c(0, 80),
+      if(sp == 1) plot(BAx, compEffect(BAx, xCD = -20, sigma_C, Mid, beta, sim), xlim = c(0, 80),
       ylim = c(0, 1), type = 'l', xlab = 'Basal area (m2/ha)', ylab = 'Competition effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(BAx, compEffect(BAx, xCD = 0, sigma_C, Mid, Lo, sim), type = 'l', col = spCols[sp])
+      points(BAx, compEffect(BAx, xCD = -20, sigma_C, Mid, beta, sim), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
@@ -310,15 +324,19 @@ print(p)
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
       sigma_C <- out['sigma_C', 1]
       Mid <- out['Mid', 1]
-      Lo <- out['Lo', 1]
+      if(sim == 'sim1') {
+        beta <- NULL
+      }else {
+        beta <- out['beta', 1]
+      }
 
-      if(sp == 1) plot(CDx, compEffect(xBA = 15, CDx, sigma_C, Mid, Lo, sim), xlim = c(-20, 30),
-      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance (m)', ylab = 'Competition effect',
+      if(sp == 1) plot(CDx, canopyDistanceEffect(CDx, Mid, beta, sim), xlim = c(-20, 30),
+      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance (m)', ylab = 'canopyDistance effect',
       col = spCols[sp],
       yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
 
-      points(CDx, compEffect(xBA = 15, CDx, sigma_C, Mid, Lo, sim), type = 'l', col = spCols[sp])
+      points(CDx, canopyDistanceEffect(CDx, Mid, beta, sim), type = 'l', col = spCols[sp])
     }
 
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
@@ -365,10 +383,12 @@ print(p)
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (0.5 * exp(-((newdata$BA^2)/2 * param["sigma_C"]^2))) + 0.5 * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (newdata$CD - param["Mid"])))))
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-0.2 * (newdata$CD - param["Mid"])))))
     }else {
-      competition <- exp(-((newdata$BA^2)/2 * param["sigma_C"]^2)) * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (newdata$CD - param["Mid"])))))
-    }
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-param["beta"] * (newdata$CD - param["Mid"])))))
+    } 
+
+    competition <- canopyDistanceEffect + ((1 - canopyDistanceEffect) * exp(-((newdata$BA^2)/2 * param["sigma_C"]^2)))
 
     mu_d <- param["pdg"] *
             competition *
@@ -684,10 +704,12 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (0.5 * exp(-((BA^2)/2 * param["sigma_C"]^2))) + 0.5 * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (CD - param["Mid"])))))
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-0.2 * (CD - param["Mid"])))))
     }else {
-      competition <- exp(-((BA^2)/2 * param["sigma_C"]^2)) * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (CD - param["Mid"])))))
-    }
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-param["beta"] * (CD - param["Mid"])))))
+    } 
+    
+    competition <- canopyDistanceEffect + ((1 - canopyDistanceEffect) * exp(-((BA^2)/2 * param["sigma_C"]^2)))
 
     mu_d <- param["pdg"] *
             competition *
@@ -754,7 +776,11 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
   # load random forest fitted curve of real vs predicted growth
   predCurveRF <- readRDS('data/quebec/randomForest_predCurve.RDS')
-
+  
+  # prepare table to save lm() info from the simulations
+  n <- length(spIds) * (length(simulations) + 1)
+  reg_dt <- data.table(sp_code2 = rep(spIds, (length(simulations) + 1)), sim = character(n), R2 = numeric(n), Slope = numeric(n))
+  
   for(sp in spIds)
   {
     # axis limites
@@ -766,6 +792,12 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
     reg_sim1 <- lm(Gdet_mean_sim1 ~ growth, data = oob_growth[sp_code2 == sp])
     reg_sim2 <- lm(Gdet_mean_sim2 ~ growth, data = oob_growth[sp_code2 == sp])
   
+    # add to reg table
+    reg_dt[sp_code2 %in% sp, `:=`(sim = c(simulations, 'randomForest'),
+                                  R2 = c(summary(reg_sim1)$r.squared, summary(reg_sim2)$r.squared, predCurveRF[[sp]][3, 'R2']),
+                                  Slope = c(reg_sim1$coefficients[[2]], reg_sim2$coefficients[[2]], predCurveRF[[sp]][3, 'Slope']))]
+
+    # legend
     leg <- c('1:1 line',
               paste0('lm() from randomForest: R2 = ', round(predCurveRF[[sp]][3, 'R2'], 2), '; slope = ', round(predCurveRF[[sp]][3, 'Slope'], 2)),
               paste0('lm() from Bayesian sim1: R2 = ', round(summary(reg_sim1)$r.squared, 3), '; slope = ', round(reg_sim1$coefficients[['growth']], 3)),
@@ -811,6 +843,14 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   }
 ```
 
+```{r oob predictions r2, echo = FALSE,fig.height = 6, fig.width = 7, warning=FALSE, message=FALSE}
+reg_dt %>%
+  mutate(sp_code2 = forcats::fct_reorder(sp_code2, R2)) %>% 
+  ggplot(mapping = aes(x = sp_code2, y = R2, fill = sim, color = sim)) +
+  geom_point() +
+  coord_flip()
+```
+
 # Mean squared error (MSE) of out-of-bag predictions
 
 Density distribution draws from the posterior distribution ($n = 500$) can be compared with the MSE values using the random forest methods (vertical bars).
@@ -830,11 +870,13 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
 
     # competition function depending on simulation
     if(sim == 'sim1') {
-      competition <- (0.5 * exp(-((BA^2)/2 * param["sigma_C"]^2))) + 0.5 * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (CD - param["Mid"])))))
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-0.2 * (CD - param["Mid"])))))
     }else {
-      competition <- exp(-((BA^2)/2 * param["sigma_C"]^2)) * (param["Lo"] + ((1 - param["Lo"])/(1 + exp(-0.5 * (CD - param["Mid"])))))
-    }
-
+      canopyDistanceEffect <- (0 + ((1 - 0)/(1 + exp(-param["beta"] * (CD - param["Mid"])))))
+    } 
+    
+    competition <- canopyDistanceEffect + ((1 - canopyDistanceEffect) * exp(-((BA^2)/2 * param["sigma_C"]^2)))
+    
     mu_d <- param["pdg"] *
             competition *
             exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *

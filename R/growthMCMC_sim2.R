@@ -139,7 +139,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("mu_d"))
+                         pars = c("mu_d", "canopyDistEffect"))
 
 ##
 
