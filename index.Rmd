@@ -33,4 +33,6 @@
 
 - Competition function as a function of both Basal area and canopyDistance ([link v4.0](https://willvieira.github.io/TreesDemography/growth/BAandCD.html))
 
+- Competition function as a function of both Basal area and canopyDistance ([link v5.0](https://willvieira.github.io/TreesDemography/growth/BAandCD2.html))
+
 ## Fecundity

@@ -35,6 +35,8 @@ navbar:
           href: growth/linearVShalf.html
         - text: "BasalArea and canopyDistance (comp)"
           href: growth/BAandCD.html
+        - text: "BasalArea and canopyDistance 2 (comp)"
+          href: growth/BAandCD2.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography
