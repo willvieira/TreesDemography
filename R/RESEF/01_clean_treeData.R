@@ -143,9 +143,19 @@ reg_data[, sp_id := NULL]
 tree_data <- merge(tree_data, plot_location[, c('PLACE', 'LONGCALGPS', 'LATCALGPS'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
 reg_data <- merge(reg_data, plot_location[, c('PLACE', 'LONGCALGPS', 'LATCALGPS'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
 
-plot_info <- plot_info[, c('PLACE', 'ZONE', 'PENTE', 'CL.PENTE', 'EXPOS', 'DEPOT', 'DRAINAGE', 'HUMUS', 'SOL', 'DENSITE'), with = FALSE]
-tree_data <- merge(tree_data, plot_info, by.x = 'plot_id', by.y = 'PLACE')
-reg_data <- merge(reg_data, plot_info, by.x = 'plot_id', by.y = 'PLACE')
+# plot info
+plot_info <- plot_info[, c('PLACE', 'ZONE', 'PENTE', 'CL.PENTE', 'DRAINAGE', 'HUMUS', 'SOL', 'DENSITE'), with = FALSE]
+plot_info <- plot_info[, .(plot_id = PLACE,
+                           ecoregion = ZONE,
+                           slope = PENTE,
+                           slope_cl = CL.PENTE,
+                           drai = DRAINAGE,
+                           humus = HUMUS,
+                           soil = SOL,
+                           densityCover = DENSITE)]
+
+tree_data <- merge(tree_data, plot_info)
+reg_data <- merge(reg_data, plot_info)
 
 
 
@@ -198,4 +208,3 @@ if(tree_data[, length(unique(spCode)), by = tree_id][, unique(V1)] != 1)
 #######################################################################
 
 tree_data[, indBA := pi * (dbh/(2 * 1000))^2]
-
