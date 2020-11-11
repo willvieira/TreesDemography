@@ -140,8 +140,9 @@ reg_data[, sp_id := NULL]
 #######################################################################
 
 # GPS location of plot
-tree_data <- merge(tree_data, plot_location[, c('PLACE', 'LONGCALGPS', 'LATCALGPS'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
-reg_data <- merge(reg_data, plot_location[, c('PLACE', 'LONGCALGPS', 'LATCALGPS'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
+plot_location[, `:=`(latitude = LATCALGPS, longitude = LONGCALGPS, LATCALGPS = NULL, LONGCALGPS = NULL)] # rename lat and long cols
+tree_data <- merge(tree_data, plot_location[, c('PLACE', 'longitude', 'latitude'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
+reg_data <- merge(reg_data, plot_location[, c('PLACE', 'longitude', 'latitude'), with = FALSE], by.x = 'plot_id', by.y = 'PLACE')
 
 # plot info
 plot_info <- plot_info[, c('PLACE', 'ZONE', 'PENTE', 'CL.PENTE', 'DRAINAGE', 'HUMUS', 'SOL', 'DENSITE'), with = FALSE]
