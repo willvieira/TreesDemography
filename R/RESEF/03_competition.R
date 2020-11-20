@@ -59,7 +59,10 @@ tree_data[, cumY := y + (1000 * as.numeric(substring(subplot_id, 2, 2)))]
 # Plot trees distribution within a plot
 ##########################################################################################
 
- # angles for drawing points around the circle
+# Set TRUE to create animated gif
+if(FALSE) {
+
+# angles for drawing points around the circle
 theta = seq(0, 2 * pi, length.out = 200)
 
 dir.create('plots')
@@ -146,6 +149,7 @@ for(Plot in tree_data[, unique(plot_id)])
     cat('   Converting', which(Plot == tree_data[, unique(plot_id)]), 'of', tree_data[, length(unique(plot_id))], '\r')
 }
 
+}
 
 
 
@@ -153,41 +157,46 @@ for(Plot in tree_data[, unique(plot_id)])
 
 
 ##########################################################################################
-# Calculate individual height using Purves et al. 2008 allometries
+# Calculate individual height for individuals missing height using Purves et al. 2008 allometries
 ##########################################################################################
 
 
-# Calculate individual height
+# Calculate individual height (for missing individuals only)
 
-  # First remove all species without sp_code2 (all of them also do not have DHP)
-  final_dt <- final_dt[!is.na(sp_code2)]
-  
-  # source parameters and functions from Amaël's GitHub repo
-  devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/createData/parametersAllometries.R')
-  devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/toolFunctions.R')
+    # 2.2% of data does not have height
+    tree_data[is.na(height) & state2 == 'alive', .N]/tree_data[, .N] * 100
 
-  # get parametrised species
-  tmp <- tempfile()
-  download.file('https://github.com/amael-ls/code_R0niche/raw/master/createData/ls_speciesParametrised.rds', tmp)
-  parametrisedSpecies <- readRDS(tmp)
-  parametrisedSpecies <- sps_code$spCode[sps_code$CODE %in% parametrisedSpecies[, 1]]
+    # source parameters and functions from Amaël's GitHub repo
+    devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/createData/parametersAllometries.R')
+    devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/toolFunctions.R')
 
-  # species not parametrised
-  final_dt[, unique(sp_code)][!final_dt[, unique(sp_code)] %in% parametrisedSpecies]
+    # get parametrised species
+    tmp <- tempfile()
+    download.file('https://github.com/amael-ls/code_R0niche/raw/master/createData/ls_speciesParametrised.rds', tmp)
+    parametrisedSpecies <- readRDS(tmp)
+    parametrisedSpecies <- sps_code$spCode[sps_code$CODE %in% parametrisedSpecies[, 1]]
 
-  ## Calculate height
-  final_dt[sp_code2 %in% parametrisedSpecies, height := dbhToHeight(DHP, purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == sp_code2)], a],
-	  	purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == sp_code2)], b], mm = TRUE), by = sp_code2]
+    # species not parametrised
+    missingPars <- tree_data[, unique(spCode)][!tree_data[, unique(spCode)] %in% parametrisedSpecies]
+
+    # Note I am estimating height from Purves on obs column
+    tree_data[spCode %in% parametrisedSpecies & is.na(height) & state2 == 'alive', obs := paste0(obs, '; height estimated with parameters from Purves 2008')]
+
+    ## Calculate height
+    tree_data[, height := height/10] # convert height from cm to m
+    tree_data[spCode %in% parametrisedSpecies & is.na(height) & state2 == 'alive', height := dbhToHeight(dbh, purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == spCode)], a],
+        purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == spCode)], b], mm = TRUE), by = spCode]
 
 
-  final_dt[is.na(height), .N]/nrow(final_dt) * 100
-  # 12% of data does not have height (NA)
-  # But most of this is due dead trees, which ecologicaly do not compete for light
-  final_dt[!is.na(DHP) & is.na(height), .N]/final_dt[!is.na(DHP), .N] * 100
-  # less than 1% of these NA for height is due to lack of species specific parameters
-  # So for those species I get the heigth based in their DHP according to a regression line for the correlation between DHP and heigth
-  # For those individuals already dead, I will keep height = 0 as they should not compete (for the S* calculation)
-  srg <- summary(lm(height ~ poly(DHP, 2 , raw = TRUE), final_dt))
-  final_dt[!is.na(DHP) & is.na(height), height := (DHP^2 * rnorm(1, srg$coefficients[3, 1], srg$coefficients[3, 2])) + (DHP * rnorm(1, srg$coefficients[2, 1], srg$coefficients[2, 2])) + rnorm(1, srg$coefficients[1, 1], srg$coefficients[1, 2])]
+    tree_data[is.na(height), .N]/nrow(tree_data) * 100
+    # 1% of data does not have height (NA)
+    # But most of this is due dead trees, which ecologicaly do not compete for light
+    tree_data[is.na(height) & state2 == 'alive', .N]
+    # Only 12 alive individuals do not have height
+    # So for those species I get the heigth based in their DHP according to a regression line for the correlation between DHP and heigth
+    # For those individuals already dead, I will keep height = 0 as they should not compete (for the S* calculation)
+    srg <- summary(lm(height ~ poly(dbh, 2 , raw = TRUE), tree_data))
+    tree_data[is.na(height) & state2 == 'alive', height := (dbh^2 * rnorm(1, srg$coefficients[3, 1], srg$coefficients[3, 2])) + (dbh * rnorm(1, srg$coefficients[2, 1], srg$coefficients[2, 2])) + rnorm(1, srg$coefficients[1, 1], srg$coefficients[1, 2])]
 
 #
+
