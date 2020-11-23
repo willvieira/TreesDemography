@@ -126,6 +126,7 @@ tree_data[, cumY := y + (1000 * as.numeric(substring(subplot_id, 2, 2)))]
 
     # match parameters species with db species
     purves2007_allometries[, sp2 := gsub('-', '', sp)]
+    purves2007_allometries <- purves2007_allometries[species != '28731-ACE-SAC'] # remove duplicated species
 
     # Add species especific `T` parameter to speed up calculation
     tree_data[, T_param := purves2007_allometries[sp2 == unique(spCode), T], by = spCode]
