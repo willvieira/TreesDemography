@@ -9,7 +9,7 @@
 ##############################
 # Steps
 # - Transform subplot xy to a continuous xy at the plot level
-# - Calculate individual height using Purves et al. 2008 allometries
+# - Calculate individual height and maximum crown area using Purves et al. 2008 allometries
 # - Calculate a competition index based on neighbor trees
 ##############################
 
@@ -51,6 +51,105 @@ tree_data[is.na(y), y := sample(1:1000, 1), by = tree_id]
 # Get first or second character of subplot_id with substring()
 tree_data[, cumX := x + (1000 * as.numeric(substring(subplot_id, 1, 1)))]
 tree_data[, cumY := y + (1000 * as.numeric(substring(subplot_id, 2, 2)))]
+
+
+
+
+
+##########################################################################################
+# Calculate individual height and maximum crown area from Purves 2008
+##########################################################################################
+
+
+# Calculate individual height (for missing individuals only)
+
+    # 2.2% of data does not have height
+    tree_data[is.na(height) & state2 == 'alive', .N]/tree_data[, .N] * 100
+
+    # source parameters and functions from Amaël's GitHub repo
+    devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/createData/parametersAllometries.R')
+    devtools::source_url('https://raw.githubusercontent.com/amael-ls/code_R0niche/master/toolFunctions.R')
+
+    # get parametrised species
+    tmp <- tempfile()
+    download.file('https://github.com/amael-ls/code_R0niche/raw/master/createData/ls_speciesParametrised.rds', tmp)
+    parametrisedSpecies <- readRDS(tmp)
+    parametrisedSpecies <- sps_code$spCode[sps_code$CODE %in% parametrisedSpecies[, 1]]
+
+    # species not parametrised
+    missingPars <- tree_data[, unique(spCode)][!tree_data[, unique(spCode)] %in% parametrisedSpecies]
+
+    # Note I am estimating height from Purves on obs column
+    tree_data[spCode %in% parametrisedSpecies & is.na(height) & state2 == 'alive', obs := paste0(obs, '; height estimated with parameters from Purves 2008')]
+
+    ## Calculate height
+    tree_data[, height := height/10] # convert height from cm to m
+    tree_data[spCode %in% parametrisedSpecies & is.na(height) & state2 == 'alive', height := dbhToHeight(dbh, purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == spCode)], a],
+        purves2007_allometries[species == sps_code$CODE[which(sps_code$spCode == spCode)], b], mm = TRUE), by = spCode]
+
+
+    tree_data[is.na(height), .N]/nrow(tree_data) * 100
+    # 1% of data does not have height (NA)
+    # But most of this is due dead trees, which ecologicaly do not compete for light
+    tree_data[is.na(height) & state2 == 'alive', .N]
+    # Only 12 alive individuals do not have height
+    # So for those species I get the heigth based in their DHP according to a regression line for the correlation between DHP and heigth
+    # For those individuals already dead, I will keep height = 0 as they should not compete (for the S* calculation)
+    srg <- summary(lm(height ~ poly(dbh, 2 , raw = TRUE), tree_data))
+    tree_data[is.na(height) & state2 == 'alive', height := (dbh^2 * rnorm(1, srg$coefficients[3, 1], srg$coefficients[3, 2])) + (dbh * rnorm(1, srg$coefficients[2, 1], srg$coefficients[2, 2])) + rnorm(1, srg$coefficients[1, 1], srg$coefficients[1, 2])]
+
+#
+
+
+
+
+# Calculate maximum radius of crown area using Purves 2008
+
+    dbhToMaxCrownArea = function(dbh, T_param, C0_C1)
+    {
+        # Table S2
+        R0_C0 = C0_C1[parameter == "R0", C0]
+        R0_C1 = C0_C1[parameter == "R0", C1]
+
+        R40_C0 = C0_C1[parameter == "R40", C0]
+        R40_C1 = C0_C1[parameter == "R40", C1]
+
+        # Appendix S3, Eq S3.3 (erroneously denoted S2.3 in the article)
+        R0 = (1 - T_param)*R0_C0 + T_param*R0_C1
+        R40 = (1 - T_param)*R40_C0 + T_param*R40_C1
+
+        # Calculate potential max radius Eq S1.6, /!\ dbh in mm /!\
+        Rp_max = R0 + (R40 - R0)*dbh/400
+
+        return(Rp_max)
+    }
+
+    # match parameters species with db species
+    purves2007_allometries[, sp2 := gsub('-', '', sp)]
+
+    # Add species especific `T` parameter to speed up calculation
+    tree_data[, T_param := purves2007_allometries[sp2 == unique(spCode), T], by = spCode]
+
+    # Fill the missing values of T_param (4% of the db) due to the 8 species missing specific parameters
+    # I will feed these species with parameters from other species of the same genus
+    # If any genus is fond, I get the mean from all species    
+    for(sp in missingPars)
+    {
+        spMissGenus <- substring(sp, 1, 3) # get genus of missing species
+        T_pars <- purves2007_allometries[substring(sp2, 1, 3) == spMissGenus, T] # T parameters of species with the same genus
+
+        # In case of missing similar genus
+        if(!length(T_pars) > 0)
+            T_pars <- purves2007_allometries[, T]
+        
+        tree_data[spCode == sp, T_param := mean(T_pars, na.rm = TRUE)]
+    }
+
+    # Get max crown area (in meters given dbh is is mm)
+    tree_data[, maxRadius := dbhToMaxCrownArea(dbh, as.numeric(T_param), C0_C1)]
+
+#
+
 
 
 
