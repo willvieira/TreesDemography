@@ -264,3 +264,31 @@ if(FALSE) {
     }
 }
 
+
+
+
+
+##########################################################################################
+# Calculate a competition index based on neighbor trees
+##########################################################################################
+
+neighborBA <- function(tree_id, cumX, cumY, maxRadius, indBA)
+{
+    n <- length(unique(tree_id))
+    # loop over all tree_ids
+    neighborsBA <- numeric(n)
+    for(i in 1:n)
+    {
+        # which ones are inside the max radius of target tree i?
+        neighborTrees <- (cumX - cumX[i])^2 + (cumY - cumY[i])^2 < (maxRadius[i] * 100)^2
+        # remove the target tree from the list
+        neighborTrees[i] <- FALSE
+        # sum basal area of neightbor trees
+        neighborsBA[i] <- sum(indBA[neighborTrees])
+    }
+    return( neighborsBA )
+}
+
+# Calculating for and considering alive individuals only
+tree_data[state2 == 'alive', neighborBA := neighborBA(tree_id, cumX, cumY, maxRadius, indBA), by = .(plot_id, year)]
+
