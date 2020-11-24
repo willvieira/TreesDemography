@@ -11,6 +11,7 @@
 # - Transform subplot xy to a continuous xy at the plot level
 # - Calculate individual height and maximum crown area using Purves et al. 2008 allometries
 # - Calculate a competition index based on neighbor trees
+# - Calculate subplot basal area
 ##############################
 
 
@@ -294,3 +295,32 @@ neighborBA <- function(tree_id, cumX, cumY, maxRadius, indBA)
 
 # Calculating for and considering alive individuals only
 tree_data[state2 == 'alive', neighborBA := neighborBA(tree_id, cumX, cumY, maxRadius, indBA), by = .(plot_id, year)]
+
+
+
+
+
+##########################################################################################
+# Calculate subplot basal area
+##########################################################################################
+
+# subplot (stand) basal area
+# calculate subplot basal area (BA in m2/ha)
+tree_data[state2 == 'alive', BA := sum(indBA) * 1e4/100, by = .(plot_id, subplot_id, year)]
+
+# fill NAs of BA (due to dead trees) with the value from the plot
+tree_data[, BA := nafill(BA, "locf"), by = .(plot_id, subplot_id, year)]
+tree_data[, BA := nafill(BA, "nocb"), by = .(plot_id, subplot_id, year)]
+
+# species basal area per plot (BA_sp) as a proxy of seed source
+tree_data[state2 == 'alive', BA_sp := sum(indBA) * 1e4/100, by = .(plot_id, subplot_id, year, spCode)]
+
+# fill NAs the same as for BA
+tree_data[, BA_sp := nafill(BA_sp, "locf"), by = .(plot_id, subplot_id, year, spCode)]
+tree_data[, BA_sp := nafill(BA_sp, "nocb"), by = .(plot_id, subplot_id, year, spCode)]
+
+# Species relative basal area to overcome the potential tradeoff between the response of
+# regeneration to BA (i.e. competition) and BA_sp (i.e. seed source)
+tree_data[, relativeBA_sp := BA_sp/BA, by = .(plot_id, subplot_id, year, spCode)]
+# 0/0 = NA
+tree_data[is.na(relativeBA_sp), relativeBA_sp := 0]
