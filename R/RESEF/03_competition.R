@@ -149,6 +149,9 @@ tree_data[, cumY := y + (1000 * as.numeric(substring(subplot_id, 2, 2)))]
     # Get max crown area (in meters given dbh is is mm)
     tree_data[, maxRadius := dbhToMaxCrownArea(dbh, as.numeric(T_param), C0_C1)]
 
+    # remove T_param column
+    tree_data[, T_param := NULL]
+
 #
 
 
@@ -291,4 +294,3 @@ neighborBA <- function(tree_id, cumX, cumY, maxRadius, indBA)
 
 # Calculating for and considering alive individuals only
 tree_data[state2 == 'alive', neighborBA := neighborBA(tree_id, cumX, cumY, maxRadius, indBA), by = .(plot_id, year)]
-
