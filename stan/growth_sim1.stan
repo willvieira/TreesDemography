@@ -6,8 +6,7 @@ data
 	// Vector data
 	vector[N] T_data; // temperature, E data
 	vector<lower = 0>[N] P_data; // Precipitation, E data
-	vector<lower = 0, upper = 100>[N] BA_data; // Basal area
-	vector<lower = -40, upper = 50>[N] CD_data; // canopyDistance
+	vector<lower = 0, upper = 100>[N] C_data; // BA
 	vector<lower = 0>[N] D_data; // diameter, I data
 	vector<lower = 0>[N] Y; // response var, not 'logarithmised'
 }
@@ -22,8 +21,7 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 	real<lower = 500, upper = 1700 > P_opt; // Optimum precipitation of each species
 	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
-	real<lower = 0, upper = 1> sigma_C;
-	real<lower = -8, upper = 15> Mid;
+	real<lower = 0, upper = 1> sigma_C; // competition effect: Mid of Generalised logistic function
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0, upper = 15> sigmaPhi_opt;
@@ -34,13 +32,10 @@ parameters // IMPORTANT: it worth adding constraints, at least to respect the pr
 
 transformed parameters
 {
-	// CanopyDistance effect to decide whether BA matters or not
-	vector[N] canopyDistEffect = (0 + ((1 - 0) ./ (1 + exp(-0.2 * (CD_data - Mid)))));
-
 	vector[N] mu_d =
 		pdg
 		*
-		(canopyDistEffect + ((1 - canopyDistEffect) .* exp(-(BA_data .* BA_data)/2 * (sigma_C * sigma_C))))
+		exp(-(C_data .* C_data)/2 * (sigma_C * sigma_C))
 		.*
 		(0.0001 + exp(-0.5 * (T_data - T_opt) .* (T_data - T_opt)/sigmaT_opt^2)
 		.*
@@ -51,7 +46,7 @@ transformed parameters
 
 model
 {
-	pdg ~ gamma(2^2/10.0, 2/10.0);
+	pdg ~ gamma(15^2/100.0, 15/100.0);
 
 	T_opt ~ normal(6, 8);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
@@ -59,12 +54,11 @@ model
 	sigmaP_opt ~ gamma(250^2/20000.0, 250/20000.0);
 
 	sigma_C ~ uniform(0, 1);
-	Mid ~ normal(2, 8);
 	
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
 
-	sigma_base ~ gamma(2.6^2/5, 2.6/5); // growth_dt[, var(growth)] = 2.6
+	sigma_base ~ gamma(5^2/20.0, 5/20.0);
 
 	// Growth model
 	Y ~ gamma(mu_d .* mu_d ./ sigma_base, mu_d ./ sigma_base);
