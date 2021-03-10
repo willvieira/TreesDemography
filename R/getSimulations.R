@@ -113,7 +113,7 @@ cat('####### Loading simulations from the server #######\n')
     for(sp in sp_load) {
       script <- paste0('sshpass -f ',
                        myPass,
-                       ' scp ',
+                       ' scp -r ',
                        myUser,
                        '@',
                        myAddress,
@@ -121,14 +121,14 @@ cat('####### Loading simulations from the server #######\n')
                        myUser,
                        serverDir,
                        sp,
-                       '/output/* ',
+                       c('/output ', '/sampleInfo '),
                        path,
                        '/',
                        mainDir,
                        '/',
                        sp,
                        '/')
-      system(script)
+      for(i in 1:2) system(script[i])
       cat('   loading sp', which(sp == sp_load), 'of', length(sp_load), '\n')
     }
 

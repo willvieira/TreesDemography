@@ -99,7 +99,7 @@ cat('####### Creating species folder to run MCMC #######\n')
           bash <- paste0("#!/bin/bash
 
 #SBATCH --account=def-dgravel
-#SBATCH -t 3-23:00:00
+#SBATCH -t 5-23:00:00
 #SBATCH --mem-per-cpu=4000M
 #SBATCH --ntasks=", nC, "
 #SBATCH --job-name=", vital, sp, "

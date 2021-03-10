@@ -113,6 +113,23 @@ set.seed(42)
 ##
 
 
+## Adjust plot_id to be a evenly sequence from 1 to nbPlot_id
+
+  # Create new data.table with unique ID_PE and a sequence of 1:N to replace ID_PE
+  ID_PE <- growth_dt[, unique(ID_PE)]
+  toSub <- data.table(ID_PE = ID_PE, plot_id = 1:length(ID_PE))
+
+  # Create new column with replaced codes
+  growth_dt[toSub, on = .(ID_PE), plot_id := i.plot_id]
+
+  dir.create('sampleInfo')
+  saveRDS(sampledIndices, file = 'sampleInfo/sampledIndices.RDS')
+  saveRDS(toSub, file = 'sampleInfo/toSub.RDS')
+
+##
+
+
+
 
 ## run the model
 
@@ -121,15 +138,15 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = growth_dt[, .N],
+          Np = growth_dt[, length(unique(plot_id))],
+          plot_id = growth_dt[, plot_id],
           T_data = growth_dt$value5_bio60_01,
           P_data = growth_dt$value5_bio60_12,
           D_data = growth_dt$dbh0,
-          BA_data = growth_dt$BA,
-          CD_data = growth_dt$canopyDistance,
+          C_data = growth_dt$BA,
           Y = growth_dt$growth)
 
   ## Run
-
   out <- rstan::sampling(object = model,
                          data = dataStan,
                          chains = nChains,
@@ -139,7 +156,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("mu_d", "canopyDistEffect"))
+                         pars = c("mu_d", "pdg_plot"))
 
 ##
 

@@ -21,15 +21,14 @@ set.seed(42)
 ## Get arguments about simulation and data
 
   # species_id
-sp = 'ACESAC'
+
   # max interation
-maxIter = 2500
+
   # number of cores and chains
-nChains = nCores = 3
+
   # load database
-growth_dt = readRDS('data/quebec/growth_dt.RDS')
+
   # sample size
-sampleSize = 4000
 
 ##
 
@@ -125,8 +124,7 @@ sampleSize = 4000
           T_data = growth_dt$value5_bio60_01,
           P_data = growth_dt$value5_bio60_12,
           D_data = growth_dt$dbh0,
-          BA_data = growth_dt$BA,
-          CD_data = growth_dt$canopyDistance,
+          C_data = growth_dt$BA,
           Y = growth_dt$growth)
 
   ## Run
@@ -140,7 +138,7 @@ sampleSize = 4000
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("mu_d", "canopyDistEffect"))
+                         pars = c("mu_d"))
 
 ##
 
