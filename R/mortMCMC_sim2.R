@@ -113,6 +113,22 @@ set.seed(42)
 ##
 
 
+## Adjust plot_id to be a evenly sequence from 1 to nbPlot_id
+
+  # Create new data.table with unique ID_PE and a sequence of 1:N to replace ID_PE
+  ID_PE <- mort_dt[, unique(ID_PE)]
+  toSub <- data.table(ID_PE = ID_PE, plot_id = 1:length(ID_PE))
+
+  # Create new column with replaced codes
+  mort_dt[toSub, on = .(ID_PE), plot_id := i.plot_id]
+
+  dir.create('sampleInfo')
+  saveRDS(sampledIndices, file = 'sampleInfo/sampledIndices.RDS')
+  saveRDS(toSub, file = 'sampleInfo/toSub.RDS')
+
+##
+
+
 
 ## run the model
 
@@ -121,6 +137,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = mort_dt[, .N],
+          Np = mort_dt[, length(unique(ID_PE))],
+          plot_id = mort_dt[, plot_id],
           T_data = mort_dt$value5_bio60_01,
           P_data = mort_dt$value5_bio60_12,
           D_data = mort_dt$dbh0,
@@ -129,7 +147,6 @@ set.seed(42)
           Y = mort_dt$mort)
 
   ## Run
-
   out <- rstan::sampling(object = model,
                          data = dataStan,
                          chains = nChains,
@@ -139,7 +156,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("M_d", "mortL", "lgSq"))
+                         pars = c("M_d", "mortL", "psi_plot"))
 
 ##
 
