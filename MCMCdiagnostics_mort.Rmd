@@ -1,15 +1,15 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v7.0 - Competition"
+ subtitle: "Test v8.0 - random effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Compare model convergence using two different variables to predict the competition effect:
+## Test if plot random effects on baseline longevity improve predictions:
 
-- **sim1**: Canopy distance ($height - S*$)
-- **sim2**: Basal area
+- **sim1**: no random effect
+- **sim2**: random effect on psi
 
 ```{r, echo = F,warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
