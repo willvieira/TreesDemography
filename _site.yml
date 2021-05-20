@@ -24,6 +24,8 @@ navbar:
           href: mort/constrainedPars.html
         - text: "Competition"
           href: mort/competition.html
+        - text: "Plot random effect"
+          href: mort/randomEffect_plot.html
     - text: "Growth"
       icon: fa-tree
       menu:
