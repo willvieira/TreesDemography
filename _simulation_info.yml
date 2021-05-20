@@ -9,9 +9,9 @@ maxIter: 5000
 # Number of cores and chains (to be ran in parallel)
 nC: 3
 # Size of transition measurements to be sampled from the population
-sampleSize: 7000
+sampleSize: 10000
 # The main folder name
-simName: "Competition"
+simName: "randomEffectMort"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,9 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v7.0
+## Mortality test - v8.0
 
-## Test the difference between using canopyDistance or Basal area as competition variables
+## Random effect on baseline longevity
 
-# - sim1: canopyDistance
-# - sim2: Basal area
+# - sim1: no random effect
+# - sim2: random effect on psi

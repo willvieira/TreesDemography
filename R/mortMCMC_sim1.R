@@ -124,7 +124,7 @@ set.seed(42)
           T_data = mort_dt$value5_bio60_01,
           P_data = mort_dt$value5_bio60_12,
           D_data = mort_dt$dbh0,
-          C_data = mort_dt$canopyDistance,
+          C_data = mort_dt$BA,
           time_interv = mort_dt$deltaYear,
           Y = mort_dt$mort)
 
