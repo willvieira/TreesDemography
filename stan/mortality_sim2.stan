@@ -16,10 +16,10 @@ functions
 data
 {
 	int<lower = 1> N; // size of response var
-	int<lower = 1> Np; // size of unique plot_id
+	int<lower = 1> Npy; // size of unique plot_id:year0
 
 	// Vector data
-	int plot_id[N]; // transformed plot_id [1:length(unique(plot_id))]
+	int plotYear[N]; // transformed plotYear [1:length(unique(plot_id, year0))]
 	vector<lower = -10, upper = 20>[N] T_data; // temperature, E data
 	vector<lower = 60, upper = 1700>[N] P_data; // Precipitation, E data
 	vector<lower = 0, upper = 100>[N] C_data; // Basal area, E data
@@ -31,8 +31,8 @@ data
 parameters
 {
 	real<lower = 70, upper = 400> psi; // baseline longevity
-	vector<lower = -40, upper = 100>[Np] psi_pmean; // mean of random effect from plot_id
-	real<lower = 1, upper = 15> psi_psd; // sd of random effect from plot_id
+	vector<lower = -40, upper = 100>[Npy] psi_pmean; // mean of random effect from plot_id:year0
+	real<lower = 1, upper = 15> psi_psd; // sd of random effect from plot_id:year0
 	
 	real<lower = -10, upper = 28> T_opt; // Optimum temperature
 	real<lower = 0.2, upper = 20> sigmaT_opt; // Variance among individuals
@@ -50,7 +50,7 @@ parameters
 model
 {
 	// define the variables
-	vector[Np] psi_plot;
+	vector[Npy] psi_plot;
 	vector[N] M_d;
 	vector[N] mortL;
 
@@ -71,13 +71,13 @@ model
 	DBHvar ~gamma(4^2/15.0, 4/15.0);
 
 	// Likelihood
-	for(j in 1:Np)
+	for(j in 1:Npy)
         psi_plot[j] = psi + psi_pmean[j];
 
 	for(i in 1:N) {
 		M_d[i] =
 		1 ./ (1 + (
-		psi_plot[plot_id[i]]
+		psi_plot[plotYear[i]]
 		*
 		(Lo + ((1 - Lo) ./ (1 + exp(0.25 * (C_data[i] - Mid)))))
 		.*

@@ -115,12 +115,12 @@ set.seed(42)
 
 ## Adjust plot_id to be a evenly sequence from 1 to nbPlot_id
 
-  # Create new data.table with unique ID_PE and a sequence of 1:N to replace ID_PE
-  ID_PE <- mort_dt[, unique(ID_PE)]
-  toSub <- data.table(ID_PE = ID_PE, plot_id = 1:length(ID_PE))
+  # Create new ID for the combination between plot_id and year0
+  toSub <- setDT(unique(mort_dt[, ID_PE, year0]))
+  toSub[, plotYear := .I]
 
   # Create new column with replaced codes
-  mort_dt[toSub, on = .(ID_PE), plot_id := i.plot_id]
+  mort_dt[toSub, on = .(year0, ID_PE), plotYear := i.plotYear]
 
   dir.create('sampleInfo')
   saveRDS(sampledIndices, file = 'sampleInfo/sampledIndices.RDS')
@@ -137,8 +137,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = mort_dt[, .N],
-          Np = mort_dt[, length(unique(ID_PE))],
-          plot_id = mort_dt[, plot_id],
+          Npy = mort_dt[, length(unique(plotYear))],
+          plotYear = mort_dt[, plotYear],
           T_data = mort_dt$value5_bio60_01,
           P_data = mort_dt$value5_bio60_12,
           D_data = mort_dt$dbh0,

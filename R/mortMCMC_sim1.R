@@ -114,6 +114,24 @@ set.seed(42)
 
 
 
+## Adjust plot_id to be a evenly sequence from 1 to nbPlot_id
+
+  # Create new data.table with unique ID_PE and a sequence of 1:N to replace ID_PE
+  year0 <- mort_dt[, unique(year0)]
+  toSub <- data.table(year0 = year0, year_sq = 1:length(year0))
+
+  # Create new column with replaced codes
+  mort_dt[toSub, on = .(year0), year_sq := i.year_sq]
+
+  dir.create('sampleInfo')
+  saveRDS(sampledIndices, file = 'sampleInfo/sampledIndices.RDS')
+  saveRDS(toSub, file = 'sampleInfo/toSub.RDS')
+
+##
+
+
+
+
 ## run the model
 
   model <- stan_model(file = "../../stan/mortality_sim1.stan")
@@ -121,6 +139,8 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = mort_dt[, .N],
+          Ny = mort_dt[, length(unique(year0))],
+          year_sq = mort_dt[, year_sq],
           T_data = mort_dt$value5_bio60_01,
           P_data = mort_dt$value5_bio60_12,
           D_data = mort_dt$dbh0,

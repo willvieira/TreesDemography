@@ -11,7 +11,7 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: 10000
 # The main folder name
-simName: "randomEffectMort"
+simName: "randomEffectYearPlot"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,9 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Mortality test - v8.0
+## Mortality test - v9.0
 
 ## Random effect on baseline longevity
 
-# - sim1: no random effect
-# - sim2: random effect on psi
+# - sim1: random effect on psi (year)
+# - sim2: random effect on psi (year:plot_id)
