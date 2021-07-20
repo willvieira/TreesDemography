@@ -134,16 +134,16 @@ library(raster)
   # Raster reference to check all years
   ref_coordinates_bio = raster::coordinates(raster::raster(paste0(mainDir, 'bio/', allYear[1], "/bio_01.asc")))
   ref_coordinates_cmi = raster::coordinates(raster::raster(paste0(mainDir, 'cmi/', allYear[1], "/cmi_01.asc")))
-  ref_coordinates_pcp = raster::coordinates(raster::raster(paste0(mainDir, 'pcp/', allYear[1], "/pcp_01.asc")))
+  #ref_coordinates_pcp = raster::coordinates(raster::raster(paste0(mainDir, 'pcp/', allYear[1], "/pcp_01.asc")))
 
   ## Check the two references are equal
-  comparison2Ref = all.equal(ref_coordinates_bio, ref_coordinates_pcp, ref_coordinates_cmi)
-  if (!isTRUE(comparison2Ref))
-  {
-    print(comparison2Ref)
-    print("Need to choose the bioclim reference for pcp")
-    print(paste0("InfNorm(diff coordinates) = ", max(abs(ref_coordinates_bio - ref_coordinates_pcp))))
-  }
+  # comparison2Ref = all.equal(ref_coordinates_bio, ref_coordinates_pcp, ref_coordinates_cmi)
+  # if (!isTRUE(comparison2Ref))
+  # {
+  #   print(comparison2Ref)
+  #   print("Need to choose the bioclim reference for pcp")
+  #   print(paste0("InfNorm(diff coordinates) = ", max(abs(ref_coordinates_bio - ref_coordinates_pcp))))
+  # }
 
   for (i in 2:nb_years)
   {
@@ -154,15 +154,15 @@ library(raster)
     coords = raster::coordinates(current_raster)
     print(all.equal(ref_coordinates_bio, coords))
 
-  # Check within pcp
+  # Check within cmi
     current_raster = raster::raster(paste0(mainDir, 'cmi/', allYear[i], "/cmi_01.asc"))
     coords = raster::coordinates(current_raster)
     print(all.equal(ref_coordinates_cmi, coords))
   
-    # Check within pcp
-    current_raster = raster::raster(paste0(mainDir, 'pcp/', allYear[i], "/pcp_01.asc"))
-    coords = raster::coordinates(current_raster)
-    print(all.equal(ref_coordinates_pcp, coords))
+    # # Check within pcp
+    # current_raster = raster::raster(paste0(mainDir, 'pcp/', allYear[i], "/pcp_01.asc"))
+    # coords = raster::coordinates(current_raster)
+    # print(all.equal(ref_coordinates_pcp, coords))
   }
 
 #
@@ -392,16 +392,16 @@ library(raster)
 
 # Remove correlated variables (> .75)
   
-  corVar <- cor(allVar_df[, setdiff(names(allVar_df), c('plot_id', 'year', grep('value0', names(allVar_df), value = T)))])
-  corVar2 <- corVar
-  corVar2[which(abs(corVar2) < 0.75)] <- NA
-  corrplot::corrplot(corVar2, type = 'upper')
+  # corVar <- cor(allVar_df[, setdiff(names(allVar_df), c('plot_id', 'year', grep('value0', names(allVar_df), value = T)))])
+  # corVar2 <- corVar
+  # corVar2[which(abs(corVar2) < 0.75)] <- NA
+  # corrplot::corrplot(corVar2, type = 'upper')
 
-  # Also remove value0 and keep only 5 years lag
-  varsToRm <- c(grep('value0', names(allVar_df), value = T),
-                'value5_bio_05', 'value5_bio_06', 'value5_bio_07', 'value5_bio_10', 'value5_bio_11', 'value5_bio_12', 'value5_bio_13', 'value5_bio_16', 'value5_bio_17', 'value5_bio_19')
+  # # Also remove value0 and keep only 5 years lag
+  # varsToRm <- c(grep('value0', names(allVar_df), value = T),
+  #               'value5_bio_05', 'value5_bio_06', 'value5_bio_07', 'value5_bio_10', 'value5_bio_11', 'value5_bio_12', 'value5_bio_13', 'value5_bio_16', 'value5_bio_17', 'value5_bio_19')
 
-  allVar_df <- allVar_df[, setdiff(names(allVar_df), varsToRm), with = FALSE]
+  # allVar_df <- allVar_df[, setdiff(names(allVar_df), varsToRm), with = FALSE]
 
 #
 
@@ -413,3 +413,7 @@ library(raster)
   reg_data <- merge(reg_data, allVar_df, by = c('plot_id', 'year'))
 
 #
+
+
+# Unload raster package
+detach("package:raster", unload=TRUE)

@@ -34,11 +34,6 @@
 ##############################
 
 
-# Load tree_data before transition transformation
-#load('data/RESEF/tree_reg_RESEF_beforeTransition.Rdata')
-tree_data <- readRDS('data/RESEF/tree_data_beforeTransition.RDS')
-
-
 # TODO if I tranform regCover into number of regeneration I must do it here
 
 # Function to get subplot IDs of the 8 neighborhood around a target subplot
@@ -374,22 +369,28 @@ saveRDS(juvenile2, file = 'data/RESEF/juvenile2_dt.RDS')
 #############
 
 # load data sets just in case
-sapling <- readRDS('data/RESEF/sapling_dt.RDS')
-juvenile1 <- readRDS('data/RESEF/juvenile1_dt.RDS')
-juvenile2 <- readRDS('data/RESEF/juvenile2_dt.RDS')
-adults <- readRDS('data/RESEF/tree_data_beforeTransition.RDS')
+# Load tree_data before transition transformation
+load('data/RESEF/tree_reg_RESEF_beforeTransition.Rdata')
+tree_data <- readRDS('data/RESEF/tree_data_beforeTransition.RDS')
 
 
-# Filter plot_id with at least 5 measures to assure enough temporal variability
-uqYear_plot <- sapling[, unique(year), by = plot_id]
-plotToKeep <- uqYear_plot[, .N, by = plot_id][N >= 5, plot_id]
+# Split tree_data between juv1, juv2, and adults
+sapling <- reg_data
+juvenile1 <- tree_data[state2 == 'alive' & dbh <= 51]
+juvenile2 <- tree_data[state2 == 'alive' & dbh > 51 & dbh < 91]
+adults <- tree_data[state2 == 'alive' & dbh >= 91]
+
+
+# Filter plot_id with at least 6 measures to assure enough temporal variability
+uqYear_plot <- reg_data[, unique(year), by = plot_id]
+plotToKeep <- uqYear_plot[, .N, by = plot_id][N >= 6, plot_id]
 uqYear_plot <- uqYear_plot[plot_id %in% plotToKeep]
 
 # Create a plot_id x year unique ID so all four datasets have the same spatio-temporal extension
 uqYear_plot[, plotYear_id := paste(plot_id, V1, sep = '_')]
 
 # prepare unique site_ID for all plot_ids
-uqSubplot_plot <- sapling[plot_id %in% plotToKeep, unique(subplot_id), by = plot_id]
+uqSubplot_plot <- reg_data[plot_id %in% plotToKeep, unique(subplot_id), by = plot_id]
 uqSubplot_plot[, site := paste(plot_id, V1, sep = '_')]
 
 
@@ -404,48 +405,51 @@ names(
                 juvenile2[plot_id %in% plotToKeep, .N, by = spCode][order(N, decreasing = T)[1:13], spCode],
                 adults[plot_id %in% plotToKeep, .N, by = spCode][order(N, decreasing = T)[1:13], spCode]
             )
-        ) == 4
+        ) >= 3
     )
 )
 
 
 # Create a subplot + plot unique ID and plot_id + year ID
 sapling[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year))]
-juvenile1[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year1))]
-juvenile2[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year1))]
+juvenile1[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year))]
+juvenile2[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year))]
 adults[, `:=`(site = paste0(plot_id, '_', subplot_id), plotYear_id = paste0(plot_id, '_', year))]
 
 
-# Filter for plot_id with at least 5 measures and for 
+# Filter for plot_id with at least 6 measures and for 
 sapling <- sapling[site %in% uqSubplot_plot$site & plotYear_id %in% uqYear_plot$plotYear_id]
 juvenile1 <- juvenile1[site %in% uqSubplot_plot$site & plotYear_id %in% uqYear_plot$plotYear_id]
 juvenile2 <- juvenile2[site %in% uqSubplot_plot$site & plotYear_id %in% uqYear_plot$plotYear_id]
 adults <- adults[site %in% uqSubplot_plot$site & plotYear_id %in% uqYear_plot$plotYear_id]
 
 
-# Fill the empty matrix for each stage class and species_id
 out_sp <- list()
 for(spId in spIds)
 {
-
     # Species specific df
     sapling_sp <- sapling[spCode == spId]
     juvenile1_sp <- juvenile1[spCode == spId]
     juvenile2_sp <- juvenile2[spCode == spId]
     adults_sp <- adults[spCode == spId]
 
-    # As the plots are not sampled on the same year, standardize the years to a sequence 1:6
-    year_to_id <- function(y)
-        return( factor(y, levels = unique(y), labels = 1:length(unique(y))) )
+    # As the plots are not sampled on the same year, standardize the years to a sequence 1:maxYearOfPlot
+    year_to_id <- function(y, plotID)
+    {
+        # get unique year of plot_id
+        uqYear <- uqYear_plot[plot_id == plotID, V1]
+        return( factor(y, levels = uqYear, labels = 1:length(uqYear)) )
+    }
 
-    sapling_sp[, year_id := year_to_id(year), by = plot_id]
-    juvenile1_sp[, year_id := year_to_id(year1), by = plot_id]
-    juvenile2_sp[, year_id := year_to_id(year1), by = plot_id]
-    adults_sp[, year_id := year_to_id(year), by = plot_id]
+    sapling_sp[, year_id := year_to_id(year, plot_id), by = plot_id]
+    juvenile1_sp[, year_id := year_to_id(year, plot_id), by = plot_id]
+    juvenile2_sp[, year_id := year_to_id(year, plot_id), by = plot_id]
+    adults_sp[, year_id := year_to_id(year, plot_id), by = plot_id]
 
-    # As adults are individually marked, count number of alive individuals by site and year_id
-    # Also filter for dbh >= 91 mm as the definition of adults
-    adults_sp <- adults_sp[state2 == 'alive' & dbh >= 91, .N, by = .(site, year_id)]
+    # As juvs and adults are individually marked, count number of alive individuals by site and year_id
+    juvenile1_sp <- juvenile1_sp[, .N, by = .(site, year_id)]
+    juvenile2_sp <- juvenile2_sp[, .N, by = .(site, year_id)]
+    adults_sp <- adults_sp[, .N, by = .(site, year_id)]
 
     # Long to large format
     sapling_la <- dcast(sapling_sp, site ~ year_id, value.var = 'nbStems')
@@ -453,34 +457,56 @@ for(spId in spIds)
     juvenile2_la <- dcast(juvenile2_sp, site ~ year_id, value.var = 'N')
     adults_la <- dcast(adults_sp, site ~ year_id, value.var = 'N')
 
+    # check if large format datasets have the same amout of years
+    maxYear <- max(c(
+        sapling_sp[, unique(year_id)],
+        juvenile1_sp[, unique(year_id)],
+        juvenile2_sp[, unique(year_id)],
+        adults_sp[, unique(year_id)]
+    ))
+
+    for(dts in c('sapling_la', 'juvenile1_la', 'juvenile2_la', 'adults_la'))
+    {   
+        # get unique year ID
+        uqYear <- suppressWarnings(as.numeric(names(get(dts))))
+        uqYear <- uqYear[-is.na(uqYear)]
+        
+        if(!identical(uqYear, 1:maxYear))
+        {
+            missingYears <- setdiff(1:maxYear, uqYear)
+            get(dts)[, (as.character(missingYears)) := NA]
+        }
+    }
+    
     # There are some missing sites in the above as no individuals of target species where found at a specific survey
     # Find the missing sites and fill with 0 (true absences)
+
     sapling_la <- rbind(
         sapling_la,
         data.table(
             site = uqSubplot_plot$site[!uqSubplot_plot$site %in% unique(sapling_la$site)],
-            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA
+            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA, `7` = NA
         )
     )
     juvenile1_la <- rbind(
         juvenile1_la,
         data.table(
             site = uqSubplot_plot$site[!uqSubplot_plot$site %in% unique(juvenile1_la$site)],
-            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA
+            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA, `7` = NA
         )
     )
     juvenile2_la <- rbind(
         juvenile2_la,
         data.table(
             site = uqSubplot_plot$site[!uqSubplot_plot$site %in% unique(juvenile2_la$site)],
-            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA
+            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA, `7` = NA
         )
     )
     adults_la <- rbind(
         adults_la,
         data.table(
             site = uqSubplot_plot$site[!uqSubplot_plot$site %in% unique(adults_la$site)],
-            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA
+            `1` = NA, `2` = NA, `3` = NA, `4` = NA, `5` = NA, `6` = NA, `7` = NA
         )
     )
 
@@ -537,7 +563,6 @@ for(spId in spIds)
                 adults_mt
             )
         )
-
 }
 
 
@@ -557,32 +582,36 @@ os <- out_sp[['ABIBAL']]
 # Stage variation over time for all sites
 #######################################################
 
-xLim <- c(1, 6)
+xLim <- c(1, dim(os)[2])
 
 par(mfrow = c(2, 2))
 plot(0, pch = '', xlim = xLim, ylim = range(os[, , 1], na.rm = TRUE), main = 'Sapling')
 for(i in 1:nrow(os[, , 1]))
 {
-    points(1:6, os[i, , 1], type = 'l', col = rgb(0, 0, 0, 0.3))
-    points(1:6, os[i, , 1])
+    points(1:xLim[2], os[i, , 1], type = 'l', col = rgb(0, 0, 0, 0.3))
+    points(1:xLim[2], os[i, , 1])
+    cat('   Plot 1 ', round(i/nrow(os[, , 1]) * 100, 0), '%\r')
 }
 plot(0, pch = '', xlim = xLim, ylim = range(os[, , 2], na.rm = TRUE), main = 'Juvenile 1')
 for(i in 1:nrow(os[, , 2]))
 {
-    points(1:6, os[i, , 2], type = 'l', col = rgb(0, 0, 0, 0.3))
-    points(1:6, os[i, , 2])
+    points(1:xLim[2], os[i, , 2], type = 'l', col = rgb(0, 0, 0, 0.3))
+    points(1:xLim[2], os[i, , 2])
+    cat('   Plot 2 ', round(i/nrow(os[, , 1]) * 100, 0), '%\r')
 }
 plot(0, pch = '', xlim = xLim, ylim = range(os[, , 3], na.rm = TRUE), main = 'Juvenile 2')
 for(i in 1:nrow(os[, , 3]))
 {
-    points(1:6, os[i, , 3], type = 'l', col = rgb(0, 0, 0, 0.3))
-    points(1:6, os[i, , 3])
+    points(1:xLim[2], os[i, , 3], type = 'l', col = rgb(0, 0, 0, 0.3))
+    points(1:xLim[2], os[i, , 3])
+    cat('   Plot 3 ', round(i/nrow(os[, , 1]) * 100, 0), '%\r')
 }
 plot(0, pch = '', xlim = xLim, ylim = range(os[, , 4], na.rm = TRUE), main = 'Adults')
 for(i in 1:nrow(os[, , 4]))
 {
-    points(1:6, os[i, , 4], type = 'l', col = rgb(0, 0, 0, 0.3))
-    points(1:6, os[i, , 4])
+    points(1:xLim[2], os[i, , 4], type = 'l', col = rgb(0, 0, 0, 0.3))
+    points(1:xLim[2], os[i, , 4])
+    cat('   Plot 4 ', round(i/nrow(os[, , 1]) * 100, 0), '%\r')
 }
 
 
@@ -590,9 +619,10 @@ for(i in 1:nrow(os[, , 4]))
 #######################################################
 
 # Get sites without zero (better to viz)
-sitesToPlot <- which(apply(os, 1, function(x) sum(x == 0, na.rm = T)) == 0)
+sitesToPlot <- which(apply(os, 1, function(x) sum(x == 0, na.rm = T)/28) < 0.1)
+cols <- RColorBrewer::brewer.pal(n = 5, name = 'BuGn')[2:5]
 
-par(mfrow = c(6, 7), mar = c(0.4, 2, 0.2, 0.2))
+par(mfrow = c(floor(sqrt(length(sitesToPlot))), floor(sqrt(length(sitesToPlot))) + 1), mar = c(0.4, 2, 0.2, 0.2))
 for(site in sitesToPlot)
 {
     yLim <- range(os[site, , 1:4], na.rm = TRUE)
@@ -600,15 +630,15 @@ for(site in sitesToPlot)
     plot(0, pch = '', xlim = xLim, ylim = yLim, xaxt = 'n')
     for(i in 1:4)
     {
-        points(os[site, , i], col = i, type = 'l')
-        points(os[site, , i], col = i)
+        points(os[site, , i], col = cols[i], type = 'l', lwd = 2)
+        points(os[site, , i], col = cols[i])
     }
 }
-legend('topleft', legend = c('Sap', 'Juv1', 'Juv2', 'Adu'), lty = 1, col = 1:4, bty = 'n')
+legend('topright', legend = c('Sap', 'Juv1', 'Juv2', 'Adu'), lty = 1, col = cols, bty = 'n')
 
 
 
-
+#=====================================================
 # Get site_ID in which any of Juv1, Juv2, or Adults have more individuals on t+1 compared to t
 check_increment <- function(x)
 {
@@ -628,4 +658,50 @@ check_increment <- function(x)
     return(0)
 }
 
-rowIncr = apply(n, 1, check_increment)
+rowIncr = apply(os, 1, check_increment)
+sit = sample(names(rowIncr)[rowIncr > 0], 1); t(os[which(rownames(os) == sit), , ])
+
+
+
+#=====================================================
+# Check for any given age and time step if there's enough source of individuals for transition
+# Returns a vector of 0 if good, otherwise return with the age_i and year_j ID
+check_source <- function(x)
+{
+    ages <- 1:ncol(x)
+    years <- 1:nrow(x)
+
+    # remove years with NA
+    if(any(is.na(x)))
+        years <- years[!apply(x, 1, function(x) all(is.na(x)))]
+
+    for(i in 2:length(ages))
+    {
+        for(j in 2:length(years))
+        {
+            # is there any increment?
+            incr <- x[j, i] - x[j - 1, i]
+
+            if(incr <= 0) {
+                next
+            }else{
+                sorc <- x[j - 1, i - 1]
+                
+                # is there enough source?
+                if((incr - sorc) > 0)
+                {
+                    return ( c(i, j) )
+                }else
+                {
+                    next
+                }
+            }
+        }
+        return ( c(0, 0) )
+    }
+}
+
+
+rowSource <- apply(os, 1, check_source)
+
+t(os[sample(which(rowSource == FALSE), 1), , ])

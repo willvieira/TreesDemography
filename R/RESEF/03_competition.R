@@ -324,3 +324,8 @@ tree_data[, BA_sp := nafill(BA_sp, "nocb"), by = .(plot_id, subplot_id, year, sp
 tree_data[, relativeBA_sp := BA_sp/BA, by = .(plot_id, subplot_id, year, spCode)]
 # 0/0 = NA
 tree_data[is.na(relativeBA_sp), relativeBA_sp := 0]
+
+
+# Save
+saveRDS(tree_data, file = 'data/RESEF/tree_data_beforeTransition.RDS')
+saveRDS(reg_data, file = 'data/RESEF/tree_reg_beforeTransition.RDS')
