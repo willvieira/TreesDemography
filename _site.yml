@@ -41,6 +41,11 @@ navbar:
           href: growth/BAandCD2.html
         - text: "random effect on pdg"
           href: growth/randomEffect.html
+    - text: "Recruitment"
+      icon: fa-tree
+      menu:
+        - text: "fastTransition"
+          href: recruit/fastTransition.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography
