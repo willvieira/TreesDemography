@@ -1,0 +1,583 @@
+---
+ title: "MCMC diagnostics - recruitment"
+ subtitle: "Test v1.0 - allow fast transition to second stage"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+- sim1: simplest model, no fast transition allowed (individuals must start on first age stage)
+- sim2: allow random individuals who are able to grow fast enough to enter the second age stage
+
+```{r, echo = F, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(jagsUI))
+suppressPackageStartupMessages(library(reshape2))
+```
+```{r load simulations, echo = F}
+# Load simulation variables
+
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
+
+  # species id
+  if(is.null(simInfo$spIds)) {
+    spIds <- readRDS('data/spIds.RDS')
+  }else {
+    spIds <- simInfo$spIds
+  }
+
+  simName <- simInfo$simName
+
+  simulations <- simInfo$simulations
+
+  # Human readble simName
+  sim1name <- 'No fast transition'
+  sim2name <- 'Fast transition'
+
+#
+
+
+# Load rStan output and scaleInfo for all species_id
+  # get output name for each species_id
+  simNames = list.files(path = paste('output', simName, sep = '/'), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
+
+  for(sim in simulations) {
+    for(sp in spIds) {
+      assign(
+        paste('fit', sim, sp, sep = '_'),
+        readRDS(paste0('output/', simName, '/', 'out_', sp, '_', sim, '.RDS'))
+      )
+    }
+  }
+
+  # get name of parameters for each simulation
+  for(sim in simulations)
+    assign(paste0('pars_', sim), setdiff(get(ls(pattern = sim)[1])$parameters, 'Ntotal'))
+
+#
+
+###########################################
+# Diagnostics
+###########################################
+```
+
+# Rhat
+
+```{r, echo = F, fig.height = 5, fig.width = 10}
+
+  Rhat <- data.table()
+  for(sim in simulations)
+  {
+    for(sp in spIds)
+    {
+      rhat_simSp <- get(paste('fit', sim, sp, sep = '_'))$Rhat
+      rhat_pars <- unlist(rhat_simSp[names(rhat_simSp) %in% get(paste0('pars_', sim))])
+
+      Rhat <- rbind(
+        Rhat,
+        data.table(
+          sim = sim,
+          sp = sp,
+          pars = names(rhat_pars),
+          rhat = rhat_pars
+        )
+      )
+    }
+  }
+
+  p <- ggplot(data = Rhat, aes(x = sp, y = rhat)) +
+         geom_boxplot() +
+         coord_flip() +
+         facet_grid(~sim,
+                   labeller = labeller(sim = setNames(c(sim1name, sim2name),
+                                     c('sim1', 'sim2'
+                                    )))) +
+       theme_classic()
+  print(p)
+```
+
+
+# Trace and density plot of each parameter by species id
+
+```{r get MCMC sampling data, echo = F}
+  # Prepare data
+  # Data frame with sim, sp_id, pars and value
+  # Value is all MCMC samples after warmup for all chains together
+
+  mcmcSampleDF <- data.table()
+  for(sim in simulations)
+  {
+    for(sp in spIds)
+    {
+      simObj <- get(paste('fit', sim, sp, sep = '_'))
+
+      # get samples and filter the parameters of interest
+      sim_samples <- do.call(rbind, simObj$samples) %>%
+        as.data.frame() %>%
+        select(!contains('Ntotal')) %>%
+        pivot_longer(
+          cols = everything(),
+          names_to = 'pars', 
+          values_to = 'value'
+        ) %>%
+        mutate(
+          sim = sim,
+          sp = sp
+        )
+
+      # merge
+      mcmcSampleDF <- rbind(
+        mcmcSampleDF,
+        sim_samples
+      )
+    }
+  }
+```
+
+```{r plot mcmcSample by pars, echo = F, message=FALSE, fig.height = 6, fig.width = 9}
+
+  for(par in unique(mcmcSampleDF$pars))
+  {
+    p <- mcmcSampleDF %>%
+      filter(pars == par) %>%
+      ggplot(aes(value, sp, fill = sim, color = sim)) +
+         geom_density_ridges(alpha = 0.5) +
+         theme_classic() +
+         xlab(par)
+    print(p)
+  }
+```
+
+
+# Predictions (observed vs predicted)
+
+```{r predictFunction,echo=FALSE}
+out_sp <- readRDS('data/RESEF/jags_data.RDS')
+
+pred_sim1 <- function(newdata, params, maxTime)
+{
+  nSites <- dim(newdata)[1]
+
+  # add more years to newdata so we can predit on the future
+  extraYears <- maxTime - dim(newdata)[2]
+  newdata_future <- aperm(apply(newdata, c(1, 3), c, setNames(rep(NA, extraYears), 8:(extraYears+dim(newdata)[2]))), c(2, 1, 3))
+
+  # Transfrom array of [site, time, stage] into data.frame of one dimension
+  newdata_lg <- reshape2::melt(newdata_future) %>%
+    mutate(
+      site = as.factor(Var1),
+      year = as.factor(Var2),
+      state = as.factor(Var3),
+      obs = value,
+      pred = ifelse(year == 1, obs, NA)
+    ) %>%
+    select(site, year, state, obs, pred)
+
+  # run model for time 2 to 7
+  for(Time in 2:dim(newdata_future)[2])
+  {
+    # estimate survival
+    for(state in 1:4)
+      assign(
+        paste0('S_', state),
+        rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
+      )
+
+    # Estimate recruitment for sapling and transition to next stage
+    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * subset(newdata_lg, year == Time-1 & state == 4)$pred + params$gamma[2])
+    for(state in 2:4)
+      assign(
+        paste0('G_', state),
+        rbinom(n = nSites, size = get(paste0('S_', state-1)), prob = params$theta[state-1])
+      )
+
+    # Sum all stages to get total N at each site j in each year t
+    # And append to data.frame
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 1)] <- S_1 + G_1 - G_2
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 2)] <- S_2 + G_2 - G_3
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 3)] <- S_3 + G_3 - G_4
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 4)] <- S_4 + G_4
+  }
+
+  return( newdata_lg )
+}
+
+
+
+pred_sim2 <- function(newdata, params, maxTime)
+{
+  nSites <- dim(newdata)[1]
+
+  # add more years to newdata so we can predit on the future
+  extraYears <- maxTime - dim(newdata)[2]
+  newdata_future <- aperm(apply(newdata, c(1, 3), c, setNames(rep(NA, extraYears), 8:(extraYears+dim(newdata)[2]))), c(2, 1, 3))
+
+  # Transfrom array of [site, time, stage] into data.frame of one dimension
+  newdata_lg <- reshape2::melt(newdata_future) %>%
+    mutate(
+      site = as.factor(Var1),
+      year = as.factor(Var2),
+      state = as.factor(Var3),
+      obs = value,
+      pred = ifelse(year == 1, obs, NA)
+    ) %>%
+    select(site, year, state, obs, pred)
+
+  # run model for time 2 to 7
+  for(Time in 2:dim(newdata_future)[2])
+  {
+    # estimate survival
+    for(state in 1:4)
+      assign(
+        paste0('S_', state),
+        rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
+      )
+
+    # Estimate recruitment for sapling and transition to next stage
+    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * subset(newdata_lg, year == Time-1 & state == 4)$pred + params$gamma[2])
+    for(state in 2:4)
+      assign(
+        paste0('G_', state),
+        rbinom(n = nSites, size = get(paste0('S_', state-1)), prob = params$theta[state-1])
+      )
+    G_5 <- rpois(n = nSites, lambda = params$gamma[3])
+
+    # Sum all stages to get total N at each site j in each year t
+    # And append to data.frame
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 1)] <- S_1 + G_1 - G_2
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 2)] <- S_2 + G_2 + G_5 - G_3
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 3)] <- S_3 + G_3 - G_4
+    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 4)] <- S_4 + G_4
+  }
+
+  return( newdata_lg )
+}
+
+
+maxTime = 15
+totalRep = 30
+pred_dt <- data.table()
+
+for(sp in spIds)
+{
+  # load data
+  newdata <- out_sp[[sp]]
+
+  # Load parameters for all simulations
+  for(sim in simulations)
+    assign(
+      paste0('params_', sim), get(paste0('fit_', sim, '_', sp))$mean
+    )
+
+  # get predictions
+  for(rep in 1:totalRep)
+  {
+    ## sim1
+    preddata <- pred_sim1(newdata, get(paste0('fit_', simulations[1], '_', sp))$mean, maxTime)
+    
+    # add species and rep info
+    preddata$sp <- sp
+    preddata$rep <- as.factor(rep)
+    preddata$sim <- simulations[1]
+    
+    pred_dt <- rbind(
+      pred_dt, 
+      preddata
+    )
+
+    ## sim2
+    preddata <- pred_sim2(newdata, get(paste0('fit_', simulations[2], '_', sp))$mean, maxTime)
+    
+    # add species and rep info
+    preddata$sp <- sp
+    preddata$rep <- as.factor(rep)
+    preddata$sim <- simulations[2]
+    
+    pred_dt <- rbind(
+      pred_dt, 
+      preddata
+    )
+  }
+}
+```
+
+
+## Year group
+
+```{r plotPrediction_state, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 15, fig.width = 10}
+for(spId in spIds)
+{
+  maxAxis <- pred_dt %>% 
+    filter(sp == spId & year %in% 2:7) %>%
+    summarise(
+      maxPred = quantile(pred, na.rm = TRUE, probs = 0.975),
+      maxObs = quantile(obs, na.rm = TRUE, probs = 0.975),
+      maxTotal = max(maxPred, maxObs)
+    ) %>%
+    select(maxTotal) %>%
+    as.numeric()
+  wrapNames <- c(
+    setNames(simulations, simulations),
+    setNames(paste0('year ', unique(pred_dt$year)), unique(pred_dt$year))
+  )
+
+  p <- pred_dt %>%
+    filter(sp == spId & year %in% 2:7) %>%
+    group_by(sim, site, state, year) %>%
+    summarise(
+      pred_mean = mean(pred),
+      obs_mean = mean(obs)
+    ) %>%
+    ggplot(aes(obs_mean, pred_mean)) +
+      geom_point(alpha = 0.5, size = 0.4) +
+      geom_abline(intercept = 0, alpha = 0.3) +
+      facet_grid(year ~ sim, labeller = as_labeller(wrapNames)) +
+      stat_regline_equation(
+        aes(label =  paste(..adj.rr.label.., sep = "~~~~")),
+        label.x.npc = 0.8,
+        size = 2.5
+      ) +
+      xlim(0, maxAxis) + ylim(0, maxAxis) +
+      xlab('Observed N') + ylab('Predicted N (mean of 10 repetitions)') +
+      ggtitle(spId)
+
+  print(p)
+}
+```
+
+## State group
+
+```{r plotPrediction_year, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 12, fig.width = 10}
+for(spId in spIds)
+{
+  maxAxis <- pred_dt %>% 
+    filter(sp == spId & year %in% 2:7) %>%
+    summarise(
+      maxPred = quantile(pred, na.rm = TRUE, probs = 0.975),
+      maxObs = quantile(obs, na.rm = TRUE, probs = 0.975),
+      maxTotal = max(maxPred, maxObs)
+    ) %>%
+    select(maxTotal) %>%
+    as.numeric()
+  wrapNames <- c(
+    setNames(simulations, simulations),
+    setNames(paste0('state ', unique(pred_dt$state)), unique(pred_dt$state))
+  )
+
+  p <- pred_dt %>%
+    filter(sp == spId & year != 1) %>%
+    group_by(sim, site, state, year) %>%
+    summarise(
+      pred_mean = mean(pred),
+      obs_mean = mean(obs)
+    ) %>%
+    ggplot(aes(obs_mean, pred_mean)) +
+      geom_point(alpha = 0.5, size = 0.4) +
+      geom_abline(intercept = 0, alpha = 0.3) +
+      facet_grid(state ~ sim, labeller = as_labeller(wrapNames)) +
+      stat_regline_equation(
+        aes(label =  paste(..adj.rr.label.., sep = "~~~~")),
+        label.x.npc = 0.8,
+        size = 2.5
+      ) +
+      xlim(0, maxAxis) + ylim(0, maxAxis) +
+      xlab('Observed N') + ylab('Predicted N (mean of 10 repetitions)') +
+      ggtitle(spId)
+
+  print(p)
+}
+```
+
+
+## Rsquared summary
+
+```{r r2pred, echo = FALSE}
+r2_state <- pred_dt %>%
+    split(list(.$sp, .$sim, .$state)) %>%
+    map(~lm(pred ~ obs, data = .)) %>%
+    map(summary) %>%
+    map_dbl(~.$r.squared) %>%
+    as.data.frame() %>%
+    rename(., r2 = .) %>%
+    rownames_to_column() %>%
+    mutate(
+        sp = gsub('\\..*', '', rowname),
+        sim = map_chr(strsplit(rowname, '\\.'), function(x) x[2]),
+        state = as.factor(gsub('.*\\.', '', rowname))
+    ) %>%
+    select(sp, sim, state, r2)
+
+r2_year <- pred_dt %>%
+    mutate(year = as.numeric(year)) %>%
+    filter(year %in% 2:7) %>%
+    split(list(.$sp, .$sim, .$year)) %>%
+    map(~lm(pred ~ obs, data = .)) %>%
+    map(summary) %>%
+    map_dbl(~.$r.squared) %>%
+    as.data.frame() %>%
+    rename(., r2 = .) %>%
+    rownames_to_column() %>%
+    mutate(
+        sp = gsub('\\..*', '', rowname),
+        sim = map_chr(strsplit(rowname, '\\.'), function(x) x[2]),
+        year = as.factor(gsub('.*\\.', '', rowname))
+    ) %>%
+    select(sp, sim, year, r2)
+```
+
+
+```{r plot_r2_a, echo = FALSE, fig.height = 6, fig.width = 9}
+r2_state %>%
+    ggplot(aes(r2, sp, fill = sim, color = sim)) +
+        geom_point() +
+        facet_wrap(~state)
+```
+
+```{r plot_r2_b, echo = FALSE, fig.height = 7, fig.width = 9}
+
+r2_year %>%
+    ggplot(aes(r2, sp, fill = sim, color = sim)) +
+        geom_point() +
+        facet_wrap(~year)
+```
+
+## Mean observed & predicted
+
+```{r calculateMEANobs, echo=FALSE, message=FALSE, warning=FALSE}
+obs_timeseries = pred_dt %>%
+  group_by(sp, sim, state, year) %>%
+  summarise(
+    obs_mean   = mean(obs, na.rm = TRUE),
+    obs_upper  = quantile(obs, na.rm = TRUE, probs = 0.975),
+    obs_lower  = quantile(obs, na.rm = TRUE, probs = 0.025),
+    pred_mean  = mean(pred, na.rm = TRUE),
+    pred_upper = quantile(pred, na.rm = TRUE, probs = 0.975),
+    pred_lower = quantile(pred, na.rm = TRUE, probs = 0.025)
+  )
+```
+
+
+```{r plotMEANobs, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 5, fig.width = 10}
+
+for(spId in spIds)
+{
+  yMax <- obs_timeseries %>%
+    filter(sp == spId & year %in% 1:7) %>%
+    group_by(sp, sim, state) %>%
+    summarise(
+      maxObs   = max(obs_upper, na.rm = T),
+      maxPred  = max(pred_upper, na.rm = T),
+      maxValue = max(maxObs, maxPred)
+    ) %>%
+    select(sim, state, maxValue)
+
+  #xMax <- max(as.numeric(pred_dt$year))
+  xMax = 7
+
+  par(mfrow = c(2, 4), las = 1, mar = c(3, 3, 0.5, 0.2), oma = c(0, 0, 4, 2), mgp = c(1.5, 0.3, 0), tck = -.008)
+  for(Sim in simulations)
+  {
+    for(st in 1:4)
+    {
+      st_dt <- obs_timeseries %>% filter(sp == spId & sim == Sim & state == st)
+      plot(0, pch = '', xlim = c(1, xMax), ylim = c(0, subset(yMax, sim == Sim & state == st)$maxValue), xlab = 'Year', ylab = ifelse(st == 1, 'N', ''))
+      # Observed
+      polygon(
+        x = c(1:7, rev(1:7)),
+        y = c(st_dt$obs_upper[1:7], rev(st_dt$obs_lower[1:7])),
+        col = rgb(253,172,83,120, maxColorValue = 255),
+        border = NA
+      )
+      lines(st_dt$obs_mean, lwd = 3, col = rgb(253,172,83,255, maxColorValue = 255))
+      # pedicted
+      polygon(
+        x = c(st_dt$year, rev(st_dt$year)),
+        y = c(st_dt$pred_upper, rev(st_dt$pred_lower)),
+        col = rgb(155,183,212,120, maxColorValue = 255),
+        border = NA
+      )
+      lines(st_dt$pred_mean, lwd = 3, col = rgb(155,183,212,255, maxColorValue = 255))
+      if(Sim == simulations[1]) mtext(paste('state', st), 3, line = 0)
+    }
+    mtext(Sim, 4, las = 0, line = 0.5)
+  }
+  legend('topleft', legend = c('Observed', 'predidcted'), lty = 1, col = c(rgb(253,172,83,255, maxColorValue = 255), rgb(155,183,212,255, maxColorValue = 255)), bty = 'n', cex = .9)
+  mtext(spId, 3, outer = TRUE, line = 1)
+}
+```
+
+
+## Mean Squared Error
+
+```{r calculateMSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+# lower_MSE <- pred_dt %>%
+#   group_by(sp, sim, site, state, year) %>%
+#   summarise(
+#     pred_mean = mean(pred),
+#     obs_mean = mean(obs)
+#   ) %>%
+#   filter(!is.na(obs_mean)) %>%
+#   group_by(sp, sim, site, state) %>%
+#   summarise(
+#     MSE = mean((obs_mean - pred_mean)^2)
+#   ) %>%
+#   filter(MSE > 1) %>%
+#   group_by(sp, sim, site) %>%
+#   summarise(
+#     meanMSE = mean(MSE)
+#   ) %>%
+#   group_by(sp, sim) %>%
+#   filter(rank(meanMSE) %in% 1:5)
+
+```
+
+```{r plotlowerMSE, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 3, fig.width = 10}
+# plot_bestSite <- function(spId, Site)
+# {
+#   yMax <- pred_dt %>%
+#     filter(sp == spId & site == Site) %>%
+#     summarise(
+#       maxObs = max(obs, na.rm = T),
+#       maxPred = max(pred, na.rm = T),
+#       maxValue = max(maxObs, maxPred)
+#     ) %>%
+#     select(maxValue) %>%
+#     as.numeric()
+
+#  # get max and min value of repetitions
+#  pred_lc <- pred_dt %>%
+#     filter(sp == spId & site == Site) %>%
+#     group_by(state, year) %>%
+#     summarise(
+#       pred_upper = max(pred),
+#       pred_lower = min(pred),
+#       obs = mean(obs)
+#     )
+
+#   par(mfrow = c(1, 4), las = 1, mar = c(3, 3, 4, 0.2), mgp = c(1.5, 0.3, 0), tck = -.008)
+#   for(st in 1:4)
+#   {
+#     plot(0, pch = '', xlim = c(2, maxTime), ylim = c(0, yMax), xlab = 'Year', ylab = ifelse(st == 1, 'N', ''))
+
+#     polygon(
+#       x = c(1:maxTime, maxTime:1),
+#       y = c(subset(pred_lc, state == st)$pred_upper, rev(subset(pred_lc, state == st)$pred_lower)),
+#       border = NA,
+#       col = '#c0bcbc'
+#     )
+#     lines(subset(pred_lc, state == st)$obs, lwd = 1.6)
+#     mtext(paste('state', st), 3, line = 0)
+#   }
+#   mtext(paste0(spId, '; site:', Site), 3, outer = TRUE, line = -2)
+# }
+
+
+# for(i in 1:nrow(lower_MSE))
+#   plot_bestSite(spId = lower_MSE$sp[i], Site = lower_MSE$site[i])
+```

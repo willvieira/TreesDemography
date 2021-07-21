@@ -1,10 +1,28 @@
 # Species id: define spId code or NULL to run for all species
-spIds: NULL
+spIds: ["ABIBAL", "ACEPEN", "ACESAC", "ACESPI", "BETALL",
+        "BETPAP", "FAGGRA", "FRAAME", "OSTVIR", "PICGLA",
+        "PICMAR", "PICRUB", "TILAME"]
 # Which vital rates to run
-vitalRates: ["mort", "growth", "fec"]
+vitalRates: ["recruit"]
 # Max interation in the MCMC
-maxIter: 15000
+maxIter: 800000
 # Number of cores and chains (to be ran in parallel)
-nC: 5
+nC: 3
 # Size of transition measurements to be sampled from the population
-sampleSize: 15000
+sampleSize: NA
+# The main folder name
+simName: "fastTransition"
+# Specific simulations (must match with the files names to run MCMC)
+simulations: ["rmFastTransition", "withFastTransition"]
+
+
+##################################
+########## DESCRIPTION  ##########
+##################################
+
+## Recruitmenet test - v1.0
+
+## Compare base model with extended model allwoing fast transition to second age stage
+
+## - sim1: simplest model, no fast transition allowed (individuals must start on first age stage)
+## - sim2: allow random individuals who are able to grow fast enough to enter the second age stage
