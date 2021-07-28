@@ -23,7 +23,7 @@ for(Sim in 1:length(simulations))
 #SBATCH --cpus-per-task=", nChains, "
 #SBATCH --job-name=", simulations[Sim], "
 #SBATCH --mail-user=willian.vieira@usherbrooke.ca
-#SBATCH --mail-type=FAIL
+#SBATCH --mail-type=ALL
 #SBATCH --array=1-", length(spIds), "
 
 R -f R/runRecruit_sim", Sim, ".R")
@@ -38,4 +38,6 @@ R -f R/runRecruit_sim", Sim, ".R")
     }else{
         print('Sbatch not found, skipping job submission.')
     }
+    
+    Sys.sleep(20)
 }

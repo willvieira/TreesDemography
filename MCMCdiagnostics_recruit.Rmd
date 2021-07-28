@@ -1,12 +1,12 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v1.0 - allow fast transition to second stage"
+ subtitle: "Test v2.0 - seed source from neighbor"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
-- sim1: simplest model, no fast transition allowed (individuals must start on first age stage)
-- sim2: allow random individuals who are able to grow fast enough to enter the second age stage
+- sim1: neighbor source only
+- sim2: neighbor source with a extra source of random seeds arriving from long distance dispersion
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(require(RColorBrewer))
@@ -50,7 +50,7 @@ suppressPackageStartupMessages(library(reshape2))
     for(sp in spIds) {
       assign(
         paste('fit', sim, sp, sep = '_'),
-        readRDS(paste0('output/', simName, '/', 'out_', sp, '_', sim, '.RDS'))
+        readRDS(paste0('output/', simName, '/', 'out_', paste0('sim', which(sim == simulations)), sp, '_', simName, '.RDS'))
       )
     }
   }
@@ -159,7 +159,52 @@ suppressPackageStartupMessages(library(reshape2))
 ```{r predictFunction,echo=FALSE}
 out_sp <- readRDS('data/RESEF/jags_data.RDS')
 
-pred_sim1 <- function(newdata, params, maxTime)
+# load tree_data to generate unique subplot_ID by each plot_id
+subplotList <- readRDS('data/RESEF/tree_data.RDS')[, unique(subplot_id), by = plot_id]
+
+# Given a site ID (and the list of all subplot_ids)
+# return the 8 site ID around the target site (+ target site ID)
+getNeighbour <- function(site, subplotList)
+{
+    plot_ID <- gsub('_.*', '', site)
+    subplot_ID <- gsub('.*_', '', site)
+    
+    # get first and second element of subplot id
+    firstEl <- as.numeric(substring(subplot_ID, 1, 1))
+    secondEl <- as.numeric(substring(subplot_ID, 2, 2))
+
+    # get max of x and y over all subplots within a plot
+    all_subplots <- subplotList[plot_id == plot_ID, V1]
+    max_X <- max(as.numeric(substring(all_subplots, 1, 1)))
+    max_Y <- max(as.numeric(substring(all_subplots, 2, 2)))
+
+    # create a vector
+    firstEl_vec <- c(firstEl - 1, firstEl, firstEl + 1)
+    secondEl_vec <- c(secondEl - 1, secondEl, secondEl + 1)
+
+    # expand possibilites
+    exp_mt <- expand.grid(firstEl_vec, secondEl_vec)
+
+    # Remove negative plots
+    exp_mt <- exp_mt[!apply(exp_mt, 1, function(x) any(x < 0)), ]
+
+    # Remove subplots outside plot (bigger than max_*)
+    exp_mt <- exp_mt[!exp_mt$Var1 > max_X, ]
+    exp_mt <- exp_mt[!exp_mt$Var2 > max_Y, ]
+
+    # reduce expanded matrix in a vector combining first and second element
+    paste0(
+        plot_ID,
+        '_',
+        paste0(exp_mt$Var1, exp_mt$Var2)
+    )
+}
+
+
+siteNames <- rownames(out_sp[[1]])
+neighbour_ls <- sapply(siteNames, getNeighbour, subplotList)
+
+pred_sim1 <- function(newdata, params, neighbour, maxTime)
 {
   nSites <- dim(newdata)[1]
 
@@ -177,7 +222,7 @@ pred_sim1 <- function(newdata, params, maxTime)
       pred = ifelse(year == 1, obs, NA)
     ) %>%
     select(site, year, state, obs, pred)
-
+ 
   # run model for time 2 to 7
   for(Time in 2:dim(newdata_future)[2])
   {
@@ -188,8 +233,15 @@ pred_sim1 <- function(newdata, params, maxTime)
         rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
       )
 
+    # get adult N from neighbor
+    neigh_t0 <- sapply(
+      subset(newdata_lg, year == Time-1 & state == 4)$site,
+      function(x)
+        sum(subset(newdata_lg, year == Time-1 & state == 4 & site %in% neighbour[[as.character(x)]])$pred)
+    )
+    
     # Estimate recruitment for sapling and transition to next stage
-    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * subset(newdata_lg, year == Time-1 & state == 4)$pred + params$gamma[2])
+    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * neigh_t0 + params$gamma[2])
     for(state in 2:4)
       assign(
         paste0('G_', state),
@@ -209,7 +261,7 @@ pred_sim1 <- function(newdata, params, maxTime)
 
 
 
-pred_sim2 <- function(newdata, params, maxTime)
+pred_sim2 <- function(newdata, params, neighbour, maxTime)
 {
   nSites <- dim(newdata)[1]
 
@@ -238,8 +290,15 @@ pred_sim2 <- function(newdata, params, maxTime)
         rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
       )
 
+    # get adult N from neighbor
+    neigh_t0 <- sapply(
+      subset(newdata_lg, year == Time-1 & state == 4)$site,
+      function(x)
+        sum(subset(newdata_lg, year == Time-1 & state == 4 & site %in% neighbour[[as.character(x)]])$pred)
+    )
+
     # Estimate recruitment for sapling and transition to next stage
-    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * subset(newdata_lg, year == Time-1 & state == 4)$pred + params$gamma[2])
+    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * neigh_t0 + params$gamma[2])
     for(state in 2:4)
       assign(
         paste0('G_', state),
@@ -268,17 +327,11 @@ for(sp in spIds)
   # load data
   newdata <- out_sp[[sp]]
 
-  # Load parameters for all simulations
-  for(sim in simulations)
-    assign(
-      paste0('params_', sim), get(paste0('fit_', sim, '_', sp))$mean
-    )
-
   # get predictions
   for(rep in 1:totalRep)
   {
     ## sim1
-    preddata <- pred_sim1(newdata, get(paste0('fit_', simulations[1], '_', sp))$mean, maxTime)
+    preddata <- pred_sim1(newdata, get(paste0('fit_', simulations[1], '_', sp))$mean, neighbour_ls, maxTime)
     
     # add species and rep info
     preddata$sp <- sp
@@ -291,7 +344,7 @@ for(sp in spIds)
     )
 
     ## sim2
-    preddata <- pred_sim2(newdata, get(paste0('fit_', simulations[2], '_', sp))$mean, maxTime)
+    preddata <- pred_sim2(newdata, get(paste0('fit_', simulations[2], '_', sp))$mean, neighbour_ls, maxTime)
     
     # add species and rep info
     preddata$sp <- sp

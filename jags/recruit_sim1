@@ -6,7 +6,7 @@ model {
   lambda[3] ~ dunif(0, 30)
   lambda[4] ~ dunif(0, 30)
   
-  gamma[1] ~ dunif(0, 10)
+  gamma[1] ~ dunif(0, 5)
   gamma[2] ~ dunif(0, 5)
 
   theta[1] ~ dunif(0, 1)
@@ -38,7 +38,10 @@ model {
 
     #Specify the model for years 2 through nYears
     for(t in 2:nYears)
-    {
+    { 
+      # Get abundance from neighbour adults (+ traget site)
+      Neig[j, t-1] <- sum(N[neighbour[j, 1:lastNonNa[j]], t-1, 4])
+     
       #Estimate survivorship
       S[j,t,1] ~ dbin(omega[1], N[j,t-1,1]) 
       S[j,t,2] ~ dbin(omega[2], N[j,t-1,2])
@@ -46,21 +49,21 @@ model {
       S[j,t,4] ~ dbin(omega[4], N[j,t-1,4])
       
       #Estimate recruitment for sapling and transition to next stage
-      G[j,t,1] ~ dpois(gamma[1] * N[j,t-1,4] + gamma[2])      
-      G[j,t,2] ~ dbin(theta[1], S[j,t,1])
-      G[j,t,3] ~ dbin(theta[2], S[j,t,2])
-      G[j,t,4] ~ dbin(theta[3], S[j,t,3])
+      G[j,t,1] ~ dpois(gamma[1] * Neig[j,t-1])            # N_1 recruit
+      G[j,t,2] ~ dbin(theta[1], S[j,t,1])                 # Transition from N_1 to N_2
+      G[j,t,3] ~ dpois(gamma[2])                          # N_2 recruit (Individuals growthing too fast that were not indentified on first N_1 stage)
+      G[j,t,4] ~ dbin(theta[2], S[j,t,2])                 # Transition from N_2 to N_3
+      G[j,t,5] ~ dbin(theta[3], S[j,t,3])                 # Transition from N_3 to N_4
 
       #Sum all stages to get total N at each site j in each year t
       N[j,t,1] <- S[j,t,1] + G[j,t,1] - G[j,t,2]
-      N[j,t,2] <- S[j,t,2] + G[j,t,2] - G[j,t,3]
-      N[j,t,3] <- S[j,t,3] + G[j,t,3] - G[j,t,4]
-      N[j,t,4] <- S[j,t,4] + G[j,t,4]
-    
+      N[j,t,2] <- S[j,t,2] + G[j,t,2] + G[j,t,3] - G[j,t,4]
+      N[j,t,3] <- S[j,t,3] + G[j,t,4] - G[j,t,5]
+      N[j,t,4] <- S[j,t,4] + G[j,t,5]
     }
 
-    #Loop accross reps to estimate process error
-    #The data matrix n is specified location x year x stage x rep
+    #Loop accross years
+    #The data matrix n is specified site, time, stage
     for (t in 1:nYears)
     {
       n[j,t,1] ~ dpois(N[j,t,1])
@@ -70,7 +73,7 @@ model {
     } 
   }
   
-  #sum up the number of individuals in all locations to estimate annual
+  #sum up the number of individuals in all locations to estimate
   #total N for each stage
   for (t in 1:nYears)
   {

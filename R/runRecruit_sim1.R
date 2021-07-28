@@ -22,57 +22,72 @@ sp = simInfo$spIds[as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))]
 # Filter data to specific species
 n <- out_sp[[sp]]
 
-# Check for any given age and time step if there's enough source of individuals for transition
-# Returns a vector of 0 if good, otherwise return with the age_i and year_j ID
-check_source <- function(x)
-{
-    ages <- 1:ncol(x)
-    years <- 1:nrow(x)
-
-    # remove years with NA
-    if(any(is.na(x)))
-        years <- years[!apply(x, 1, function(x) all(is.na(x)))]
-
-    for(i in 2:length(ages))
-    {
-        for(j in 2:length(years))
-        {
-            # is there any increment?
-            incr <- x[j, i] - x[j - 1, i]
-
-            if(incr <= 0) {
-                next
-            }else{
-                sorc <- x[j - 1, i - 1]
-                
-                # is there enough source?
-                if((incr - sorc) > 0)
-                {
-                    return ( c(i, j) )
-                }else
-                {
-                    next
-                }
-            }
-        }
-        return ( c(0, 0) )
-    }
-}
-
-# Keep only sites in which source was available for transition
-rowSource <- apply(n, 1, check_source)
-n <- n[which(apply(rowSource, 2, sum) == 0), , ]
-
 
 # Remove sites in which delta year was different than 5 years (first attempt to keep time interval standardize between sites)
 plot_to_rm <- c('301', '804', '904')
 n <- n[which(!gsub('\\_.*', '', rownames(n)) %in% plot_to_rm), ,]
 
 
-nSites = nrow(n) #Total number of locations
-nYears = ncol(n) #Total number of survey years
-nObsAges = 4               #Number of observable stages
 
+# Get neighbour J index for each site
+########################################################
+
+# load tree_data to generate unique subplot_ID by each plot_id
+subplotList <- readRDS('data/RESEF/tree_data.RDS')[, unique(subplot_id), by = plot_id]
+
+# Given a site ID (and the list of all subplot_ids)
+# return the 8 site ID around the target site (+ target site ID)
+getNeighbour <- function(site, subplotList)
+{
+    plot_ID <- gsub('_.*', '', site)
+    subplot_ID <- gsub('.*_', '', site)
+    
+    # get first and second element of subplot id
+    firstEl <- as.numeric(substring(subplot_ID, 1, 1))
+    secondEl <- as.numeric(substring(subplot_ID, 2, 2))
+
+    # get max of x and y over all subplots within a plot
+    all_subplots <- subplotList[plot_id == plot_ID, V1]
+    max_X <- max(as.numeric(substring(all_subplots, 1, 1)))
+    max_Y <- max(as.numeric(substring(all_subplots, 2, 2)))
+
+    # create a vector
+    firstEl_vec <- c(firstEl - 1, firstEl, firstEl + 1)
+    secondEl_vec <- c(secondEl - 1, secondEl, secondEl + 1)
+
+    # expand possibilites
+    exp_mt <- expand.grid(firstEl_vec, secondEl_vec)
+
+    # Remove negative plots
+    exp_mt <- exp_mt[!apply(exp_mt, 1, function(x) any(x < 0)), ]
+
+    # Remove subplots outside plot (bigger than max_*)
+    exp_mt <- exp_mt[!exp_mt$Var1 > max_X, ]
+    exp_mt <- exp_mt[!exp_mt$Var2 > max_Y, ]
+
+    # reduce expanded matrix in a vector combining first and second element
+    paste0(
+        plot_ID,
+        '_',
+        paste0(exp_mt$Var1, exp_mt$Var2)
+    )
+}
+
+siteNames <- rownames(n)
+neighbour_ls <- sapply(siteNames, getNeighbour, subplotList)
+
+# Transform site ID to J index
+neighbour_ls <- lapply(neighbour_ls, function(x) which(siteNames %in% x))
+
+# List to matrix
+neighbour_mt <- t(sapply(neighbour_ls, "length<-", max(lengths(neighbour_ls))))
+
+# For each site (row) retrieve which column is the last non NA (ugly way to handle NA on jags but works :(
+lastNonNa <- apply(neighbour_mt, 1, function(x) max(which(!is.na(x))))
+
+nSites = nrow(n) # Total number of locations
+nYears = ncol(n) # Total number of survey years
+nObsAges = 4     # Number of observable stages
 
 
 # #Set the intital values to run the JAGS model
@@ -156,6 +171,8 @@ nObsAges = 4               #Number of observable stages
 Dat <- list(
     nSites = nSites, 
     nYears = nYears,
+    neighbour = neighbour_mt,
+    lastNonNa = lastNonNa,
     n = n
 )
 

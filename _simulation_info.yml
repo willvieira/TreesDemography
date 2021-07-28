@@ -11,18 +11,18 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: NA
 # The main folder name
-simName: "fastTransition"
+simName: "seedSource"
 # Specific simulations (must match with the files names to run MCMC)
-simulations: ["rmFastTransition", "withFastTransition"]
+simulations: ["neighborOnly", "neighborPlusRandom"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v1.0
+## Recruitmenet test - v2.0
 
-## Compare base model with extended model allwoing fast transition to second age stage
+## Instead of considering adults only within site, get source from neighbor sites
 
-## - sim1: simplest model, no fast transition allowed (individuals must start on first age stage)
-## - sim2: allow random individuals who are able to grow fast enough to enter the second age stage
+## - sim1: neighbor source only
+## - sim2: neighbor source with a extra source of random seeds arriving from long distance dispersion
