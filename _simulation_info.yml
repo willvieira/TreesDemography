@@ -1,6 +1,6 @@
 # Species id: define spId code or NULL to run for all species
 spIds: ["THUOCC", "BETPAP", "PICGLA", "BETALL",
-        "ACERUB", "ABIBAL", "PICMAR", "POPTRE",
+        "ACERUB", "ABIBAL", "PICMAR",
         "ACESAC", "PINBAN"]
 # Which vital rates to run
 vitalRates: ["mort"]

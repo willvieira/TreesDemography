@@ -1,23 +1,22 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v8.0 - random effect"
+ subtitle: "Test v9.0 - random effect plot:year"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Test if plot random effects on baseline longevity improve predictions:
+## Test if plot:year random effects on baseline longevity improve predictions:
 
-- **sim1**: no random effect
-- **sim2**: random effect on psi
+- **sim1**: year random effect on $\psi$
+- **sim2**: plot:year random effect on $\psi$
 
-```{r, echo = F,warning=FALSE}
+```{r, echo=F,warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
-suppressPackageStartupMessages(require(RColorBrewer)) 
-suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggridges))
-suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(data.table))
 ```
@@ -37,8 +36,8 @@ suppressPackageStartupMessages(library(data.table))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'Fixed effect'
-  sim2name <- 'Random effect'
+  sim1name <- 'year random effect'
+  sim2name <- 'plot:year random effect'
 
 #
 
@@ -48,18 +47,12 @@ suppressPackageStartupMessages(library(data.table))
   simNames = list.files(path = paste('output', simName, sep = '/'), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
   output = simNames[grep('mortMCMC', simNames)]
 
-  for(sim in simulations) {
-    for(sp in spIds) {
-      fileName <- output[grep(paste0(sim, sp), output)]
-      assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
-    }
-  }
-
   # get name of parameters for each simulation
   for(sim in simulations)
   {
     # get one MCMC file for a specific sim
-    assign(paste0('pars_', sim), rownames(summary(get(ls(pattern = sim)[1]))[[1]]))
+    sim_out <- readRDS(grep(sim, output, value = TRUE)[1])
+    assign(paste0('pars_', sim), rownames(summary(sim_out)[[1]]))
   }
 
 #
@@ -70,25 +63,90 @@ suppressPackageStartupMessages(library(data.table))
 ```
 
 
+```{r load all metrics, echo = FALSE}
+
+# data.frames to fill for each simulation and species ID
+Rhat <- data.frame()
+divergentDF <- data.frame()
+mcmcSampleDF <- data.frame()
+samplingDF <- data.frame()
+
+for(sim in simulations)
+{
+  for(sp in spIds)
+  {
+    # load simulation
+    sim_sp_output <- readRDS(grep(sim, grep(sp, output, value = TRUE), value = TRUE))
+
+
+    # Rhat section
+    df <- summary(sim_sp_output)$summary
+    nRow = nrow(df)
+    dfToAdd <- data.frame(
+        sim = sim,
+        sp = sp,
+        pars = rownames(df),
+        Rhat = df[, 'Rhat'],
+        row.names = NULL
+    )
+    Rhat <- rbind(Rhat, dfToAdd)
+
+
+    # Divergent transitions section
+    sampler_params <- get_sampler_params(sim_sp_output, inc_warmup = FALSE)
+    nbDivergent <- sum(
+      unlist(
+        lapply(
+          sampler_params,
+          function(mat)
+            mat[, 'divergent__']
+        )
+      )
+    )
+
+    divergentDF <- rbind(
+      divergentDF,
+      data.frame(
+        sim = sim,
+        sp = sp,
+        nbDivergent = nbDivergent
+      )
+    )
+
+
+    # Sampling section
+    dfToAdd <- gather(as.data.frame(sim_sp_output), key = 'pars')
+    dfToAdd <- subset(dfToAdd, pars %in% grep('psi_pmean', get(paste0('pars_', sim)), value = TRUE, invert = TRUE))
+    dfToAdd$sim <- sim
+    dfToAdd$sp <- sp
+
+    mcmcSampleDF <- rbind(
+      mcmcSampleDF,
+      dfToAdd
+    )
+
+
+    # sampling time
+    sumTime <- rowSums(get_elapsed_time(sim_sp_output))
+
+    samplingDF <- rbind(
+      samplingDF,
+      data.frame(
+        sim = sim,
+        sp = sp,
+        time = sumTime/60/60
+      )
+    )
+  }
+}
+
+# Get the parameters from the random plot_id
+# mcmcsSampleDF_random <- subset(mcmcSampleDF, pars %in% grep('psi_pmean', unique(mcmcSampleDF$pars), value = TRUE))
+```
 
 # Rhat
 
 ```{r, echo = F, fig.height = 6, fig.width = 10}
-  # number of parameters for all simulations
-  nbParams <- prod(unlist(lapply(as.list(paste0('pars_', simulations)), function(x) length(get(x)))))
-  # create a table with Rhat for each parameter (clumn) and species_id (Rhat)
-  Rhat <- data.frame()
-  count = 1
-  for(sim in simulations) {
-    for(sp  in spIds) {
-      df <- summary(get(paste('fit', sim, sp, sep = '_')))$summary
-      nRow = nrow(df)
-      dfToAdd <- data.frame(rep(sim, nRow), rep(sp, nRow), rownames(df), df[, 'Rhat'], row.names = NULL)
-      Rhat <- rbind(Rhat ,dfToAdd)
-    }
-  }
-  names(Rhat) <- c('sim', 'sp', 'pars', 'Rhat')
-
   p <- ggplot(data = Rhat, aes(x = sp, y = Rhat)) +
        geom_boxplot() +
        coord_flip() +
@@ -101,23 +159,6 @@ suppressPackageStartupMessages(library(data.table))
 
 # Divergent transitions
 
-```{r divergent transitions, echo = FALSE}
-
-divergentDF <- data.frame(matrix(NA, ncol = 3))
-names(divergentDF) <- c('sim', 'sp', 'divergent')
-
-count = 1
-for(sim in simulations) {
-  for(sp in spIds) {
-    simNames <- paste('fit', sim, sp, sep = '_')
-    sampler_params <- get_sampler_params(get(simNames), inc_warmup = FALSE)
-    nbDivergent <- sum(unlist(lapply(sampler_params, function(mat) mat[, 'divergent__'])))
-    divergentDF[count, ] <- c(sim, sp, nbDivergent)
-    count = count + 1
-  }
-}
-```
-
 ```{r divergent table, echo = FALSE}
 DT::datatable(divergentDF)
 ```
@@ -125,25 +166,6 @@ DT::datatable(divergentDF)
 
 
 # Density plot of each parameter by species id
-
-```{r get MCMC sampling data, echo = F}
-  # Prepare data
-  # Data frame with sim, sp_id, pars and value
-  # Value is all MCMC samples after warmup for all chains together
-
-  mcmcSampleDF <- data.frame()
-  for(sim in simulations) {
-    for(sp in spIds) {
-      simObj <- get(paste('fit', sim, sp, sep = '_'))
-      dfToAdd <- gather(as.data.frame(simObj), key = 'pars')
-      dfToAdd <- cbind(data.frame(sim = rep(sim, nrow(dfToAdd)), sp = rep(sp, nrow(dfToAdd))), dfToAdd)
-      mcmcSampleDF <- rbind(mcmcSampleDF, dfToAdd)
-    }
-  }
-
-  # Get the parameters from the random plot_id
-  mcmcSampleDF_random <- subset(mcmcSampleDF, pars %in% grep('psi_pmean', unique(mcmcSampleDF$pars), value = TRUE))
-```
 
 ```{r plot mcmcSample by pars, echo = F, message=FALSE, fig.height = 7, fig.width = 9}
   parsToPlot <- setdiff(unique(mcmcSampleDF$pars), grep('psi_pmean', unique(mcmcSampleDF$pars), value = TRUE))
@@ -156,10 +178,10 @@ DT::datatable(divergentDF)
     print(p)
   }
 
-  ggplot(data = mcmcSampleDF_random, aes(value, sp)) +
-        geom_density_ridges(alpha = 0.5) +
-        theme_classic() +
-        xlab('Random effect of psi at the population level')
+  # ggplot(data = mcmcSampleDF_random, aes(value, sp)) +
+  #       geom_density_ridges(alpha = 0.5) +
+  #       theme_classic() +
+  #       xlab('Random effect of psi at the population level')
 ```
 
 # Data distribution
@@ -213,7 +235,7 @@ print(p)
 
     # competition effect
     compEffect = function(xba, param, sim) {
-        return(param['Lo', 1] + ((1 - param['Lo', 1]) / (1 + exp(0.25 * (xba - param['Mid', 1])))))
+        return(param[param$pars == 'Lo', 4] + ((1 - param[param$pars == 'Lo', 4]) / (1 + exp(0.25 * (xba - param[param$pars == 'Mid', 4])))))
     }
 
   #
@@ -227,87 +249,97 @@ print(p)
   BAx = seq(0, 80, 0.1)
 
   # species specfic colours
-  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
+  spCols <- setNames(rev(RColorBrewer::brewer.pal(length(spIds), "Set3")), spIds)
+
+  # get sample mean
+  mcmc_mean <- mcmcSampleDF %>%
+    group_by(sp, sim, pars) %>%
+    summarise(mean_par = mean(value)) %>%
+    as.data.frame()
 
   par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
 
   # plot size effect
-  for(sim in simulations) {
-    for(sp in 1:length(spIds)) {
+  for(Sim in simulations) {
+    for(Sp in spIds) {
       # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
+
       # plot
-      if(sp == 1) plot(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]),
+      if(Sp == spIds[1]) plot(sizex, sizeEffect(sizex, out[out$pars == 'DBHopt', 4], out[out$pars == 'DBHvar', 4]),
                   type = 'l', ylim = c(0, 1), xlab = 'Size (mm)', ylab = 'Size effect',
-                  col = spCols[sp],
-                  yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
-      points(sizex, sizeEffect(sizex, out['DBHopt', 1], out['DBHvar', 1]), type = 'l', col = spCols[sp])
+                  col = spCols[Sp],
+                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
+      if(Sim == 'sim2') axis(2, labels = FALSE)
+      points(sizex, sizeEffect(sizex, out[out$pars == 'DBHopt', 4], out[out$pars == 'DBHvar', 4]), type = 'l', col = spCols[Sp])
     }
-    mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
-    if(sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
+    mtext(ifelse(Sim == 'sim1', sim1name, ifelse(Sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
+    if(Sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
   # plot temp effect
-  for(sim in simulations) {
-    for(sp in 1:length(spIds)) {
+  for(Sim in simulations) {
+    for(Sp in spIds) {
       # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
-      topt <- out['T_opt', 1]
-      sigTopt <- out['sigmaT_opt', 1]
+      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
 
-      if(sp == 1) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
+      topt <- out[out$pars == 'T_opt', 4]
+      sigTopt <- out[out$pars == 'sigmaT_opt', 4]
+
+      if(Sp == spIds[1]) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
                   ylim = c(0, 1), xlab = 'Temperature (°C)', ylab = 'Temperature effect',
-                  col = spCols[sp],
-                  yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
-      points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = spCols[sp])
+                  col = spCols[Sp],
+                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
+      if(Sim == 'sim2') axis(2, labels = FALSE)
+      points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = spCols[Sp])
     }
-    if(sim == 'sim1') mtext("Temperature effect", 2, las = 0, cex = .8, line = 1.9)
+    if(Sim == 'sim1') mtext("Temperature effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
   # plot precipitation effect
-  for(sim in simulations) {
-    for(sp in 1:length(spIds)) {
+  for(Sim in simulations) {
+    for(Sp in spIds) {
       # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
-      popt <- out['P_opt', 1]
-      sigPopt <- out['sigmaP_opt', 1]
+      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
 
-      if(sp == 1) plot(precx, precEffect(precx, popt, sigPopt), type = 'l',
+      popt <- out[out$pars == 'P_opt', 4]
+      sigPopt <- out[out$pars == 'sigmaP_opt', 4]
+
+      if(Sp == spIds[1]) plot(precx, precEffect(precx, popt, sigPopt), type = 'l',
                   ylim = c(0, 1), xlab = 'Precipiation (mm)', ylab = 'Precipiation effect',
-                  col = spCols[sp],
-                  yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
-      points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = spCols[sp])
+                  col = spCols[Sp],
+                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
+      if(Sim == 'sim2') axis(2, labels = FALSE)
+      points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = spCols[Sp])
     }
-    if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
+    if(Sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
   # plot basal area effect
-  for(sim in simulations) {
-    for(sp in 1:length(spIds)) {
+  for(Sim in simulations) {
+    for(Sp in spIds) {
       # get parameters
-      out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
+      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
 
-      if(sp == 1) plot(BAx, compEffect(BAx, param = out, sim = sim),
+      if(Sp == spIds[1]) plot(BAx, compEffect(BAx, param = out, sim = sim),
       ylim = c(0, 1), type = 'l', xlab = 'Basal area (m2/ha)', ylab = 'Competition effect',
-      col = spCols[sp],
-      yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
+      col = spCols[Sp],
+      yaxt = ifelse(Sim == 'sim1', "s", "n"))
+      if(Sim == 'sim2') axis(2, labels = FALSE)
 
-      points(BAx, compEffect(BAx, param = out, sim = sim), type = 'l', col = spCols[sp])
+      points(BAx, compEffect(BAx, param = out, sim = Sim), type = 'l', col = spCols[Sp])
     }
 
-    if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+    if(Sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
+  legend('topleft', legend = spIds, col = spCols, lty = 1, lwd = 1.5, bty = 'n', cex = 0.7)
 ```
 
 
 
 # Predictions
 
-```{r prediction functions, echo = F,fig.width = 9}
+```{r prediction functions, echo = F,fig.width = 9,message = FALSE}
 # Plot predictions
   # define model
 
@@ -324,7 +356,7 @@ print(p)
   }
 
   # Function in which you give a rstan output (species_id) and it returns the three plots
-  plot_prediction <- function(sim, sp, model, data) {
+  plot_prediction <- function(Sim, Sp, model, data) {
 
     # Prepare data
     newdataT <- data[['newdataT']]
@@ -332,37 +364,36 @@ print(p)
     newdataD <- data[['newdataD']]
     newdataC <- data[['newdataC']]
 
-    # simulation
-    fit <- get(paste('fit', sim, sp, sep = '_'))
-
-    # posterior distribution
-    posterior <- rstan::extract(fit)
-
-    param_summary <- summary(fit, probs = c(0.1, 0.9))$summary
-    param_summary <- param_summary[,-c(2:3)]
-
+    # Prepare parameters
+    fit <- subset(mcmcSampleDF, sim == Sim & sp == Sp) %>%
+      group_by(pars) %>%
+      summarise(
+        mean = mean(value),
+        ci10 = quantile(value, 0.025),
+        ci90 = quantile(value, 0.975)
+      )
+    
     # define parameters
-    nRow <- nrow(param_summary)
-    param_mean <- param_summary[-nRow, 1]
-    param_ci10 <- param_summary[-nRow, 2]
-    param_ci90 <- param_summary[-nRow, 3]
+    param_mean <- setNames(fit$mean, fit$pars)
+    param_ci10 <- setNames(fit$ci10, fit$pars)
+    param_ci90 <- setNames(fit$ci90, fit$pars)
 
     # get predictions
-    mort_meanT <- mort_model(param = param_mean, sim = sim, newdata = newdataT)
-    mort_ci10T <- mort_model(param = param_ci10, sim = sim, newdata = newdataT)
-    mort_ci90T <- mort_model(param = param_ci90, sim = sim, newdata = newdataT)
+    mort_meanT <- mort_model(param = param_mean, sim = Sim, newdata = newdataT)
+    mort_ci10T <- mort_model(param = param_ci10, sim = Sim, newdata = newdataT)
+    mort_ci90T <- mort_model(param = param_ci90, sim = Sim, newdata = newdataT)
 
-    mort_meanP <- mort_model(param = param_mean, sim = sim, newdata = newdataP)
-    mort_ci10P <- mort_model(param = param_ci10, sim = sim, newdata = newdataP)
-    mort_ci90P <- mort_model(param = param_ci90, sim = sim, newdata = newdataP)
+    mort_meanP <- mort_model(param = param_mean, sim = Sim, newdata = newdataP)
+    mort_ci10P <- mort_model(param = param_ci10, sim = Sim, newdata = newdataP)
+    mort_ci90P <- mort_model(param = param_ci90, sim = Sim, newdata = newdataP)
 
-    mort_meanD <- mort_model(param = param_mean, sim = sim, newdata = newdataD)
-    mort_ci10D <- mort_model(param = param_ci10, sim = sim, newdata = newdataD)
-    mort_ci90D <- mort_model(param = param_ci90, sim = sim, newdata = newdataD)
+    mort_meanD <- mort_model(param = param_mean, sim = Sim, newdata = newdataD)
+    mort_ci10D <- mort_model(param = param_ci10, sim = Sim, newdata = newdataD)
+    mort_ci90D <- mort_model(param = param_ci90, sim = Sim, newdata = newdataD)
 
-    mort_meanC <- mort_model(param = param_mean, sim = sim, newdata = newdataC)
-    mort_ci10C <- mort_model(param = param_ci10, sim = sim, newdata = newdataC)
-    mort_ci90C <- mort_model(param = param_ci90, sim = sim, newdata = newdataC)
+    mort_meanC <- mort_model(param = param_mean, sim = Sim, newdata = newdataC)
+    mort_ci10C <- mort_model(param = param_ci10, sim = Sim, newdata = newdataC)
+    mort_ci90C <- mort_model(param = param_ci90, sim = Sim, newdata = newdataC)
 
 
     cd2plot <- unique(newdataT$CD)
@@ -374,7 +405,7 @@ print(p)
     # Mortality vs temperature
     plot(mort ~ TP, mort_ci10T, type = "n", ylim = c(0, 1),
          xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
-    if(sim == 'sim2') axis(2,labels=F)
+    if(Sim == 'sim2') axis(2,labels=F)
 
     for(cd in cd2plot) {
       mu <- subset(mort_meanT, CD == cd)
@@ -387,18 +418,18 @@ print(p)
               c(ci10$mort, rev(ci90$mort)),
               col = alpha(mycol, 0.5), border = NA)
     }
-    legend("topleft", legend = cd2plot, title = ifelse(sim == 'sim1', "Canopy distance", "Basal area"),
+    legend("topleft", legend = cd2plot, title = ifelse(Sim == 'sim1', "Canopy distance", "Basal area"),
             fill = colcd[1:3], bty = "n", border = "transparent")
 
     # data range
     abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_01)], col = 'grey', lty = 2)
 
-     mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
-     mtext(sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
+     mtext(ifelse(Sim == 'sim1', sim1name, ifelse(Sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
+     mtext(Sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
 
     # Mortality vs precipitation
     plot(mort ~ PP, mort_ci10P, type = "n", ylim = c(0, 1),
-         xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+         xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'Sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     for(cd in cd2plot) {
       mu <- subset(mort_meanP, CD == cd)
@@ -414,11 +445,11 @@ print(p)
     mtext("P(Mortality)/year", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
     # data range
-    abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_12)], col = 'grey', lty = 2)
+    abline(v = mort_dt[sp_code2 == Sp, range(value5_bio60_12)], col = 'grey', lty = 2)
     
     # Mortality vs size
     plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
-         xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+         xlab = "Size (mm)", ylab = "", yaxt = ifelse(Sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     for(cd in cd2plot) {
       mu <- subset(mort_meanD, CD == cd)
@@ -433,11 +464,11 @@ print(p)
     }
 
     # data range
-    abline(v = mort_dt[sp_code2 == sp, range(dbh0)], col = 'grey', lty = 2)
+    abline(v = mort_dt[sp_code2 == Sp, range(dbh0)], col = 'grey', lty = 2)
 
     # Mortality vs competition
     plot(mort ~ CD, mort_ci10C, type = "n", ylim = c(0, 1),
-         xlab = ifelse(sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+         xlab = ifelse(Sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
     axis(2, labels = F)
     lines(mort ~ CD, mort_meanC, cex = .5, pch = 19, col = mycol)
       polygon(c(mort_meanC$CD, rev(mort_meanC$CD)),
@@ -445,11 +476,11 @@ print(p)
               col = alpha(mycol, 0.5), border = NA)
 
     # add data range
-    if(sim == 'sim1')
+    if(Sim == 'sim1')
     {
-      abline(v = mort_dt[sp_code2 == sp, range(canopyDistance)], col = 'grey', lty = 2)
+      abline(v = mort_dt[sp_code2 == Sp, range(canopyDistance)], col = 'grey', lty = 2)
     }else{
-      abline(v = mort_dt[sp_code2 == sp, range(BA)], col = 'grey', lty = 2)
+      abline(v = mort_dt[sp_code2 == Sp, range(BA)], col = 'grey', lty = 2)
     }  
   }
   ```
@@ -508,26 +539,28 @@ Using four different metrics:
     db <- mort_dt[sp_code2 == sp]
 
     # load plot_id references and update plot_id to ID_PE
-    toSub <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub.RDS'))
-    db[toSub, on = .(ID_PE), plot_id := i.plot_id]
+    toSub_sim1 <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim1.RDS'))
+    db[toSub_sim1, on = .(year0), year_sq := i.year_sq]
+    toSub_sim2 <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim2.RDS'))
+    db[toSub_sim2, on = .(year0, ID_PE), plotYear := i.plotYear]
 
     # load rows used for stan fit
     sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices.RDS'))
 
+    # get validation dataset
     db <- db[!sampledIndices, ]
 
-    oob_list[[sp]] <- db[!is.na(plot_id), ]
+    oob_list[[sp]] <- db[!(is.na(year_sq) | is.na(plotYear)), ]
   }
 ```
 
 ```{r calculate OOB predictions and confusion matrix, echo=FALSE,fig.height = 12, fig.width = 12}
-
-  mort_model2 <- function(param, sim, plot_id, D, TP, PP, C)
+  mort_model2 <- function(param, sim, year, plotYear, D, TP, PP, C)
   {
     if(sim == 'sim1') {
-      psi_pop <- param["psi"]
+      psi_pop <- param["psi"] + param[paste0("psi_pmean[", year, "]")]
     }else{
-      psi_pop <- param["psi"] + param[paste0("psi_pmean[", plot_id, "]")]
+      psi_pop <- param["psi"] + param[paste0("psi_pmean[", plotYear, "]")]
     }
 
 
@@ -559,18 +592,15 @@ Using four different metrics:
     for(sim in simulations)
     {
       # get params
-      fit <- get(paste('fit', sim, sp, sep = '_'))
+      fit <- readRDS(grep(sim, grep(sp, output, value = TRUE), value = TRUE))
       posterior <- rstan::extract(fit)
-      if(sim == 'sim1') {
-        params <- lapply(posterior, sample, size = sampleN)
-      }else{
-        # First sample for the random effect parameters and rename them
-        psi_pars <- lapply(lapply(seq_len(ncol(posterior[['psi_pmean']])), function(i) posterior[['psi_pmean']][, i]), sample, sampleN)
-        names(psi_pars) <- paste0('psi_pmean[', 1:length(psi_pars), ']')
-        # sample the remaining parameters and merge with pdg_ random effect
-        params <- lapply(posterior[-which(names(posterior) == 'psi_pmean')], sample, sampleN)
-        params <- append(params, psi_pars)
-      }
+    
+      # First sample for the random effect parameters and rename them
+      psi_pars <- lapply(lapply(seq_len(ncol(posterior[['psi_pmean']])), function(i) posterior[['psi_pmean']][, i]), sample, sampleN)
+      names(psi_pars) <- paste0('psi_pmean[', 1:length(psi_pars), ']')
+      # sample the remaining parameters and merge with pdg_ random effect
+      params <- lapply(posterior[-which(names(posterior) == 'psi_pmean')], sample, sampleN)
+      params <- append(params, psi_pars)
       
       Acc <- Sensitivity <- Specificity <- AccCorrected <- numeric(sampleN)
       for(i in 1:sampleN)
@@ -578,7 +608,7 @@ Using four different metrics:
         pars <- unlist(lapply(params, `[[`, i))
         
         # get mortality
-        db[, mortByYear := 1 - mort_model2(param = pars, sim = sim, plot_id = plot_id, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = BA)]
+        db[, mortByYear := 1 - mort_model2(param = pars, sim = sim, year = year_sq, plotYear = plotYear, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = BA)]
         db[, mort_det := 1 - (mortByYear^deltaYear)]
         db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_det)]
 
@@ -591,7 +621,6 @@ Using four different metrics:
         Sensitivity[i] <- TP/(TP + FN)
         Specificity[i] <- TN/(FP + TN)
         AccCorrected[i] <- (Sensitivity[i] + Specificity[i])/2
-
       }      
       acc_dt <- rbind(acc_dt, data.table(sp = rep(sp, sampleN), sim = rep(sim, sampleN), Acc = Acc, Sensitivity = Sensitivity, Specificity = Specificity, AccCorrected = AccCorrected))
     }
@@ -694,26 +723,7 @@ Using four different metrics:
 
 # Sampling time
 
-```{r sampling time, echo = FALSE}
-samplingDF <- data.frame()
-
-for(sim in simulations) {
-  for(sp in spIds) {
-    simNames <- paste('fit', sim, sp, sep = '_')
-    sumTime <- rowSums(get_elapsed_time(get(simNames)))
-    nChain <- length(sumTime)
-    df1 <- data.frame(sim = rep(sim, nChain),
-                     sp = rep(sp, nChain),
-                     time = sumTime)
-    samplingDF <- rbind(samplingDF, df1)
-  }
-}
-
-samplingDF$time <- samplingDF$time/60/60
-```
-
 ```{r plot sampling time, echo = FALSE, fig.height = 6, fig.width = 12}
-
 p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
       geom_boxplot() +
       facet_grid(~sp) +
