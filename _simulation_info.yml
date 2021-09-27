@@ -1,17 +1,17 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ["THUOCC", "BETPAP", "PICGLA", "BETALL",
-        "ACERUB", "ABIBAL", "PICMAR", "POPTRE",
-        "ACESAC", "PINBAN"]
+spIds: ["505490THUOCC", "19489BETPAP", "183295PICGLA", "19481BETALL",
+        "28728ACERUB", "18032ABIBAL", "183302PICMAR", "195773POPTRE",
+        "28731ACESAC", "183319PINBAN", "18034PICRUB"]
 # Which vital rates to run
 vitalRates: ["growth"]
 # Max interation in the MCMC
-maxIter: 5000
+maxIter: 7000
 # Number of cores and chains (to be ran in parallel)
 nC: 3
 # Size of transition measurements to be sampled from the population
-sampleSize: 14000
+sampleSize: 20000
 # The main folder name
-simName: "randomEffect"
+simName: "compPredictor"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -20,9 +20,9 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v6.0
+## Growth test - v7.0
 
-## Add a random effect to the baseline growth rate (pdg) to partionate variation between permanent plotshan small individuals
+## With random effects at the plot level, compare two different competition predictors:
 
-# - sim1: no random effect
-# - sim2: ranfom effect for pdg
+# - sim1: basal area (of the plot)
+# - sim2: canopy distance (height - s_star)

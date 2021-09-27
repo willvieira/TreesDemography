@@ -6,7 +6,7 @@ data
 	// Vector data
 	vector[N] T_data; // temperature, E data
 	vector<lower = 0>[N] P_data; // Precipitation, E data
-	vector<lower = 0, upper = 100>[N] C_data; // BA
+	vector<lower = 0, upper = 400>[N] C_data; // BA
 	vector<lower = 0>[N] D_data; // diameter, I data
 	vector<lower = 0>[N] Y; // response var, not 'logarithmised'
 }

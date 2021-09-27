@@ -37,20 +37,20 @@ set.seed(42)
 ## begin stratified sampling (thanks Amaēl for sharing)
 
   # select the species
-  growth_dt <- growth_dt[sp_code2 == sp]
+  growth_dt <- growth_dt[species_id == sp]
 
-  # get latitude and longitude from SHAPE list
-  getCoord <- function(SHAPE, coord = 1) {
-      n <- length(SHAPE)
-      xy <- unique(unlist(SHAPE))
-      return (rep(xy[coord], n))
-  }
-  growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
-  growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
+  # # get latitude and longitude from SHAPE list
+  # getCoord <- function(SHAPE, coord = 1) {
+  #     n <- length(SHAPE)
+  #     xy <- unique(unlist(SHAPE))
+  #     return (rep(xy[coord], n))
+  # }
+  # growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
+  # growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
-    deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaC = 5
+    deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaBA = 5; deltaCD = 2
 
     # Size classes
     sizeClass = seq(from = min(growth_dt$dbh0), to = max(growth_dt$dbh0) + deltaS, by = deltaS)
@@ -72,22 +72,31 @@ set.seed(42)
   		growth_dt[ latClass[i] <= latitude & latitude < latClass[i + 1], latInt := i]
 
     # BA classes
-    BAClass = seq(from = min(growth_dt$BA), to = max(growth_dt$BA) + deltaC, by = deltaC)
+    BAClass = seq(from = min(growth_dt$BA), to = max(growth_dt$BA) + deltaBA, by = deltaBA)
     nbBAClass = length(BAClass) - 1
 
   	for (i in 1:nbBAClass)
   		growth_dt[ BAClass[i] <= BA & BA < BAClass[i + 1], BAInt := i]
+
+    # canopyDistance
+    CDClass = seq(from = min(growth_dt$canopyDistance), to = max(growth_dt$canopyDistance) + deltaCD, by = deltaCD)
+    nbCDClass = length(CDClass) - 1
+    
+    for (i in 1:nbCDClass)
+        growth_dt[ CDClass[i] <= canopyDistance & canopyDistance < CDClass[i + 1], CDInt := i]
 
   	# Derive frequencies
   	freqDBH = growth_dt[, table(sizeInt)]/growth_dt[, .N]
   	freqLon = growth_dt[, table(lonInt)]/growth_dt[, .N]
   	freqLat = growth_dt[, table(latInt)]/growth_dt[, .N]
     freqBA = growth_dt[, table(BAInt)]/growth_dt[, .N]
+    freqCD = growth_dt[, table(CDInt)]/growth_dt[, .N]
 
   	ls_sizeInt = growth_dt[, unique(sizeInt)]
   	ls_lonInt = growth_dt[, unique(lonInt)]
   	ls_latInt = growth_dt[, unique(latInt)]
     ls_BAInt = growth_dt[, unique(BAInt)]
+    ls_CPInt = growth_dt[, unique(CDInt)]
 
   	for (s in ls_sizeInt)
   		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
@@ -101,7 +110,10 @@ set.seed(42)
     for (b in ls_BAInt)
   		growth_dt[BAInt == b, proba_b := freqBA[as.character(b)]]
 
-  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_b]
+   for (cd in ls_CPInt)
+  		growth_dt[CDInt == cd, proba_cd := freqCD[as.character(cd)]]
+
+  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_b*proba_cd]
 
   	sampledIndices = sample(x = 1:growth_dt[,.N], size = sampleSize, replace = FALSE, prob = growth_dt$proba)
 
@@ -109,6 +121,22 @@ set.seed(42)
     growth_dt = growth_dt[sampledIndices, ]
 
   }
+
+##
+
+
+## Adjust plot_id to be a evenly sequence from 1 to nbPlot_id
+
+  # Create new data.table with unique ID_PE and a sequence of 1:N to replace ID_PE
+  plot_id_uq <- growth_dt[, unique(plot_id)]
+  toSub <- data.table(plot_id = plot_id_uq, plot_id_seq = 1:length(plot_id_uq))
+
+  # Create new column with replaced codes
+  growth_dt[toSub, on = .(plot_id), plot_id_seq := i.plot_id_seq]
+
+  dir.create('sampleInfo')
+  saveRDS(sampledIndices, file = 'sampleInfo/sampledIndices_sim1.RDS')
+  saveRDS(toSub, file = 'sampleInfo/toSub_sim1.RDS')
 
 ##
 
@@ -121,8 +149,10 @@ set.seed(42)
   ## Data stan
   dataStan <- list(
           N = growth_dt[, .N],
-          T_data = growth_dt$value5_bio60_01,
-          P_data = growth_dt$value5_bio60_12,
+          Np = growth_dt[, length(unique(plot_id_seq))],
+          plot_id = growth_dt[, plot_id_seq],
+          T_data = growth_dt$mean_temp_period_3_lag,
+          P_data = growth_dt$tot_annual_pp_lag,
           D_data = growth_dt$dbh0,
           C_data = growth_dt$BA,
           Y = growth_dt$growth)
@@ -138,7 +168,7 @@ set.seed(42)
                          init = "random",
                          control = list(adapt_delta = 0.95),
                          include = FALSE,
-                         pars = c("mu_d"))
+                         pars = c("mu_d", "pdg_plot"))
 
 ##
 
