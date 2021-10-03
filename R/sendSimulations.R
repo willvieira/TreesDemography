@@ -26,7 +26,7 @@ cat('####### Sending simulations to the server #######\n')
 
 ## Folders and files
 
-  filesToSend <- c('_simulation_info.yml', '_rawDataLink', paste0('data/quebec/', vitalRate, '_dt.RDS'))
+  filesToSend <- c('_simulation_info.yml', '_rawDataLink', paste0('data/', vitalRate, '_dt.RDS'))
   foldersToSend <- c('R', 'stan')
 ##
 

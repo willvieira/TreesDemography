@@ -40,8 +40,8 @@ suppressPackageStartupMessages(library(MuMIn))
   simulations <- simInfo$simulations
 
   # Human readble simName
-  sim1name <- 'Fixed effect'
-  sim2name <- 'Random effect'
+  sim1name <- 'Basal area'
+  sim2name <- 'Canopy distance'
 
 #
 
@@ -86,9 +86,14 @@ suppressPackageStartupMessages(library(MuMIn))
   for(sim in simulations) {
     for(sp  in spIds) {
       df <- summary(get(paste('fit', sim, sp, sep = '_')))$summary
-      nRow = nrow(df)
-      dfToAdd <- data.frame(rep(sim, nRow), rep(sp, nRow), rownames(df), df[, 'Rhat'], row.names = NULL)
-      Rhat <- rbind(Rhat ,dfToAdd)
+      dfToAdd <- data.frame(
+          sim, 
+          sp,
+          rownames(df),
+          df[, 'Rhat'],
+          row.names = NULL
+      )
+      Rhat <- rbind(Rhat, dfToAdd)
     }
   }
   names(Rhat) <- c('sim', 'sp', 'pars', 'Rhat')
@@ -174,18 +179,18 @@ DT::datatable(divergentDF)
 # Data distribution
 
 ```{r organize data, echo = FALSE}
-growth_dt <- readRDS('data/quebec/growth_dt.RDS')
-growth_dt <- growth_dt[sp_code2 %in% spIds]
-growth <- growth_dt[, .(ID_PE, sp_code2, growth, dbh0, dbh1, deltaYear, value5_bio60_01, value5_bio60_12, BA)]
+growth_dt <- readRDS('data/growth_dt.RDS')
+growth_dt <- growth_dt[species_id %in% spIds]
+growth <- growth_dt[, .(plot_id, species_id, growth, dbh0, deltaYear, mean_temp_period_3_lag, tot_annual_pp_lag, BA, canopyDistance)]
 
 # transform dt
 growth <- tidyr::gather(data = growth,
-            growth, dbh0, value5_bio60_01, value5_bio60_12, BA,
+            growth, dbh0, mean_temp_period_3_lag, tot_annual_pp_lag, BA, canopyDistance,
             key = 'var', value = 'value')
 ```
 
 ```{r plot data distribution, echo = FALSE, message=FALSE, fig.height = 7, fig.width = 10}
-p <- ggplot(data = growth, aes(value, sp_code2)) +
+p <- ggplot(data = growth, aes(value, species_id)) +
       geom_density_ridges_gradient() +
       facet_grid(~var, scales = 'free_x') + #,
       #          labeller = labeller(sim = setNames(c(sim1name,
@@ -218,8 +223,12 @@ print(p)
       return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
     }
 
-    compEffect = function(xBA, sigma_C) {
-      return( exp(-((xBA^2)/2 * sigma_C^2)) )
+    compEffect = function(x, params, sim) {
+      if(sim == 'sim1') {
+        return( exp(-((x^2)/2 * params['sigma_C', 1]^2)) )
+      }else{
+        return( (params['Lo', 1] + ((1 - params['Lo', 1]) / (1 + exp(-0.45 * (x))))) )
+      }
     }
 
   #
@@ -227,10 +236,9 @@ print(p)
   ## PLOT ##
 
  # define x axis
-  sizex = seq(91, 700, 0.5)
-  tempx = seq(-8, 25)
-  precx = seq(500, 1700)
-  BAx = seq(0, 80, 0.1)
+  sizex = seq(91, 900, 0.5)
+  tempx = seq(5, 25)
+  precx = seq(200, 1800)
 
   # species specfic colours
   spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
@@ -261,7 +269,7 @@ print(p)
       sigTopt <- out['sigmaT_opt', 1]
 
       if(sp == 1) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
-                  ylim = c(0, 1), xlab = 'Temperature (°C)', ylab = 'Temperature effect',
+                  ylim = c(0, 1), xlab = 'Annual mean temperature period 3 (°C)', ylab = 'Temperature effect',
                   col = spCols[sp],
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
@@ -288,19 +296,25 @@ print(p)
     if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
-  # plot BA effect
+  # plot competition effect
   for(sim in simulations) {
     for(sp in 1:length(spIds)) {
       # get parameters
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
-      sigma_C <- out['sigma_C', 1]
 
-      if(sp == 1) plot(BAx, compEffect(BAx, sigma_C), xlim = c(0, 80),
-      ylim = c(0, 1), type = 'l', xlab = 'Canopy distance', ylab = 'Competition effect',
-      col = spCols[sp],
-      yaxt = ifelse(sim == 'sim1', "s", "n"))
-      if(sim == 'sim2') axis(2, labels = FALSE)
-      points(BAx, compEffect(BAx, sigma_C), type = 'l', col = spCols[sp])
+      if(sim == 'sim1') {
+        x = seq(0, 90, 0.1)
+      }else{
+        x = seq(-30, 40, 0.1)
+      }
+      if(sp == 1) 
+        plot(x, compEffect(x, out, sim),
+            ylim = c(0, 1), type = 'l', xlab = ifelse(sim == 'sim1', 'Basal area', 'Canopy distance'), ylab = 'Competition effect',
+            col = spCols[sp],
+            yaxt = ifelse(sim == 'sim1', "s", "n")
+        )
+        if(sim == 'sim2') axis(2, labels = FALSE)
+        points(x, compEffect(x, out, sim), type = 'l', col = spCols[sp])
     }
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
@@ -320,8 +334,13 @@ print(p)
 
     lgPart <- (log(newdata$D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
+    if(sim == 'sim1') {
+      compEffect <- exp(-((newdata$BA^2)/2*param["sigma_C"]^2))
+    }else{
+      compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.45 * (newdata$BA)))))
+    }
     mu_d <- param["pdg"] *
-            exp(-((newdata$BA^2)/2*param["sigma_C"]^2)) *
+            compEffect *
             exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
@@ -380,11 +399,11 @@ print(p)
       # get predictions
       if(!indVar)
       {
-        growth_meanT <- growth_model(param = param_mean, newdata = newdataT)
-        growth_ci10T <- growth_model(param = param_ci10, newdata = newdataT)
-        growth_ci90T <- growth_model(param = param_ci90, newdata = newdataT)
+        growth_meanT <- growth_model(param = param_mean, sim = sim, newdata = newdataT)
+        growth_ci10T <- growth_model(param = param_ci10, sim = sim, newdata = newdataT)
+        growth_ci90T <- growth_model(param = param_ci90, sim = sim, newdata = newdataT)
       }else {
-        DF <- growth_model(param = param_mean, newdata = newdataT, indVar = TRUE)
+        DF <- growth_model(param = param_mean, sim = sim, newdata = newdataT, indVar = TRUE)
         growth_meanT <- DF[, c('means', varNames)]
         growth_ci10T <- DF[, c('lower', varNames)]
         growth_ci90T <- DF[, c('upper', varNames)]
@@ -406,7 +425,7 @@ print(p)
                 col = alpha(mycol, ifelse(indVar, 0.15, 0.5)), border = NA)
       }
       # add data range
-      abline(v = growth_dt[sp_code2 == sp, range(value5_bio60_01)], col = 'grey', lty = 2)
+      abline(v = growth_dt[species_id == sp, range(mean_temp_period_3_lag)], col = 'grey', lty = 2)
 
       if(indVar)
       {
@@ -452,7 +471,7 @@ print(p)
                 col = alpha(mycol, ifelse(indVar, 0.15, 0.5)), border = NA)
       }
       # add data range
-      abline(v = growth_dt[sp_code2 == sp, range(value5_bio60_12)], col = 'grey', lty = 2)
+      abline(v = growth_dt[species_id == sp, range(tot_annual_pp_lag)], col = 'grey', lty = 2)
 
       mtext("Growth rate (mm/year)", 2, outer = T, las = 0, cex = .8, line = 1.5)
 
@@ -487,9 +506,9 @@ print(p)
                 col = alpha(mycol, ifelse(indVar, 0.15, 0.5)), border = NA)
       }
       # add data range
-      abline(v = growth_dt[sp_code2 == sp, range(dbh0)], col = 'grey', lty = 2)
+      abline(v = growth_dt[species_id == sp, range(dbh0)], col = 'grey', lty = 2)
 
-      # Growth vs Basal area
+      # Growth vs competition
 
       # get predictions
       if(!indVar)
@@ -514,7 +533,7 @@ print(p)
               col = alpha("grey25", 0.1), border = NA)
 
       # add data range
-      abline(v = growth_dt[sp_code2 == sp, range(BA)], col = 'grey', lty = 2)
+      abline(v = growth_dt[species_id == sp, range(get(ifelse(sim == 'sim1', 'BA', 'canopyDistance')))], col = 'grey', lty = 2)
 
     }
   }
@@ -525,35 +544,66 @@ print(p)
   for(sp in spIds) {
     for(sim in simulations) {
       # fixed data for prediction depending on competition variable
-      # Temp
-      newdataT <- data.frame(expand.grid(BA = c(5, 20, 40),
-                                        CD = 0,
-                                        TP = seq(-10, 15, length.out = 300),
-                                        PP = 1000,
-                                        D = 200))
-      # Prec
-      newdataP <- data.frame(expand.grid(BA = c(5, 20, 40),
-                                        CD = 0,
-                                        TP = 4,
-                                        PP = seq(250, 1800, length.out = 300),
-                                        D = 200))
-      # Size
-      newdataD <- data.frame(expand.grid(BA = c(5, 20, 40),
-                                        CD = 0,
-                                        TP = 4,
-                                        PP = 1000,
-                                        D = seq(0, 900, length.out = 300)))
+      if(sim == 'sim1')
+      {
+        # Temp
+        newdataT <- data.frame(expand.grid(BA = c(5, 20, 40),
+                                          CD = 0,
+                                          TP = seq(-10, 15, length.out = 300),
+                                          PP = 1000,
+                                          D = 200))
+        # Prec
+        newdataP <- data.frame(expand.grid(BA = c(5, 20, 40),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = seq(250, 1800, length.out = 300),
+                                          D = 200))
+        # Size
+        newdataD <- data.frame(expand.grid(BA = c(5, 20, 40),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = seq(0, 900, length.out = 300)))
 
-      # Basal area
-      newdataC <- data.frame(expand.grid(BA = seq(0, 100, length.out = 300),
-                                        CD = 0,
-                                        TP = 4,
-                                        PP = 1000,
-                                        D = 200))
+        # Basal area
+        newdataC <- data.frame(expand.grid(BA = seq(0, 100, length.out = 300),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = 200))
+      }else {
+                # Temp
+        newdataT <- data.frame(expand.grid(BA = c(-10, 0, 10),
+                                          CD = 0,
+                                          TP = seq(-10, 15, length.out = 300),
+                                          PP = 1000,
+                                          D = 200))
+        # Prec
+        newdataP <- data.frame(expand.grid(BA = c(-10, 0, 10),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = seq(250, 1800, length.out = 300),
+                                          D = 200))
+        # Size
+        newdataD <- data.frame(expand.grid(BA = c(-10, 0, 10),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = seq(0, 900, length.out = 300)))
+
+        # Basal area
+        newdataC <- data.frame(expand.grid(BA = seq(-30, 45, length.out = 300),
+                                          CD = 0,
+                                          TP = 4,
+                                          PP = 1000,
+                                          D = 200))
+      }
 
       
-      plot_prediction(sim, sp, growth_model,
-      data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC))
+      plot_prediction(
+        sim, sp, growth_model,
+        data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC)
+      )
     }
   }
 
@@ -572,16 +622,17 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   for(sp in spIds)
   {
     # sp specific db
-    db <- growth_dt[sp_code2 == sp]
+    db <- growth_dt[species_id == sp]
 
     # load plot_id references and update plot_id to ID_PE
-    toSub <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub.RDS'))
-    db[toSub, on = .(ID_PE), plot_id := i.plot_id]
+    toSub <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim1.RDS'))
+    db[toSub, on = .(plot_id), plot_id_seq := i.plot_id_seq]
 
     # load rows used for stan fit
-    sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices.RDS'))
+    sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
 
     db <- db[!sampledIndices, ]
+    db <- db[!is.na(plot_id_seq), ]
 
     oob_list[[sp]] <- db[!is.na(plot_id), ]
   }
@@ -590,23 +641,29 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 ```{r calculate OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
 
   # growth model
-  growth_model2 <- function(param, sim, D, TP, PP, BA, plot_id, indVar = FALSE)
+  growth_model2 <- function(param, sim, D, TP, PP, C, BA, plot_id, indVar = FALSE)
   {
     lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
-    if(sim == 'sim1') {
-      pdg_pop <- param["pdg"]
+    # competition
+    if(sim == 'sim1')
+    {
+      compEffect <- exp(-((BA^2)/2*param["sigma_C"]^2))
     }else{
-      if(indVar) {
-        pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
-        pdg_pop[pdg_pop <= 0] = 0.0001
-      }else{
-        pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
-      } 
+      compEffect <- (params['Lo'] + ((1 - params['Lo']) / (1 + exp(-0.45 * (C)))))
     }
 
+    if(indVar)
+    {
+      pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
+      pdg_pop[pdg_pop <= 0] = 0.0001
+    }else
+    {
+      pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
+    } 
+
     mu_d <- pdg_pop *
-            exp(-((BA^2)/2*param["sigma_C"]^2)) *
+            compEffect *
             exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
@@ -644,18 +701,23 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       if(sim == 'sim1')
       {
         # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
 
         # get growth rate with individual parameter AND individual variation
         summ_mat <- matrix(rep(0, nrow(oob_list[[sp]]) * sampleN), ncol = sampleN)
         r2_sim1 <- numeric(sampleN)
-        # sample parameters
-        params <- lapply(posterior, sample, sampleN)
+        # First sample for the random effect parameters and rename them
+        pdg_pars <- lapply(lapply(seq_len(ncol(posterior[['pdg_pmean']])), function(i) posterior[['pdg_pmean']][,i]), sample, sampleN)
+        names(pdg_pars) <- paste0('pdg_pmean[', 1:length(pdg_pars), ']')
+        
+        # sample the remaining parameters and merge with pdg_ random effect
+        params <- lapply(posterior[-which(names(posterior) == 'pdg_pmean')], sample, sampleN)
+        params <- append(params, pdg_pars)        
         for(i in 1:sampleN)
         {
-          summ_mat[, i] <- oob_list[[sp]][, growth_model2(unlist(lapply(params, `[[`, i)), sim = sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = TRUE)]
+          summ_mat[, i] <- oob_list[[sp]][, growth_model2(unlist(lapply(params, `[[`, i)), sim = sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = TRUE)]
           r2_sim1[i] <- summary(lm(summ_mat[, i] ~ oob_list[[sp]]$growth))$r.squared
         }
         oob_list[[sp]][, Gvar_mean_sim1 := apply(summ_mat, 1, mean, na.rm = TRUE)]
@@ -664,9 +726,9 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   
       }else{
           # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
 
         # get growth rate with individual parameter AND individual variation
         summ_mat <- matrix(rep(0, nrow(oob_list[[sp]]) * sampleN), ncol = sampleN)
@@ -680,7 +742,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
         for(i in 1:sampleN)
         {
-          summ_mat[, i] <- oob_list[[sp]][, growth_model2(unlist(lapply(params, `[[`, i)), sim = sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = TRUE)]
+          summ_mat[, i] <- oob_list[[sp]][, growth_model2(unlist(lapply(params, `[[`, i)), sim = sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = TRUE)]
           r2_sim2[i] <- summary(lm(summ_mat[, i] ~ oob_list[[sp]]$growth))$r.squared
         }
         oob_list[[sp]][, Gvar_mean_sim2 := apply(summ_mat, 1, mean, na.rm = TRUE)]
