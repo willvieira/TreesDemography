@@ -43,6 +43,8 @@ navbar:
           href: growth/BAandCD2.html
         - text: "random effect on pdg"
           href: growth/randomEffect.html
+        - text: "Competition predictor"
+          href: growth/compPredictor.html
     - text: "Recruitment"
       icon: fa-tree
       menu:

@@ -41,6 +41,8 @@
 
 - Random effect on the baseline growth rate (pdg) ([link v6.0](https://willvieira.github.io/TreesDemography/growth/randomEffect.html))
 
+- Canopy distance vs basal area with random effect ([link v7.0](https://willvieira.github.io/TreesDemography/growth/compPredictor.html))
+
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))
