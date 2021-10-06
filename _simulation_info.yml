@@ -1,5 +1,5 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ["505490THUOCC", "19489BETPAP", "183295PICGLA", "19481BETALL",
+spIds: ["19489BETPAP", "183295PICGLA", "19481BETALL",
         "28728ACERUB", "18032ABIBAL", "183302PICMAR", "195773POPTRE",
         "28731ACESAC", "183319PINBAN", "18034PICRUB"]
 # Which vital rates to run

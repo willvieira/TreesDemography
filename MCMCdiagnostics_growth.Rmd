@@ -13,11 +13,10 @@
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(rstan))
-suppressPackageStartupMessages(require(RColorBrewer))
-suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggridges))
-suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(ranger))
@@ -65,11 +64,6 @@ suppressPackageStartupMessages(library(MuMIn))
     assign(paste0('pars_', sim), rownames(summary(get(ls(pattern = sim)[1]))[[1]]))
   }
 
-#
-
-###########################################
-# Diagnostics
-###########################################
 ```
 
 
@@ -144,12 +138,24 @@ DT::datatable(divergentDF)
   # Value is all MCMC samples after warmup for all chains together
 
   mcmcSampleDF <- data.frame()
-  for(sim in simulations) {
-    for(sp in spIds) {
-      simObj <- get(paste('fit', sim, sp, sep = '_'))
-      dfToAdd <- gather(as.data.frame(simObj), key = 'pars')
-      dfToAdd <- cbind(data.frame(sim = rep(sim, nrow(dfToAdd)), sp = rep(sp, nrow(dfToAdd))), dfToAdd)
-      mcmcSampleDF <- rbind(mcmcSampleDF, dfToAdd)
+  for(sim in simulations)
+  {
+    for(sp in spIds)
+    {
+      dfToAdd <- gather(
+          as.data.frame(
+            get(paste('fit', sim, sp, sep = '_'))
+          ),
+          key = 'pars'
+        )
+      
+      dfToAdd$sp <- sp
+      dfToAdd$sim <- sim
+
+      mcmcSampleDF <- rbind(
+        mcmcSampleDF,
+        dfToAdd
+      )
     }
   }
 
@@ -174,6 +180,7 @@ DT::datatable(divergentDF)
         theme_classic() +
         xlab('Random effect of pdg at the population level')
 
+  rm(mcmcSampleDF, mcmcSampleDF_random, dfToAdd)
 ```
 
 # Data distribution
@@ -198,6 +205,8 @@ p <- ggplot(data = growth, aes(value, species_id)) +
       #                              c('sim1', 'sim2')))) +
       theme_classic()
 print(p)
+
+rm(growth)
 ```
 
 
@@ -525,7 +534,7 @@ print(p)
       }
 
       plot(growth ~ BA, growth_ci10C, type = "n", ylim = c(0, 4),
-          xlab = "Basal area (m²/ha)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
+          xlab = ifelse(sim == 'sim1', "Basal area (m²/ha)", "Canopy distance (m)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
       lines(growth ~ BA, growth_meanC, cex = .5, pch = 19, col = mycol)
       polygon(c(growth_meanC$BA, rev(growth_meanC$BA)),
@@ -549,52 +558,52 @@ print(p)
         # Temp
         newdataT <- data.frame(expand.grid(BA = c(5, 20, 40),
                                           CD = 0,
-                                          TP = seq(-10, 15, length.out = 300),
+                                          TP = seq(5, 25, length.out = 300),
                                           PP = 1000,
                                           D = 200))
         # Prec
         newdataP <- data.frame(expand.grid(BA = c(5, 20, 40),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = seq(250, 1800, length.out = 300),
                                           D = 200))
         # Size
         newdataD <- data.frame(expand.grid(BA = c(5, 20, 40),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = 1000,
                                           D = seq(0, 900, length.out = 300)))
 
         # Basal area
         newdataC <- data.frame(expand.grid(BA = seq(0, 100, length.out = 300),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = 1000,
                                           D = 200))
       }else {
                 # Temp
-        newdataT <- data.frame(expand.grid(BA = c(-10, 0, 10),
+        newdataT <- data.frame(expand.grid(BA = c(-5, 0, 10),
                                           CD = 0,
-                                          TP = seq(-10, 15, length.out = 300),
+                                          TP = seq(5, 25, length.out = 300),
                                           PP = 1000,
                                           D = 200))
         # Prec
-        newdataP <- data.frame(expand.grid(BA = c(-10, 0, 10),
+        newdataP <- data.frame(expand.grid(BA = c(-5, 0, 10),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = seq(250, 1800, length.out = 300),
                                           D = 200))
         # Size
-        newdataD <- data.frame(expand.grid(BA = c(-10, 0, 10),
+        newdataD <- data.frame(expand.grid(BA = c(-5, 0, 10),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = 1000,
                                           D = seq(0, 900, length.out = 300)))
 
         # Basal area
         newdataC <- data.frame(expand.grid(BA = seq(-30, 45, length.out = 300),
                                           CD = 0,
-                                          TP = 4,
+                                          TP = 15,
                                           PP = 1000,
                                           D = 200))
       }
@@ -650,7 +659,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
     {
       compEffect <- exp(-((BA^2)/2*param["sigma_C"]^2))
     }else{
-      compEffect <- (params['Lo'] + ((1 - params['Lo']) / (1 + exp(-0.45 * (C)))))
+      compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.45 * (C)))))
     }
 
     if(indVar)
@@ -726,9 +735,9 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   
       }else{
           # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
-        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDisstance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
 
         # get growth rate with individual parameter AND individual variation
         summ_mat <- matrix(rep(0, nrow(oob_list[[sp]]) * sampleN), ncol = sampleN)
@@ -760,20 +769,25 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
 ```{r calculate R2 from random forest and LMM,echo=FALSE,warning=FALSE}
   # Variables to not consider on the model
-  varsToRm <- c("relativeBA_sp", "CAUS_DEFOL", "ETAT", "state_original", "state0", "state1", "spCode", "heightMeasured",
-                "height", "nbMeasure", "indBA", "BA_sp", "dbh1", "deltaYear", "year1", "sp_code", "SHAPE",
-                "mort", "obs", "slope_cl", "x", "y", "maxRadius", "neighborBA2", "PH_HORIZB", "POURCPIERR", 
-                "ORIGINE", "ORIGINE2", "PERTURB", "PERTURB2", "state", "DEFOL_MAX", "ENSOLEIL")
+  # Quebec
+  # varsToRm <- c("relativeBA_sp", "CAUS_DEFOL", "ETAT", "state_original", "state0", "state1", "spCode", "heightMeasured",
+  #               "height", "nbMeasure", "indBA", "BA_sp", "dbh1", "deltaYear", "year1", "sp_code", "SHAPE",
+  #               "mort", "obs", "slope_cl", "x", "y", "maxRadius", "neighborBA2", "PH_HORIZB", "POURCPIERR", 
+  #               "ORIGINE", "ORIGINE2", "PERTURB", "PERTURB2", "state", "DEFOL_MAX", "ENSOLEIL")
 
+  # US
+  varsToRm <- c("relativeBA_sp", "org_db_loc",
+                "height", "real_lon", "real_lat", "indBA", "BA_sp", "plot_size", "dbh1", "deltaYear", "year1", 
+                "is_dead", "mort", "nbMeasure")
 
   rf_coeff <- data.table()
   for(sp in spIds)
   {
       # data from species
-      db <- growth_dt[sp_code2 == sp, setdiff(names(growth_dt), varsToRm), with = FALSE]
+      db <- growth_dt[species_id == sp, setdiff(names(growth_dt), varsToRm), with = FALSE]
 
       # Split into training/validation data
-      sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices.RDS'))
+      sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
       db_training <- na.omit(db[sampledIndices, ])
       db_validation <- na.omit(db[!sampledIndices, ])
 
@@ -785,10 +799,10 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       rf_summary <- lm(growth_pred_rf ~ growth, db_validation)
       
       # run lmm with training data
-      lmm_sp <- lmer(growth ~ 1 + (1 | ID_PE) +
-                              (1 | year0) + (1 | ID_PE:year0) +
-                              (BA + dbh0 + I(dbh0^2)) * (value5_bio60_01 + I(value5_bio60_01^2) +
-                                  value5_bio60_12 + I(value5_bio60_12^2)), data = db_training, REML = TRUE)
+      lmm_sp <- lmer(growth ~ 1 + (1 | plot_id) +
+                              (1 | year0) + (1 | plot_id:year0) +
+                              (BA + dbh0 + I(dbh0^2)) * (mean_temp_period_3_lag + I(mean_temp_period_3_lag^2) +
+                                  tot_annual_pp_lag + I(tot_annual_pp_lag^2)), data = db_training, REML = TRUE)
 
       # predict with validation data
       db_validation$growth_pred_lmm <- predict(lmm_sp, newdata = db_validation, allow.new.levels = TRUE)
@@ -805,7 +819,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       db_validation[, mean(sqErr_rf)]
     
       rf_coeff <- rbind(rf_coeff,
-                        data.table(sp_code2 = sp,
+                        data.table(species_id = sp,
                                   Int_rf = rf_summary$coefficients[[1]],
                                   Slope_rf = rf_summary$coefficients[[2]],
                                   R2_rf = summary(rf_summary)$r.squared,
@@ -823,40 +837,40 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   
   # prepare table to save lm() info from the simulations
   n <- length(spIds) * (length(simulations) + 2)
-  reg_dt <- data.table(sp_code2 = rep(spIds, (length(simulations) + 2)), sim = character(n), R2 = numeric(n), Slope = numeric(n))
+  reg_dt <- data.table(species_id = rep(spIds, (length(simulations) + 2)), sim = character(n), R2 = numeric(n), Slope = numeric(n))
   
   for(sp in spIds)
   {
     # axis limites
-    xyLim <- oob_growth[sp_code2 == sp, range(growth)]
-
+    maxGrowth <- oob_growth[species_id == sp, quantile(growth, probs = .975)]
+    
     par(mfcol = c(2, length(simulations)), xaxs = "i", las = 1, mar = c(4, 4, 1, 1), oma = c(7, 5, 7, .5), mgp = c(1, 2.5, 0), tck = -.008, cex.lab = 4, cex.axis = 4, cex = 0.3)
   
     # regression (pred ~ real growth)
-    reg_sim1 <- lm(Gdet_mean_sim1 ~ growth, data = oob_growth[sp_code2 == sp])
-    reg_sim2 <- lm(Gdet_mean_sim2 ~ growth, data = oob_growth[sp_code2 == sp])
-    rf_coeffSp <- rf_coeff[sp_code2 == sp, ]
+    reg_sim1 <- lm(Gdet_mean_sim1 ~ growth, data = oob_growth[species_id == sp])
+    reg_sim2 <- lm(Gdet_mean_sim2 ~ growth, data = oob_growth[species_id == sp])
+    rf_coeffSp <- rf_coeff[species_id == sp, ]
 
     # add to reg table
-    reg_dt[sp_code2 %in% sp, `:=`(sim = c(simulations, 'randomForest', 'LMM'),
+    reg_dt[species_id %in% sp, `:=`(sim = c(simulations, 'randomForest', 'LMM'),
                                   R2 = c(summary(reg_sim1)$r.squared, summary(reg_sim2)$r.squared, rf_coeffSp$R2_rf, rf_coeffSp$R2_lmm),
                                   Slope = c(reg_sim1$coefficients[[2]], reg_sim2$coefficients[[2]], rf_coeffSp$Slope_rf, rf_coeffSp$Slope_lmm))]
 
     # legend
     leg <- c('1:1 line',
-              latex2exp::TeX(paste0('LMM: R^2 = ', round(reg_dt[sp_code2 == sp & sim == 'LMM', R2], 2), '; slope = ', round(reg_dt[sp_code2 == sp & sim == 'LMM', Slope], 2))),
-              latex2exp::TeX(paste0('randomForest: R^2 = ', round(reg_dt[sp_code2 == sp & sim == 'randomForest', R2], 2), '; slope = ', round(reg_dt[sp_code2 == sp & sim == 'randomForest', Slope], 2))),
-              latex2exp::TeX(paste0('Bayesian sim1: R^2 = ', round(reg_dt[sp_code2 == sp & sim == 'sim1', R2], 2), '; slope = ', round(reg_dt[sp_code2 == sp & sim == 'sim1', Slope], 2))),
-              latex2exp::TeX(paste0('Bayesian sim2: R^2 = ', round(reg_dt[sp_code2 == sp & sim == 'sim2', R2], 2), '; slope = ', round(reg_dt[sp_code2 == sp & sim == 'sim2', Slope], 2))))
+              latex2exp::TeX(paste0('LMM: R^2 = ', round(reg_dt[species_id == sp & sim == 'LMM', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'LMM', Slope], 2))),
+              latex2exp::TeX(paste0('randomForest: R^2 = ', round(reg_dt[species_id == sp & sim == 'randomForest', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'randomForest', Slope], 2))),
+              latex2exp::TeX(paste0('Bayesian sim1: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim1', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim1', Slope], 2))),
+              latex2exp::TeX(paste0('Bayesian sim2: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim2', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim2', Slope], 2))))
     
     for(sim in simulations)
     {
       # sample 10% of data
-      dbAll <- oob_growth[sp_code2 == sp, c('growth', grep(sim, names(oob_growth), value = TRUE)), with = FALSE]
+      dbAll <- oob_growth[species_id == sp, c('growth', grep(sim, names(oob_growth), value = TRUE)), with = FALSE]
       db <- dbAll[sample(1:nrow(dbAll), floor(nrow(dbAll) * 0.1))]
 
       # plot deterministic growth
-      plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
+      plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(1, labels = NA)
       if(sim == 'sim2') axis(2, labels = NA)
       abline(0, 1)
@@ -864,28 +878,28 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       segments(db$growth - 0.01, db[[4]], db$growth + 0.01, db[[4]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth , db[[3]], db$growth, db[[4]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
-      abline(rf_coeffSp[sp_code2 == sp]$Int_rf, rf_coeffSp[sp_code2 == sp]$Slope_rf, lty = 3)
-      abline(rf_coeffSp[sp_code2 == sp]$Int_lmm, rf_coeffSp[sp_code2 == sp]$Slope_lmm, lty = 4)
+      abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
+      abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
       if(sim == 'sim1') legend('topleft', legend = leg, lty = c(1, 4, 3, 2, 2), cex = 2.8, bty = 'n')
       mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 3, cex = 1, line = 0.25)
 
 
       # plot gorwth with individual variation
-      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, 7), ylim = c(0, 7), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
+      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(2, labels = NA)
       abline(0, 1)
       segments(db$growth - 0.01, db[[6]], db$growth + 0.01, db[[6]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth - 0.01, db[[7]], db$growth + 0.01, db[[7]], col = rgb(0, 0, 0, 0.2))
       segments(db$growth , db[[6]], db$growth, db[[7]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
-      abline(rf_coeffSp[sp_code2 == sp]$Int_rf, rf_coeffSp[sp_code2 == sp]$Slope_rf, lty = 3)
-      abline(rf_coeffSp[sp_code2 == sp]$Int_lmm, rf_coeffSp[sp_code2 == sp]$Slope_lmm, lty = 4)
+      abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
+      abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
 
       # text
       mtext(sp, 3, outer = TRUE, cex = 1, line = 2.5)
-      mtext('Deterministic growth', 3, outer = TRUE, cex = 1, line = -0.5)
+      mtext('Deterministic growth (mean)', 3, outer = TRUE, cex = 1, line = -0.5)
       mtext('Ind variable growth', 3, outer = TRUE, cex = 1, line = -60)
-      mtext('Growth rate (mm/y)', 1, outer = TRUE, line = 1.3, cex = 1)
+      mtext('Observed growth rate (mm/y)', 1, outer = TRUE, line = 1.3, cex = 1)
       mtext('Predicted growth rate (mm/y)', 2, las = 0, outer = TRUE, line = 2.2, cex = 1)
     }
   }
@@ -893,8 +907,8 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
 ```{r oob predictions r2, echo = FALSE,fig.height = 6, fig.width = 7, warning=FALSE, message=FALSE}
 reg_dt %>%
-  mutate(sp_code2 = forcats::fct_reorder(sp_code2, R2)) %>% 
-  ggplot(mapping = aes(x = sp_code2, y = R2, fill = sim, color = sim)) +
+  mutate(species_id = forcats::fct_reorder(species_id, R2)) %>% 
+  ggplot(mapping = aes(x = species_id, y = R2, fill = sim, color = sim)) +
   geom_point() +
   coord_flip()
 ```
@@ -911,23 +925,28 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
   #################################
 
   # growth model
-  growth_model3 <- function(param, sim, D, TP, PP, BA, plot_id, indVar = FALSE)
+  growth_model3 <- function(param, sim, D, TP, PP, C, BA, plot_id, indVar = FALSE)
   {
     lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
 
-    if(sim == 'sim1') {
-      pdg_pop <- param["pdg"]
+    # competition
+    if(sim == 'sim1')
+    {
+      compEffect <- exp(-((BA^2)/2*param["sigma_C"]^2))
     }else{
-      if(indVar) {
-        pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
-        pdg_pop[pdg_pop <= 0] = 0.0001
-      }else{
-        pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
-      } 
+      compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.45 * (C)))))
     }
+
+
+    if(indVar) {
+      pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
+      pdg_pop[pdg_pop <= 0] = 0.0001
+    }else{
+      pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
+    } 
         
     mu_d <- pdg_pop *
-            exp(-((BA^2)/2*param["sigma_C"]^2)) *
+            compEffect *
             exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
             exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
             exp(-lgPart)
@@ -942,13 +961,12 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
     return( growth )
   }
 
-  MSE_dt <- setDT(data.frame(sp = character(), sim = integer(), MSE_det = logical(), MSE_var = numeric(), r2 = numeric()))
+  MSE_dt <- data.table()
   sampleN <- 200
 
   for(sp in spIds)
-  {
-    
-    db <- oob_growth[sp_code2 == sp, .(growth, dbh0, value5_bio60_01, value5_bio60_12, BA, plot_id)]
+  {    
+    db <- oob_growth[species_id == sp, .(growth, dbh0, mean_temp_period_3_lag, tot_annual_pp_lag, canopyDistance, BA, plot_id_seq)]
 
     for(sim in simulations)
     {
@@ -956,19 +974,14 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
       fit <- get(paste('fit', sim, sp, sep = '_'))
       posterior <- rstan::extract(fit)
       
-      # sample X random values from posterior dist
-      if(sim == 'sim1')
-      {
-        params <- lapply(posterior, sample, sampleN)
-      }else{
-        # First sample for the random effect parameters and rename them
-        pdg_pars <- lapply(lapply(seq_len(ncol(posterior[['pdg_pmean']])), function(i) posterior[['pdg_pmean']][,i]), sample, sampleN)
-        names(pdg_pars) <- paste0('pdg_pmean[', 1:length(pdg_pars), ']')
+    # sample X random values from posterior dist
+      # First sample for the random effect parameters and rename them
+      pdg_pars <- lapply(lapply(seq_len(ncol(posterior[['pdg_pmean']])), function(i) posterior[['pdg_pmean']][,i]), sample, sampleN)
+      names(pdg_pars) <- paste0('pdg_pmean[', 1:length(pdg_pars), ']')
 
-        # sample the remaining parameters and merge with pdg_ random effect
-        params <- lapply(posterior[-which(names(posterior) == 'pdg_pmean')], sample, sampleN)
-        params <- append(params, pdg_pars)
-      }
+      # sample the remaining parameters and merge with pdg_ random effect
+      params <- lapply(posterior[-which(names(posterior) == 'pdg_pmean')], sample, sampleN)
+      params <- append(params, pdg_pars)
 
       MSE_det <- MSE_var <- r2 <- numeric(sampleN)
       for(i in 1:sampleN)
@@ -979,14 +992,14 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
         if(sim == 'sim1')
         {
           # get deterministic growth rate
-          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
           # get growth rate with individual variation
-          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = TRUE)]
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = TRUE)]
         }else{
             # get deterministic growth rate
-          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = FALSE)]
+          db[, g_det_pred := growth_model3(param = parsI, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = FALSE)]
           # get growth rate with individual variation
-          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, BA = BA, plot_id = plot_id, indVar = TRUE)]
+          db[, g_var_pred := growth_model3(param = parsI, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, BA = BA, plot_id = plot_id_seq, indVar = TRUE)]
         }
 
         # calculate MSE
@@ -1000,13 +1013,22 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
         varPred <- db[, var(g_det_pred)]
         # Variance of modelled residual
         var_res <- parsI['sigma_base']
-        # Rsquared = varPred/(varPred + var_res)        
+        # Rsquared = varPred/(varPred + var_res)      
         r2[i] <- varPred/(varPred + var_res)
 
       }
 
       # update main dt
-      MSE_dt <- rbind(MSE_dt, data.frame(sp = rep(sp, sampleN), sim = rep(sim, sampleN), MSE_det = MSE_det, MSE_var = MSE_var, r2 = r2))
+      MSE_dt <- rbind(
+        MSE_dt, 
+        data.table(
+          species_id = sp,
+          sim = sim,
+          MSE_det = MSE_det,
+          MSE_var = MSE_var,
+          r2 = r2
+        )
+      )
     }
   }
 
@@ -1016,19 +1038,24 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
   
   # Rename rf_coeff for legend
   rf_coeff_lg <- rf_coeff %>%
-                  pivot_longer(!sp_code2, names_to = 'Method', values_to = 'value') %>%
-                  mutate(Method = plyr::revalue(Method, c('MSE_rf' = 'Random forest', 'MSE_lmm' = 'LMM')))
+                  pivot_longer(!species_id, names_to = 'Method', values_to = 'value') %>%
+                  mutate(
+                    Method = plyr::revalue(
+                      Method,
+                      c('MSE_rf' = 'Random forest', 'MSE_lmm' = 'LMM')
+                    )
+                  )
 
   # For deterministic growth
-  ggplot(data = MSE_dt, aes(MSE_det, sp, fill = sim, colour = sim)) + 
+  ggplot(data = MSE_dt, aes(MSE_det, species_id, fill = sim, colour = sim)) + 
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0.5, 7.6) +
+    xlim(0, 7.6) +
     theme_classic() +
     ggtitle('Deterministic growth') +
     xlab('MSE') +
@@ -1036,15 +1063,15 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
 
 
   # For ind variation growth
-    ggplot(data = MSE_dt, aes(MSE_var, sp, fill = sim, colour = sim)) + 
+    ggplot(data = MSE_dt, aes(MSE_var, species_id, fill = sim, colour = sim)) + 
       geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0.5, 7.6) +
+    xlim(0, 7.6) +
     theme_classic() +
     ggtitle('Ind variable growth') +
     xlab('MSE') +
@@ -1066,20 +1093,54 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
                  mutate(Method = plyr::revalue(Method, c('R2_rf' = 'Random forest', 'R2_lmm' = 'LMM')))
 
   # For deterministic growth
-  ggplot(data = MSE_dt, aes(r2, sp, fill = sim, colour = sim)) + 
+  ggplot(data = MSE_dt, aes(r2, species_id, fill = sim, colour = sim)) + 
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(rf_coeff_r2, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_r2, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    geom_segment(data = subset(rf_coeff_r2, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(sp_code2):1,
-                                      yend = (length(sp_code2):1) + .8),
+    geom_segment(data = subset(rf_coeff_r2, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
+                                      yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0, 0.64) +
+    xlim(0, 1) +
     theme_classic() +
     xlab('Rsquared') +
     scale_y_discrete(limits = rev(spIds))
 
 ```
+
+
+# Population summary
+
+```{r popSummary, echo = FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+
+params <- rstan::extract(get(paste0('fit_', sim, '_', sp)))
+
+p1 <- oob_growth %>%
+  select(species_id, 'growth', contains('Gvar')) %>%
+  pivot_longer(
+    cols = starts_with('G'),
+    names_to = 'pars',
+    values_to = 'value'
+  )  %>%
+  mutate(
+    pars = recode(
+      pars,
+      Gvar_mean_sim1 = 'Gvar_sim1',
+      Gvar_ci10_sim1 = 'Gvar_sim1',
+      Gvar_ci90_sim1 = 'Gvar_sim1',
+      Gvar_mean_sim2 = 'Gvar_sim2',
+      Gvar_ci10_sim2 = 'Gvar_sim2',
+      Gvar_ci90_sim2 = 'Gvar_sim2'
+    )
+  ) %>%
+  ggplot(aes(x = value, y = species_id, fill = pars)) +
+    geom_density_ridges(alpha = 0.4) +
+    xlim(0, 7) +
+    xlab('Growth')
+
+print(p1)
+```
+
 
 # Sampling time
 
