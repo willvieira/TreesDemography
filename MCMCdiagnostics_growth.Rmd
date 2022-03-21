@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v6.0 - Random effect on the baseline growth rate (pdg)"
+ subtitle: "Test v7.0 - Random effect on the baseline growth rate (pdg)"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -245,9 +245,9 @@ rm(growth)
   ## PLOT ##
 
  # define x axis
-  sizex = seq(91, 900, 0.5)
+  sizex = seq(0, 1100, 0.5)
   tempx = seq(5, 25)
-  precx = seq(200, 1800)
+  precx = seq(100, 2000)
 
   # species specfic colours
   spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
@@ -264,8 +264,9 @@ rm(growth)
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
       points(sizex, sizeEffect(sizex, out['Phi_opt', 1], out['sigmaPhi_opt', 1]), type = 'l', col = spCols[sp])
+      abline(v = growth_dt[species_id == spIds[sp], range(dbh0)], col = spCols[sp], lwd = 1, lty = c(2, 4))
     }
-    mtext(ifelse(sim == 'sim1', sim1name, ifelse(sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
+    mtext(ifelse(sim == 'sim1', paste0('sim: ', sim1name), paste0('sim: ', sim2name)), side = 3, line = 0)
     if(sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
   }
 
@@ -283,6 +284,7 @@ rm(growth)
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
       points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = spCols[sp])
+      abline(v = growth_dt[species_id == spIds[sp], range(mean_temp_period_3_lag)], col = spCols[sp], lwd = 1, lty = c(2, 4))
     }
     if(sim == 'sim1') mtext("Temperature effect", 2, las = 0, cex = .8, line = 1.9)
   }
@@ -301,6 +303,7 @@ rm(growth)
                   yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2, labels = FALSE)
       points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = spCols[sp])
+      abline(v = growth_dt[species_id == spIds[sp], range(tot_annual_pp_lag)], col = spCols[sp], lwd = 1, lty = c(2, 4))
     }
     if(sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
   }
@@ -312,9 +315,9 @@ rm(growth)
       out <- summary(get(paste('fit', sim, spIds[sp], sep = '_')))$summary
 
       if(sim == 'sim1') {
-        x = seq(0, 90, 0.1)
+        x = seq(0, 120, 0.1)
       }else{
-        x = seq(-30, 40, 0.1)
+        x = seq(-35, 45, 0.1)
       }
       if(sp == 1) 
         plot(x, compEffect(x, out, sim),
@@ -324,11 +327,15 @@ rm(growth)
         )
         if(sim == 'sim2') axis(2, labels = FALSE)
         points(x, compEffect(x, out, sim), type = 'l', col = spCols[sp])
+      if(sim == 'sim1'){
+        abline(v = growth_dt[species_id == spIds[sp], range(BA)], col = spCols[sp], lwd = 1, lty = c(2, 4))
+      }else{
+        abline(v = growth_dt[species_id == spIds[sp], range(canopyDistance)], col = spCols[sp], lwd = 1, lty = c(2, 4))
+      }
     }
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
   }
-  legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n')
-
+  legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
 ```
 
 
@@ -378,6 +385,9 @@ rm(growth)
     # simulation
     fit <- get(paste('fit', sim, sp, sep = '_'))
 
+    # define ylim
+    yLim <- c(0, summary(fit)$summary['pdg', '97.5%'] + summary(fit)$summary['sigma_base', '97.5%'])
+  
     # posterior distribution
     posterior <- rstan::extract(fit)
 
@@ -419,7 +429,7 @@ rm(growth)
         names(growth_meanT)[1] <- names(growth_ci10T)[1] <- names(growth_ci90T)[1] <- 'growth'
       }
 
-      plot(growth ~ TP, growth_ci90T, type = "n", ylim = c(0, 5),
+      plot(growth ~ TP, growth_ci90T, type = "n", ylim = yLim,
           xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
       if(sim == 'sim2') axis(2,labels=F)
       for(ba in ba2plot) {
@@ -465,7 +475,7 @@ rm(growth)
         names(growth_meanP)[1] <- names(growth_ci10P)[1] <- names(growth_ci90P)[1] <- 'growth'
       }
 
-      plot(growth ~ PP, growth_ci90P, type = "n", ylim = c(0, 6),
+      plot(growth ~ PP, growth_ci90P, type = "n", ylim = yLim,
           xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
       for(ba in ba2plot) {
@@ -500,7 +510,7 @@ rm(growth)
         names(growth_meanD)[1] <- names(growth_ci10D)[1] <- names(growth_ci90D)[1] <- 'growth'
       }
 
-      plot(growth ~ D, growth_ci10D, type = "n", ylim = c(0, 4),
+      plot(growth ~ D, growth_ci10D, type = "n", ylim = yLim,
           xlab = "Size (mm)", ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
       for(ba in ba2plot) {
@@ -533,7 +543,7 @@ rm(growth)
         names(growth_meanC)[1] <- names(growth_ci10C)[1] <- names(growth_ci90C)[1] <- 'growth'
       }
 
-      plot(growth ~ BA, growth_ci10C, type = "n", ylim = c(0, 4),
+      plot(growth ~ BA, growth_ci10C, type = "n", ylim = yLim,
           xlab = ifelse(sim == 'sim1', "Basal area (m²/ha)", "Canopy distance (m)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
       axis(2, labels = F)
       lines(growth ~ BA, growth_meanC, cex = .5, pch = 19, col = mycol)
