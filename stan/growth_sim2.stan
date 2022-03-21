@@ -23,9 +23,10 @@ parameters
 	real<lower = 0.2, upper = 20> sigmaT_opt; // Variance among individuals of optimal T within a species
 
 	real<lower = 500, upper = 1700 > P_opt; // Optimum precipitation of each species
-	real<lower = 80, upper = 1000> sigmaP_opt; // Variance among individuals of optimal P within a species
+	real<lower = 80, upper = 2000> sigmaP_opt; // Variance among individuals of optimal P within a species
 
 	real<lower = 0, upper = 1> Lo;
+	real<lower = 0, upper = 1> beta;
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0, upper = 15> sigmaPhi_opt;
@@ -47,10 +48,11 @@ model
 	T_opt ~ normal(6, 8);
 	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
 	P_opt ~ normal(1000, 350);
-	sigmaP_opt ~ gamma(250^2/20000.0, 250/20000.0);
+	sigmaP_opt ~ normal(500, 300);
 
 	Lo ~ uniform(0, 1);
-	
+	beta ~ uniform(0.05, 0.5);
+
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
 
@@ -65,7 +67,7 @@ model
 		mu_d[i] =
 			pdg_plot[plot_id[i]]
 			*
-			(Lo + ((1 - Lo) ./ (1 + exp(-0.45 * (C_data[i])))))
+			(Lo + ((1 - Lo) ./ (1 + exp(-beta * (C_data[i])))))
 			.*
 			(0.0001 + exp(-0.5 * (T_data[i] - T_opt) .* (T_data[i] - T_opt)/sigmaT_opt^2)
 			.*
