@@ -45,6 +45,8 @@ navbar:
           href: growth/randomEffect.html
         - text: "Competition predictor"
           href: growth/compPredictor.html
+        - text: "Competition function"
+          href: growth/canopyDistanceFun.html
     - text: "Recruitment"
       icon: fa-tree
       menu:
