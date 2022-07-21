@@ -659,11 +659,13 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 ```{r calculate OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
 
   # growth model
-  growth_model2 <- function(param, sim, D, TP, PP, C, plot_id, indVar = FALSE)
+  growth_model2 <- function(param, sim, D, TP, PP, C, plot_id, indVar = FALSE, singleEffect = FALSE)
   {
+    # size effect
     lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
+    sizeEffect <- exp(-lgPart)
 
-    # competition
+    # competition effect
     if(sim == 'sim1')
     {
       compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.45 * (C - param['mid'])))))
@@ -671,20 +673,28 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-param['beta'] * (C)))))
     }
 
-    if(indVar)
-    {
-      pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
-      pdg_pop[pdg_pop <= 0] = 0.0001
-    }else
-    {
-      pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
-    } 
+    # Temperature effect
+    tempEffect <- exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2)
+
+    # Precipitation effect
+    precEffect <- exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2)
+
+    # if(indVar)
+    # {
+    #   pdg_pop <- param["pdg"] + rnorm(length(D), param[paste0('pdg_pmean[', plot_id, ']')], param["pdg_psd"])
+    #   pdg_pop[pdg_pop <= 0] = 0.0001
+    # }else
+    # {
+    #   pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
+    # } 
+
+    pdg_pop <- param["pdg"] + param[paste0('pdg_pmean[', plot_id, ']')]
 
     mu_d <- pdg_pop *
             compEffect *
-            exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
-            exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-            exp(-lgPart)
+            tempEffect *
+            precEffect *
+            sizeEffect
 
     if(!indVar)
     {
@@ -693,7 +703,19 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       growth <- rgamma(length(D), (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"])
     }
 
-    return( growth )
+    if(singleEffect) {
+      return(
+        list(
+          growth,
+          sizeEffect,
+          tempEffect,
+          precEffect,
+          compEffect
+        )
+      )
+    }else{
+      return( growth )
+    }
   }
 
   # loop over species and simulations
@@ -719,7 +741,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       if(sim == 'sim1')
       {
         # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim1 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, c('Gdet_mean_sim1', 'sizeEff_sim1', 'tempEff_sim1', 'precEff_sim1', 'compEff_sim1') := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE, singleEffect = TRUE)]
         oob_list[[sp]][, Gdet_ci10_sim1 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
         oob_list[[sp]][, Gdet_ci90_sim1 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
 
@@ -744,7 +766,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
   
       }else{
           # get deterministic growth rate
-        oob_list[[sp]][, Gdet_mean_sim2 := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
+        oob_list[[sp]][, c('Gdet_mean_sim2', 'sizeEff_sim2', 'tempEff_sim2', 'precEff_sim2', 'compEff_sim2') := growth_model2(param = param_mean, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE, singleEffect = TRUE)]
         oob_list[[sp]][, Gdet_ci10_sim2 := growth_model2(param = param_ci10, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
         oob_list[[sp]][, Gdet_ci90_sim2 := growth_model2(param = param_ci90, sim, D = dbh0, TP = mean_temp_period_3_lag, PP = tot_annual_pp_lag, C = canopyDistance, plot_id = plot_id_seq, indVar = FALSE)]
 
@@ -1121,8 +1143,6 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
 # Population summary
 
 ```{r popSummary, echo = FALSE,fig.height = 12, fig.width = 7, warning=FALSE, message=FALSE}
-params <- rstan::extract(get(paste0('fit_', sim, '_', sp)))
-
 p1 <- oob_growth %>%
   select(species_id, 'growth', contains('Gvar')) %>%
   pivot_longer(
@@ -1130,20 +1150,22 @@ p1 <- oob_growth %>%
     names_to = 'pars',
     values_to = 'value'
   )  %>%
+
   mutate(
     pars = recode(
       pars,
-      Gvar_mean_sim1 = 'Gvar_sim1',
-      Gvar_ci10_sim1 = 'Gvar_sim1',
-      Gvar_ci90_sim1 = 'Gvar_sim1',
-      Gvar_mean_sim2 = 'Gvar_sim2',
-      Gvar_ci10_sim2 = 'Gvar_sim2',
-      Gvar_ci90_sim2 = 'Gvar_sim2'
+      growth = 'Observed',
+      Gvar_mean_sim1 = 'Predicted_sim1',
+      Gvar_ci10_sim1 = 'Predicted_sim1',
+      Gvar_ci90_sim1 = 'Predicted_sim1',
+      Gvar_mean_sim2 = 'Predicted_sim2',
+      Gvar_ci10_sim2 = 'Predicted_sim2',
+      Gvar_ci90_sim2 = 'Predicted_sim2'
     )
   ) %>%
   ggplot(aes(x = value, y = species_id, fill = pars)) +
-    geom_density_ridges(alpha = 0.4) +
-    xlim(0, 7) +
+    geom_density_ridges(alpha = 0.3) +
+    xlim(0, 12) +
     xlab('Growth')
 
 print(p1)
