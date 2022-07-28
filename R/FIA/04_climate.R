@@ -297,7 +297,7 @@ for(var in dir('rawData/climateData'))
 #------------------------------------------------------
 #------------------------------------------------------
 
-# Correction for temperature variables
+# Fix climate units
 
 #------------------------------------------------------
 #------------------------------------------------------
@@ -400,6 +400,29 @@ clim_dt <- merge(
 saveRDS(clim_dt, 'data/FIA/clim_dt.RDS')
 
 
+
+
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+# Assign the climate cell ID to the plot so I can trace
+# Which plots are using the same source of information
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+plot_location$cellID <- raster::extract(
+  stackbio[[1]][[1]],
+  plot_location[, c('longitude', 'latitude')],
+  cellnumbers = TRUE
+)[, 1L] 
+
+
+
+
+
+
 #------------------------------------------------------
 #------------------------------------------------------
 
@@ -408,12 +431,20 @@ saveRDS(clim_dt, 'data/FIA/clim_dt.RDS')
 #------------------------------------------------------
 #------------------------------------------------------
 
-treeData <- merge(
-  treeData,
-  clim_dt[, .(plot_id, year, bio_01, bio_12)],
-  by.x = c('plot_id', 'year_measured'),
-  by.y = c('plot_id', 'year')
-)
+treeData[
+  clim_dt,
+  `:=`(
+    bio_01 = i.bio_01,
+    bio_12 = i.bio_12
+  ),
+  on = c(plot_id = 'plot_id', year_measured = 'year')
+]
+
+treeData[
+  plot_location,
+  climate_cellID := i.cellID,
+  on = c('plot_id')
+]
 
 
 saveRDS(treeData, 'data/FIA/treeData_sStar_clim.RDS')
