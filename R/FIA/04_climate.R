@@ -8,14 +8,16 @@
 
 #------------------------------------------------------
 # Steps
-#   - Stack over years for each variable (bio, cmi, pcp)
-#   - 
-
+#   - Stack over years for each variable (bio, cmi)
+#   - Extract climate data for plot locations
+#   - Fill NA plots with adjacent information
+#   - Fix climate units
+#   - Rolling average of 5 years
 #------------------------------------------------------
 
 
 library(data.table)
-library(dplyrqq)
+library(dplyr)
 library(sf)
 library(raster)
 
@@ -167,6 +169,116 @@ for(var in dir('rawData/climateData/'))
 
   var_pts[[var]] <- year_pts
 
+}
+
+
+
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+# Some plots have NA climate cells
+# Fill it with the mean of the adjacent cells
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+na_plots <- list()
+var_newCells <- list()
+
+for(var in dir('rawData/climateData'))
+{
+
+  cat('Getting adjacent cells for NA values: ', var, '\n')
+
+  # Get plots and their location with climate NA
+  missing_clim <- var_pts[[var]][[1]][is.na(get(paste0(var, '_01'))), .(plot_id, longitude, latitude)]
+
+  # extract cell number on the raster
+  missing_clim[, 'cellNumber'] <- raster::extract(
+    get(paste0('stack', var))[[1]][[1]],
+    missing_clim[, c('longitude', 'latitude')],
+    cellnumbers = TRUE
+  )[, 1L]
+
+  # find the nearest adjacent cells with non-NA values
+  newCells <- list()
+  count = 0
+  for (i in which(!is.na(missing_clim$cellNumber)))
+  {
+    nr <- 3; l <- 1
+    while (l)
+    {
+      mid <- floor(nr/2) + 1
+      mat <- matrix(1, nr, nr)
+      mat[mid, mid] <- 0
+      
+      tmp_cells <- raster::adjacent(
+        get(paste0('stack', var))[[1]][[1]],
+        missing_clim$cellNumber[i], directions = mat
+      )[, 2L]
+
+      tmp_val <- raster::values(
+        get(paste0('stack', var))[[1]][[1]]
+      )[tmp_cells]
+
+      if (!all(is.na(tmp_val))) {
+        newCells[[i]] <- tmp_cells[!is.na(tmp_val)]
+        l <- 0
+      } else nr <- nr + 2
+    }
+    
+    # progress
+    cat('   In progress...', round(count/length(which(!is.na(missing_clim$cellNumber))) * 100, 1), '%\r'); count = count + 1  
+  }
+  na_plots[[var]] <- missing_clim
+  var_newCells[[var]] <- newCells
+
+}
+
+
+
+# Replace the NA values by the mean value of adjacent cells
+for(var in dir('rawData/climateData')) 
+{
+  cat('Replacing the NA values: ', var, '\n')
+
+  # cell to be fixed
+  plotsToFix <- na_plots[[var]][, 'plot_id']
+  
+  # adjacent cells
+  adjCells <- var_newCells[[var]]
+
+  # variable stack
+  varStack <- get(paste0('stack', var))
+
+  count = 0
+  for(plot in which(!unlist(lapply(adjCells, is.null))))
+  {
+    # adjacent cells
+    adjCell <- var_newCells[[var]][[plot]]
+
+    # get mean climate for adjacent cells
+    for(yr in 1:length(varStack))
+    {
+      # get adj values
+      extVars <- colMeans(
+        raster::extract(
+          varStack[[yr]],
+          adjCell
+        )
+      )
+
+      # fill NAs
+      var_pts[[var]][[yr]][
+        plot_id %in% plotsToFix$plot_id[plot],
+        names(extVars) := as.list(extVars)
+      ]
+
+      # progress
+      cat('   In progress...', round(count/(length(which(!unlist(lapply(adjCells, is.null)))) * length(varStack)) * 100, 1), '%\r'); count = count + 1
+    }
+  }
 }
 
 
