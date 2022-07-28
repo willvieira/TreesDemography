@@ -52,5 +52,6 @@ MCMC/*
 output/*
 tests/*
 plots/*
+Exploration/*
 _rawDataLink
 _serverInfo.yml
