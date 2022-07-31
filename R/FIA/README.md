@@ -51,3 +51,10 @@ Each of the following steps is a `R` script :
   - Remove already dead and multiple dead events
   - Fix indivudals with multiple species_id
   - Remove plots with missing climate
+
+### Transition
+  - Calculate growth (dbh1 - dbh0), deltaYear (year1 - year0), and state (state after deltaYear)
+  - Transform db in a transition way
+  - Remove extreme growth rate (0 < growth < 35 mm/year)
+  - Keep natural dead events for mortality
+  - remove already indivuduals
