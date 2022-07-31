@@ -105,5 +105,5 @@ mort_dt[, mort := ifelse(status1 == 1, 0, 1)]
 # Save
 #------------------------------------------------------
 
-saveRDS(growth_dt, 'data/FIA/growth_dt.R')
-saveRDS(mort_dt, 'data/FIA/mort_dt.R')
+saveRDS(growth_dt, 'data/FIA/growth_dt.RDS')
+saveRDS(mort_dt, 'data/FIA/mort_dt.RDS')
