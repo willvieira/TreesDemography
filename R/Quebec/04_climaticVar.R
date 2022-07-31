@@ -359,6 +359,22 @@
 
 
 
+# Get cellID
+  plot_coord <- plot_xy1 %>%
+    st_transform(4326) %>%
+    st_coordinates()
+
+  plot_xy1$cellID <- raster::extract(
+    stackbio[[1]][[1]],
+    plot_coord,
+    cellnumbers = TRUE
+  )[, 1L] 
+
+
+#
+
+
+
 # Long format for rolling average
 
   IDVAR <- c('.id', 'ID_PE', 'X', 'Y')
