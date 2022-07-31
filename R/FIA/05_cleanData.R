@@ -13,6 +13,7 @@
 #   - Fix resurrected
 #   - Remove already dead and multiple dead events
 #   - Fix indivudals with multiple species_id
+#   - Remove plots with missing climate
 #------------------------------------------------------
 
 
@@ -168,6 +169,20 @@ fix_sp <- function(sp)
     return( rep(sp[n], n) )
 }
 treeData[nbSp > 1, species_id := fix_sp(species_id), by = tree_id]
+
+
+
+# Remove plots with missing climate
+# Only one plot is missing climate
+#------------------------------------------------------
+
+# get NA by plot_id and year_measured
+NA_plot <- treeData[, sum(is.na(bio_01)), by = .(plot_id, year_measured)]
+
+# Filter for years with climate data (up to 2018)
+plot_toRm <- NA_plot[year_measured < 2019 & V1 > 0, unique(plot_id)]
+
+treeData <- treeData[plot_id != plot_toRm]
 
 
 

@@ -50,3 +50,4 @@ Each of the following steps is a `R` script :
   - Fix resurrected
   - Remove already dead and multiple dead events
   - Fix indivudals with multiple species_id
+  - Remove plots with missing climate
