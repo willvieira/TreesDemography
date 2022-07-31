@@ -37,4 +37,16 @@ Each of the following steps is a `R` script :
   - Calculate S* and canopyDistance
   - Calculate plot and species basal area
 
-### 
+### Climate
+  - Stack over years for each variable (bio, cmi)
+  - Extract climate data for plot locations
+  - Fill NA plots with adjacent information
+  - Fix climate units
+  - Rolling average of 5 years
+
+### Clean data
+  - Remove individuals from micro plot
+  - Keep only alive and dead status
+  - Fix resurrected
+  - Remove already dead and multiple dead events
+  - Fix indivudals with multiple species_id
