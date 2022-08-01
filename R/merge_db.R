@@ -8,7 +8,15 @@
 
 #------------------------------------------------------
 # Steps
-#   - 
+#   - Rename plot columns in Quebec
+#   - Add plot size
+#   - Geo location in Quebec plots
+#   - Climate variables and cell ID for Quebec
+#   - Keep same species_id in both sources
+#   - Use correct height measure or estimation in FIA
+#   - Delta size and status for Quebec
+#   - Merge both Quebec and FIA
+#   - Filter NAs
 #------------------------------------------------------
 
 
@@ -131,8 +139,8 @@ colsToKeep_growth <- c(
     'plot_id', 'longitude', 'latitude', 'plot_size', 'BA', 's_star',
     'db_origin', 'bio_01', 'bio_12', 'climate_cellID',
     'tree_id', 'species_id', 'status', 'year0', 'year1', 'deltaYear',
-    'dbh0', 'dbh1', 'deltaDbh', 'height', 'canopyDistance',
-    'BA_sp', 'relativeBA_sp'
+    'dbh0', 'dbh1', 'deltaDbh', 'growth', 'height',
+    'canopyDistance', 'BA_sp', 'relativeBA_sp'
 )
 
 # Merge growth
@@ -155,6 +163,15 @@ mort <- rbind(
     mort_fia[, colsToKeep_mort, with = FALSE],
     mort_quebec[, colsToKeep_mort, with = FALSE]
 )
+
+
+
+
+# Remove NAs
+#------------------------------------------------------
+
+growth <- growth[!(is.na(species_id) | is.na(BA_sp) | is.na(s_star))]
+mort <- mort[!(is.na(species_id) | is.na(BA) | is.na(BA_sp) | is.na(s_star))]
 
 
 
