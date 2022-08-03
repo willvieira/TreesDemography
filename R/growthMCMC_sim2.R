@@ -30,7 +30,6 @@ set.seed(42)
 
   # sample size
 
-
 ##
 
 
@@ -39,18 +38,6 @@ set.seed(42)
 
   # select the species
   growth_dt <- growth_dt[species_id == sp]
-
-  # filter to remove plot_id with s_star == 0
-  growth_dt <- growth_dt[s_star > 0]
-
-  # # get latitude and longitude from SHAPE list
-  # getCoord <- function(SHAPE, coord = 1) {
-  #     n <- length(SHAPE)
-  #     xy <- unique(unlist(SHAPE))
-  #     return (rep(xy[coord], n))
-  # }
-  # growth_dt[, longitude := getCoord(SHAPE, coord = 1), by = ID_PE]
-  # growth_dt[, latitude := getCoord(SHAPE, coord = 2), by = ID_PE]
 
   if(growth_dt[, .N] > sampleSize) {
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
@@ -143,8 +130,8 @@ set.seed(42)
           N = growth_dt[, .N],
           Np = growth_dt[, length(unique(plot_id_seq))],
           plot_id = growth_dt[, plot_id_seq],
-          T_data = growth_dt$mean_temp_period_3_lag,
-          P_data = growth_dt$tot_annual_pp_lag,
+          T_data = growth_dt$bio_01,
+          P_data = growth_dt$bio_12,
           D_data = growth_dt$dbh0,
           C_data = growth_dt$canopyDistance,
           Y = growth_dt$growth)
