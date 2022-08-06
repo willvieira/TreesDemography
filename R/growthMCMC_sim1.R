@@ -144,7 +144,6 @@ set.seed(42)
                          refresh = maxIter/10,
                          cores = nCores,
                          init = "random",
-                         control = list(adapt_delta = 0.95),
                          include = FALSE,
                          pars = c("mu_d", "pdg_plot"))
 

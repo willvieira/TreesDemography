@@ -12,7 +12,7 @@ nC: 3
 # Size of transition measurements to be sampled from the population
 sampleSize: 20000
 # The main folder name
-simName: "canopyDistanceFunB"
+simName: "BAvsCanopy"
 # Specific simulations (must match with the files names to run MCMC)
 simulations: ["sim1", "sim2"]
 
@@ -21,11 +21,11 @@ simulations: ["sim1", "sim2"]
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v8.1
+## Growth test - v9.0
 
-## With random effects at the plot level, compare two different function set for the canopyDistance predictor for competition:
+## Competition with BA vs canopy distance using the new data base and more flexible 4 parameters sigmoid function for canopy distance:
 
-# - sim1: sigmoid with `Lo` [0-1] and `mid` [0.1 - 0.5] parameters
-# - sim2: sigmoid with `Lo` [0-1] and `beta` [-10 - 10] parameters
+# - sim1: sigmoid with `Lo` [0-1], `mid` [0.1 - 0.5], and `beta` [-10 - 10] parameters
+# - sim2: BA with simple negative exponential
 
-# subversion 0.1 where I test the new dataset.
+Rscript -e "rmarkdown::render('MCMCdiagnostics_growth.Rmd')"

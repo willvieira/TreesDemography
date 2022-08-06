@@ -27,6 +27,7 @@ parameters
 
 	real<lower = 0, upper = 1> Lo;
 	real<lower = -11, upper = 21> mid;
+	real<lower = 0, upper = 1> beta;
 
 	real<lower = 0, upper = 850> Phi_opt;
 	real<lower = 0, upper = 15> sigmaPhi_opt;
@@ -52,7 +53,8 @@ model
 
 	Lo ~ uniform(0, 1);
 	mid ~ uniform(-10, 20);
-	
+	beta ~ uniform(0.05, 0.7);
+
 	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
 	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
 
@@ -67,7 +69,7 @@ model
 		mu_d[i] =
 			pdg_plot[plot_id[i]]
 			*
-			(Lo + ((1 - Lo) ./ (1 + exp(-0.45 * (C_data[i] - mid)))))
+			(Lo + ((1 - Lo) ./ (1 + exp(-beta * (C_data[i] - mid)))))
 			.*
 			(0.0001 + exp(-0.5 * (T_data[i] - T_opt) .* (T_data[i] - T_opt)/sigmaT_opt^2)
 			.*

@@ -133,7 +133,7 @@ set.seed(42)
           T_data = growth_dt$bio_01,
           P_data = growth_dt$bio_12,
           D_data = growth_dt$dbh0,
-          C_data = growth_dt$canopyDistance,
+          C_data = growth_dt$BA,
           Y = growth_dt$growth)
 
   ## Run
@@ -144,7 +144,6 @@ set.seed(42)
                          refresh = maxIter/10,
                          cores = nCores,
                          init = "random",
-                         control = list(adapt_delta = 0.95),
                          include = FALSE,
                          pars = c("mu_d", "pdg_plot"))
 
