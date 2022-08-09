@@ -1,6 +1,6 @@
 # Species id: define spId code or NULL to run for all species
 spIds: ["19489BETPAP", "183295PICGLA", "19481BETALL", "19462FAGGRA",
-        "28728ACERUB", "18032ABIBAL", "183302PICMAR", "195773POPTRE",
+        "28728ACERUB", "18032ABIBAL", "195773POPTRE",
         "28731ACESAC", "183319PINBAN", "18034PICRUB", "183397TSUCAN",
         "19408QUERUB", "19290QUEALB", "505490THUOCC"]
 # Which vital rates to run
@@ -27,5 +27,3 @@ simulations: ["sim1", "sim2"]
 
 # - sim1: sigmoid with `Lo` [0-1], `mid` [0.1 - 0.5], and `beta` [-10 - 10] parameters
 # - sim2: BA with simple negative exponential
-
-Rscript -e "rmarkdown::render('MCMCdiagnostics_growth.Rmd')"

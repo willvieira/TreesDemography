@@ -287,7 +287,7 @@ rm(growth)
   precx = seq(100, 2000)
 
   # species specfic colours
-  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
+  spCols <- colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(spIds))
   par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
   # plot size effect
   for(sim in simulations) {
@@ -376,8 +376,10 @@ rm(growth)
         points(xData, compEffect(xData, out, sim), type = 'l', col = spCols[sp], lwd = 1, lty = 1)
     }
     if(sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
+    if(sim == 'sim1')
+      legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
   }
-  legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
+
 ```
 
 
