@@ -505,7 +505,7 @@ for(sp in spIds)
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
     points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
@@ -532,7 +532,7 @@ for(sp in spIds)
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
     points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
@@ -559,7 +559,7 @@ for(sp in spIds)
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
     points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
   }
