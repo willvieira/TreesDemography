@@ -47,7 +47,7 @@ suppressPackageStartupMessages(library(MuMIn))
 
 # Load rStan output and scaleInfo for all species_id
   # get output name for each species_id
-  simNames = list.files(path = 'MCMC', pattern = '.RDS', recursive = TRUE, full.names = TRUE)
+  simNames = list.files(path = paste0('output/', simName), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
   output = simNames[grep('growthMCMC', simNames)]
 
   for(sim in simulations) {
@@ -283,11 +283,11 @@ rm(growth)
 
  # define x axis
   sizex = seq(0, 1100, 0.5)
-  tempx = seq(5, 25, 0.1)
+  tempx = seq(-8, 24, 0.1)
   precx = seq(100, 2000)
 
   # species specfic colours
-  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
+  spCols <- colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(spIds))
   par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
   # plot size effect
   for(sim in simulations) {
@@ -415,10 +415,10 @@ growth_model <- function(sp, sim, pars, D, TP, PP, CD, indVar = FALSE)
 
 
 # define classes for each predictive variables
-growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), 8)), by = species_id]
-growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), 1.5)), by = species_id]
-growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), 100)), by = species_id]
-growth_dt[, compc := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), 5)), by = species_id]
+growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), length.out = 8)), by = species_id]
+growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), length.out = 8)), by = species_id]
+growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), length.out = 8)), by = species_id]
+growth_dt[, compc := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), length.out = 8)), by = species_id]
 
 # get the classe with max of individuals (best representative classe)
 growth_dt[, maxsizec := names(which.max(table(sizec))), by = species_id]
@@ -472,13 +472,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(dbh0, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(dbh0, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 225, cex = 1.2, line = 0.25)
 
@@ -501,13 +501,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(bio_01, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_01, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     # Precipitation effect
     sp_dt <- growth_dt[
@@ -528,13 +528,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(bio_12, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_12, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     # Competition effect
     sp_dt <- growth_dt[
@@ -555,13 +555,13 @@ for(sp in spIds)
       CD = x
     )
 
-    sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
   }
    mtext(sp, 3, outer = TRUE, cex = 1.3, line = 2.5)
 }
@@ -583,11 +583,11 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
     db <- growth_dt[species_id == sp]
 
     # load plot_id references and update plot_id to ID_PE
-    toSub <- readRDS(paste0('MCMC/', sp, '/sampleInfo/toSub_sim1.RDS'))
+    toSub <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim1.RDS'))
     db[toSub, on = .(plot_id), plot_id_seq := i.plot_id_seq]
 
     # load rows used for stan fit
-    sampledIndices <- readRDS(paste0('MCMC/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
+    sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
 
     db <- db[!sampledIndices, ]
     db <- db[!is.na(plot_id_seq), ]
@@ -739,17 +739,10 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 ```
 
 ```{r calculate R2 from random forest and LMM,echo=FALSE,warning=FALSE}
-  # Variables to not consider on the model
-  # Quebec
-  # varsToRm <- c("relativeBA_sp", "CAUS_DEFOL", "ETAT", "state_original", "state0", "state1", "spCode", "heightMeasured",
-  #               "height", "nbMeasure", "indBA", "BA_sp", "dbh1", "deltaYear", "year1", "sp_code", "SHAPE",
-  #               "mort", "obs", "slope_cl", "x", "y", "maxRadius", "neighborBA2", "PH_HORIZB", "POURCPIERR", 
-  #               "ORIGINE", "ORIGINE2", "PERTURB", "PERTURB2", "state", "DEFOL_MAX", "ENSOLEIL")
 
-  # US
-  varsToRm <- c("relativeBA_sp", "org_db_loc",
-                "height", "real_lon", "real_lat", "indBA", "BA_sp", "plot_size", "dbh1", "deltaYear", "year1", 
-                "is_dead", "mort", "nbMeasure")
+  varsToRm <- c("relativeBA_sp", "db_origin", "dbh1",
+                "height", "indBA", "BA_sp", "plot_size",
+                "deltaYear", "deltaDbh", "year1", "status")
 
   rf_coeff <- data.table()
   for(sp in spIds)
@@ -758,7 +751,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       db <- growth_dt[species_id == sp, setdiff(names(growth_dt), varsToRm), with = FALSE]
 
       # Split into training/validation data
-      sampledIndices <- readRDS(paste0('MCMC/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
+      sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
       db_training <- na.omit(db[sampledIndices, ])
       db_validation <- na.omit(db[!sampledIndices, ])
 
@@ -834,20 +827,20 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
               latex2exp::TeX(paste0('Bayesian sim1: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim1', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim1', Slope], 2))),
               latex2exp::TeX(paste0('Bayesian sim2: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim2', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim2', Slope], 2))))
     
+    # sample 10% of data
+    db <- oob_growth[species_id == sp]
+    db <- db[sample(1:nrow(db), floor(nrow(db) * 0.1))]
+
     for(sim in simulations)
     {
-      # sample 10% of data
-      dbAll <- oob_growth[species_id == sp, c('growth', grep(sim, names(oob_growth), value = TRUE)), with = FALSE]
-      db <- dbAll[sample(1:nrow(dbAll), floor(nrow(dbAll) * 0.1))]
-
       # plot deterministic growth
       plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(1, labels = NA)
       if(sim == 'sim2') axis(2, labels = NA)
       abline(0, 1)
-      segments(db$growth - 0.01, db[[3]], db$growth + 0.01, db[[3]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth - 0.01, db[[4]], db$growth + 0.01, db[[4]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth , db[[3]], db$growth, db[[4]], col = rgb(0, 0, 0, 0.2)) # vertica
+      segments(db$growth - 0.01, db[[paste0('Gdet_ci10_', sim)]], db$growth + 0.01, db[[paste0('Gdet_ci10_', sim)]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[paste0('Gdet_ci90_', sim)]], db$growth + 0.01, db[[paste0('Gdet_ci90_', sim)]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[paste0('Gdet_ci10_', sim)]], db$growth, db[[paste0('Gdet_ci90_', sim)]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
       abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
       abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
@@ -855,13 +848,13 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 3, cex = 1, line = 0.25)
 
 
-      # plot gorwth with individual variation
-      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
+      # plot growth with individual variation
+      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', pch = 20, yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(2, labels = NA)
       abline(0, 1)
-      segments(db$growth - 0.01, db[[6]], db$growth + 0.01, db[[6]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth - 0.01, db[[7]], db$growth + 0.01, db[[7]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth , db[[6]], db$growth, db[[7]], col = rgb(0, 0, 0, 0.2)) # vertica
+      segments(db$growth - 0.01, db[[paste0('Gvar_ci10_', sim)]], db$growth + 0.01, db[[paste0('Gvar_ci10_', sim)]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[paste0('Gvar_ci90_', sim)]], db$growth + 0.01, db[[paste0('Gvar_ci90_', sim)]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[paste0('Gvar_ci10_', sim)]], db$growth, db[[paste0('Gvar_ci90_', sim)]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
       abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
       abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
@@ -1063,6 +1056,8 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
                  dplyr::filter(Method %in% c('R2_rf', 'R2_lmm')) %>%
                  mutate(Method = plyr::revalue(Method, c('R2_rf' = 'Random forest', 'R2_lmm' = 'LMM')))
 
+  xMax <- max(c(rf_coeff_r2$value, MSE_dt$r2))
+
   # For deterministic growth
   ggplot(data = MSE_dt, aes(r2, species_id, fill = sim, colour = sim)) + 
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
@@ -1072,13 +1067,72 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
     geom_segment(data = subset(rf_coeff_r2, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
                                       yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0, 1) +
+    xlim(0, xMax) +
     theme_classic() +
     xlab('Rsquared') +
     scale_y_discrete(limits = rev(spIds))
 
 ```
 
+
+# Intraclass Correlation Coefficient (ICC)
+
+```{r calculate ICC, echo = FALSE}
+icc <- data.table()
+for(sp in spIds) {
+  for(sim in simulations) {
+    out <- rstan::extract(get(paste('fit', sim, sp, sep = '_')))
+    
+    alpha1 <- out[['pdg_psd']]
+    alpha2 <- out[['sigma_base']]
+    ic <- alpha1/(alpha1 + alpha2)
+
+    icc <- rbind(
+      icc,
+      data.table(
+        species_id = sp,
+        sim = sim,
+        icc = ic
+      )
+    )
+  }
+}
+```
+
+```{r plot icc,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+# For deterministic growth
+ggplot(data = icc, aes(icc, species_id, fill = sim, colour = sim)) + 
+  geom_density_ridges(alpha = 0.4, scale= 1.8) +
+  theme_classic() +
+  xlab('ICC') +
+  scale_y_discrete(limits = rev(spIds))
+
+# create uniqueID by group to make merge possible
+MSE_dt[, ID := 1:.N, by = .(species_id, sim)]
+
+# From the rstan extract object, sample N iterations to plot R2 vs ICC dist
+icc %>%
+  group_by(species_id, sim) %>%
+  summarise(icc = sample(icc, sampleN)) %>%
+  group_by(species_id, sim) %>%
+  mutate(ID = 1:n()) %>%
+  left_join(MSE_dt, by = c('species_id', 'sim', 'ID')) %>%
+  group_by(species_id, sim) %>%
+  summarise(
+    icc_mean = mean(icc),
+    icc_min = icc_mean - sd(icc),
+    icc_max = icc_mean + sd(icc),
+    r2_mean = mean(r2),
+    r2_min = r2_mean - sd(r2),
+    r2_max = r2_mean + sd(r2)
+  ) %>%
+  ggplot(aes(r2_mean, icc_mean, color = species_id, shape = sim)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = icc_min, ymax = icc_max), alpha = .5) + 
+    geom_errorbarh(aes(xmin = r2_min,xmax = r2_max), alpha = .5) +
+    theme_classic() +
+    ylab('Mean ICC')
+```
 
 # Population summary
 
