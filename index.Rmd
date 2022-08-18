@@ -47,6 +47,8 @@
 
 - Canopy distance with different parameters set and new dataset ([link v8.1](https://willvieira.github.io/TreesDemography/growth/canopyDistanceFunB.html))
 
+- Canopy distance with 3 parameters vs basal area ([link v9.0](https://willvieira.github.io/TreesDemography/growth/BAvsCanopy.html))
+
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))
