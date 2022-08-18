@@ -1083,7 +1083,7 @@ for(sp in spIds) {
   for(sim in simulations) {
     out <- rstan::extract(get(paste('fit', sim, sp, sep = '_')))
     
-    alpha1 <- out[['pdg_psd']]
+    alpha1 <- out[['pdg_psd']]^2
     alpha2 <- out[['sigma_base']]
     ic <- alpha1/(alpha1 + alpha2)
 
