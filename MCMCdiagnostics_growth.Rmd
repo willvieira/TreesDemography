@@ -426,11 +426,11 @@ growth_model <- function(sp, sim, pars, D, TP, PP, CD, indVar = FALSE)
 
 
 # define classes for each predictive variables
-growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), 8)), by = species_id]
-growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), 1.5)), by = species_id]
-growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), 100)), by = species_id]
-growth_dt[, compsim1c := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), 5)), by = species_id]
-growth_dt[, compsim2c := cut(BA, seq(min(BA), max(BA), 5)), by = species_id]
+growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), length.out = 8)), by = species_id]
+growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), length.out = 8)), by = species_id]
+growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), length.out = 8)), by = species_id]
+growth_dt[, compsim1c := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), length.out = 8)), by = species_id]
+growth_dt[, compsim2c := cut(BA, seq(min(BA), max(BA), length.out = 8)), by = species_id]
 
 # get the classe with max of individuals (best representative classe)
 growth_dt[, maxsizec := names(which.max(table(sizec))), by = species_id]
@@ -485,13 +485,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(dbh0, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(dbh0, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 225, cex = 1.2, line = 0.25)
 
@@ -514,13 +514,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(bio_01, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_01, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     # Precipitation effect
     sp_dt <- growth_dt[
@@ -541,13 +541,13 @@ for(sp in spIds)
       CD = sp_dt[, mean(canopyDistance)]
     )
 
-    sp_dt[, plot(bio_12, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_12, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
 
     # Competition effect
     sp_dt <- growth_dt[
@@ -573,17 +573,17 @@ for(sp in spIds)
     )
 
     if(sim == 'sim1') {
-      sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+      sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     }else{
-      sp_dt[, plot(BA, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Basal area (m2/ha)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+      sp_dt[, plot(BA, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Basal area (m2/ha)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     }
 
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("grey25", 0.1), border = NA
+      col = alpha("deepskyblue4", 0.3), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2)
+    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
   }
    mtext(sp, 3, outer = TRUE, cex = 1.3, line = 2.5)
 }
@@ -761,6 +761,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 ```
 
 ```{r calculate R2 from random forest and LMM,echo=FALSE,warning=FALSE}
+
 
   varsToRm <- c("relativeBA_sp", "db_origin", "dbh1",
                 "height", "indBA", "BA_sp", "plot_size",
@@ -1097,6 +1098,7 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
 ```
 
 
+
 # Intraclass Correlation Coefficient (ICC)
 
 ```{r calculate ICC, echo = FALSE}
@@ -1155,6 +1157,7 @@ icc %>%
     theme_classic() +
     ylab('Mean ICC')
 ```
+
 
 # Population summary
 
