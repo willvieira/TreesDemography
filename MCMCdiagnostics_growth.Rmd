@@ -762,9 +762,9 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 
 ```{r calculate R2 from random forest and LMM,echo=FALSE,warning=FALSE}
 
-  varsToRm <- c("relativeBA_sp", "db_origin",
-                "height", "longitude", "latitude", "indBA", "BA_sp", "plot_size", "dbh1", "deltaYear", "year1", "deltaDbh",
-                "status", "climate_cellID")
+  varsToRm <- c("relativeBA_sp", "db_origin", "dbh1",
+                "height", "indBA", "BA_sp", "plot_size",
+                "deltaYear", "deltaDbh", "year1", "status")
 
   rf_coeff <- data.table()
   for(sp in spIds)
@@ -1078,6 +1078,8 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
                  dplyr::filter(Method %in% c('R2_rf', 'R2_lmm')) %>%
                  mutate(Method = plyr::revalue(Method, c('R2_rf' = 'Random forest', 'R2_lmm' = 'LMM')))
 
+  xMax <- max(c(rf_coeff_r2$value, MSE_dt$r2))
+
   # For deterministic growth
   ggplot(data = MSE_dt, aes(r2, species_id, fill = sim, colour = sim)) + 
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
@@ -1087,13 +1089,72 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
     geom_segment(data = subset(rf_coeff_r2, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
                                       yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0, 1) +
+    xlim(0, xMax) +
     theme_classic() +
     xlab('Rsquared') +
     scale_y_discrete(limits = rev(spIds))
 
 ```
 
+
+# Intraclass Correlation Coefficient (ICC)
+
+```{r calculate ICC, echo = FALSE}
+icc <- data.table()
+for(sp in spIds) {
+  for(sim in simulations) {
+    out <- rstan::extract(get(paste('fit', sim, sp, sep = '_')))
+    
+    alpha1 <- out[['pdg_psd']]^2
+    alpha2 <- out[['sigma_base']]
+    ic <- alpha1/(alpha1 + alpha2)
+
+    icc <- rbind(
+      icc,
+      data.table(
+        species_id = sp,
+        sim = sim,
+        icc = ic
+      )
+    )
+  }
+}
+```
+
+```{r plot icc,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+# For deterministic growth
+ggplot(data = icc, aes(icc, species_id, fill = sim, colour = sim)) + 
+  geom_density_ridges(alpha = 0.4, scale= 1.8) +
+  theme_classic() +
+  xlab('ICC') +
+  scale_y_discrete(limits = rev(spIds))
+
+# create uniqueID by group to make merge possible
+MSE_dt[, ID := 1:.N, by = .(species_id, sim)]
+
+# From the rstan extract object, sample N iterations to plot R2 vs ICC dist
+icc %>%
+  group_by(species_id, sim) %>%
+  summarise(icc = sample(icc, sampleN)) %>%
+  group_by(species_id, sim) %>%
+  mutate(ID = 1:n()) %>%
+  left_join(MSE_dt, by = c('species_id', 'sim', 'ID')) %>%
+  group_by(species_id, sim) %>%
+  summarise(
+    icc_mean = mean(icc),
+    icc_min = icc_mean - sd(icc),
+    icc_max = icc_mean + sd(icc),
+    r2_mean = mean(r2),
+    r2_min = r2_mean - sd(r2),
+    r2_max = r2_mean + sd(r2)
+  ) %>%
+  ggplot(aes(r2_mean, icc_mean, color = species_id, shape = sim)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = icc_min, ymax = icc_max), alpha = .5) + 
+    geom_errorbarh(aes(xmin = r2_min,xmax = r2_max), alpha = .5) +
+    theme_classic() +
+    ylab('Mean ICC')
+```
 
 # Population summary
 
