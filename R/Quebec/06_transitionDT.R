@@ -17,36 +17,37 @@
 ##############################
 
 
+final_transition <- copy(final_dt)
 
 # Calculate growth (dbh1 - dbh0), deltaYear (year1 - year0) and state (state after deltaYear)
 
   # Number of measurement by tree_id (interested only in nbMeasure > 1 to get transition)
-  final_dt[, nbMeasure := .N, by = tree_id]
+  final_transition[, nbMeasure := .N, by = tree_id]
 
   # first it is important data is sorted by year_measured
-  setorderv(final_dt, cols = "year_measured", order = -1)
+  setorderv(final_transition, cols = "year_measured", order = -1)
 
   # year
-  final_dt[, year1 := shift(year_measured, 1, type = 'lag'), by = tree_id]
-  final_dt[, year0 := year_measured]
-  final_dt[, year_measured := NULL]
+  final_transition[, year1 := shift(year_measured, 1, type = 'lag'), by = tree_id]
+  final_transition[, year0 := year_measured]
+  final_transition[, year_measured := NULL]
 
   # DHP
-  final_dt[, dbh1 := shift(DHP, 1, type = 'lag'), by = tree_id]
-  final_dt[, dbh0 := DHP]
-  final_dt[, DHP := NULL]
+  final_transition[, dbh1 := shift(DHP, 1, type = 'lag'), by = tree_id]
+  final_transition[, dbh0 := DHP]
+  final_transition[, DHP := NULL]
 
   # Growth and deltYear
-  final_dt[, deltaYear := year1 - year0]
-  final_dt[, growth := (dbh1 - dbh0)/deltaYear]
+  final_transition[, deltaYear := year1 - year0]
+  final_transition[, growth := (dbh1 - dbh0)/deltaYear]
 
   # State
-  final_dt[, state1 := shift(state, 1, type = 'lag'), by = tree_id]
-  final_dt[, state0 := state]
-  final_dt[, state := NULL]
+  final_transition[, state1 := shift(state, 1, type = 'lag'), by = tree_id]
+  final_transition[, state0 := state]
+  final_transition[, state := NULL]
 
   # Remove first measure with NA due to transition transformation
-  final_dt <- final_dt[!is.na(deltaYear)]
+  final_transition <- final_transition[!is.na(deltaYear)]
 
 #
 
@@ -55,7 +56,7 @@
 # Separate between growth and mortality df
 
   # Growth and mortality (nb > 1 to obtain transition)
-  mort_dt = final_dt[nbMeasure > 1]
+  mort_dt = final_transition[nbMeasure > 1]
   growth_dt = mort_dt[state1 == 'alive']
 
 #
@@ -129,23 +130,5 @@
   
   # 'leading' shift as year is in descreasing order
   mort_dt[, growth_lag := shift(growth, 1L, type = 'lead'), by = tree_id]
-
-#
-
-
-
-# Save all
-
-  if(!dir.exists('data/quebec/')) dir.create('data/quebec')
-
-  saveRDS(tree_data, "data/quebec/tree_data_nov2019.RDS")
-  st_write(plot_xy, "data/quebec/plot_xy32198_nov2019.gpkg", append = FALSE)
-  saveRDS(ecoreg_df, "data/quebec/ecoreg_df_nov19.RDS")
-  st_write(bound_Qc, "data/quebec/bound_Qc.gpkg")
-  saveRDS(env_data, "data/quebec/env_data_nov2019.RDS")
-  saveRDS(allVar_df, "data/quebec/bio-cmi-pcp.RDS")
-  saveRDS(final_dt, "data/quebec/treeDataQuebec_all.RDS")
-  saveRDS(growth_dt, "data/quebec/growth_dt.RDS")
-  saveRDS(mort_dt, "data/quebec/mort_dt.RDS")
 
 #

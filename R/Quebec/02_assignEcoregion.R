@@ -17,13 +17,13 @@
 
 # Download ecoregion data
 
-  dtLink = 'ftp://transfert.mffp.gouv.qc.ca/Public/Diffusion/DonneeGratuite/Foret/DONNEES_FOR_ECO_SUD/Classification_ecologique/CLASSI_ECO_GDB.zip'
+  dtLink = 'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/DONNEES_FOR_ECO_SUD/Classification_ecologique/CLASSI_ECO_QC_GDB.zip'
 
   ecoDir = 'rawData/CLASSI_ECO_GDB'
 
   if(!dir.exists(ecoDir))
   {
-    ecoFile = 'rawData/ECO_REGION.zip'
+    ecoFile = 'rawData/CLASSI_ECO_REGION.zip'
     
     if(!file.exists(ecoFile))
       download.file(url = dtLink, destfile = ecoFile, method = 'auto', quiet = TRUE)
@@ -38,7 +38,7 @@
 
 # Reclassify ecoregions
 
-  ecoregion <- sf::st_read('rawData/CLASSI_ECO_GDB/CLASSI_ECO_IEQM.gdb', layer = 'SDOM_BIO')
+  ecoregion <- sf::st_read('rawData/CLASSI_ECO_QC_GDB/CLASSI_ECO_QC.gdb')
 
   ecoregion <- ecoregion %>% select(SOUS_DOM11 = SDOM_BIO)
   

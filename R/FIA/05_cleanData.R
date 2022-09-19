@@ -177,7 +177,7 @@ treeData[nbSp > 1, species_id := fix_sp(species_id), by = tree_id]
 #------------------------------------------------------
 
 # get NA by plot_id and year_measured
-NA_plot <- treeData[, sum(is.na(bio_01)), by = .(plot_id, year_measured)]
+NA_plot <- treeData[, sum(is.na(bio_01_mean)), by = .(plot_id, year_measured)]
 
 # Filter for years with climate data (up to 2018)
 plot_toRm <- NA_plot[year_measured < 2019 & V1 > 0, unique(plot_id)]
