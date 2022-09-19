@@ -15,13 +15,12 @@
 
 # Merge all in one single dt
 
-  final_df <- tree_data %>%
+  final_dt <- tree_data %>%
       dplyr::select(-c('ID_PE_MES', 'NO_ARBRE', 'ID_ARBRE', 'ID_ARB_MES', 'ESSENCE', 'DHP_NC', 'plot_id')) %>%
       dplyr::right_join(ecoreg_df[, c('ID_PE', 'ecoreg3')], by = 'ID_PE') %>%
       dplyr::right_join(env_data[, names(env_data)[-c(2, 3)]], by = c('ID_PE', 'year_measured')) %>%
-      dplyr::right_join(allVar_df[, c('ID_PE', 'year_measured', names(allVar_df)[grep('value5_', names(allVar_df))])], by = c('ID_PE', 'year_measured'))
-      
-  final_dt <- as.data.table(final_df)
+      dplyr::right_join(plot_climVars, by = c('ID_PE', 'year_measured')) %>%
+      as.data.table()
 
 #
 
@@ -232,23 +231,57 @@
 
   # plot basal area
   # calculate plot basal area (BA in m2/ha)
-  final_dt[state == 'alive', BA := sum(indBA) * 1e4/399.7312, by = list(ID_PE, year_measured)]
+  final_dt[state == 'alive', BA_plot := sum(indBA) * 1e4/399.7312, by = list(ID_PE, year_measured)]
 
   # fill NAs of BA (due to dead trees) with the value from the plot
-  final_dt[, BA := nafill(BA, "locf"), by = list(ID_PE, year_measured)]
-  final_dt[, BA := nafill(BA, "nocb"), by = list(ID_PE, year_measured)]
+  final_dt[,
+    BA_plot := nafill(nafill(BA_plot, "locf"), "nocb"),
+    by = .(ID_PE, year_measured)
+  ]
 
   # species basal area per plot (BA_sp) as a proxy of seed source
-  final_dt[state == 'alive', BA_sp := sum(indBA) * 1e4/399.7312, by = list(ID_PE, year_measured, sp_code2)]
+  final_dt[
+    state == 'alive',
+    BA_sp := sum(indBA) * 1e4/399.7312,
+    by = .(ID_PE, year_measured, sp_code2)
+  ]
   # fill NAs the same as for BA
-  final_dt[, BA_sp := nafill(BA_sp, "locf"), by = list(ID_PE, year_measured, sp_code2)]
-  final_dt[, BA_sp := nafill(BA_sp, "nocb"), by = list(ID_PE, year_measured, sp_code2)]
+  final_dt[,
+    BA_sp := nafill(nafill(BA_sp, "locf"), "nocb"),
+    by = .(ID_PE, year_measured, sp_code2)
+  ]
   
   # Species relative basal area to overcome the potential opposite response of
   # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
-  final_dt[, relativeBA_sp := BA_sp/BA, by = list(ID_PE, year_measured, sp_code2)]
+  final_dt[,
+    relativeBA_sp := BA_sp/BA_plot,
+    by = .(ID_PE, year_measured, sp_code2)
+  ]
   # 0/0 = NA
   final_dt[is.na(relativeBA_sp), relativeBA_sp := 0]
+
+  # Basal area of larger individuals than the focal individual (competitive index)
+  BA_comp <- function(size, BA_ind) {
+      sapply(
+        size,
+        function(x)
+          sum(BA_ind[size > x]) * 1e4/399.7212
+      )
+  }
+  
+  final_dt[
+    state == 'alive',
+    BA_comp := BA_comp(DHP, indBA),
+    by = .(ID_PE, year_measured)
+  ]
+
+  # Individual basal area relative to the plot basal area
+  final_dt[
+    state == 'alive',
+    relativeBA_comp := indBA/sum(indBA),
+    by = .(ID_PE, year_measured)
+  ]
+
 
   # plot(test[, unique(s_star), by = .(ID_PE, year0)]$V1, test[, unique(BA),
   #    by = .(ID_PE, year0)]$V1, pch = 19, col = rgb(0,0,0, 0.1), xlab = 's_star (m)', ylab = c('Basal area (m2/ha)'))

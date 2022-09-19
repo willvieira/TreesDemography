@@ -381,13 +381,15 @@ treeData[
 # calculate plot basal area (BA in m2/ha)
 treeData[
   status == 1,
-  BA := sum(indBA) * 1e4/subPlot_size,
+  BA_plot := sum(indBA) * 1e4/subPlot_size,
   by = .(plot_id, subplot_id, year_measured)
 ]
 
 # fill NAs of BA (due to dead trees) with the value from the plot
-treeData[, BA := nafill(BA, "locf"), by = .(plot_id, subplot_id, year_measured)]
-treeData[, BA := nafill(BA, "nocb"), by = .(plot_id, subplot_id, year_measured)]
+treeData[,
+  BA_plot := nafill(nafill(BA_plot, "locf"), "nocb"),
+  by = .(plot_id, subplot_id, year_measured)
+]
 
 # species basal area per plot (BA_sp) as a proxy of seed source
 treeData[
@@ -397,15 +399,42 @@ treeData[
 ]
 
 # fill NAs the same as for BA
-treeData[, BA_sp := nafill(BA_sp, "locf"), by = .(plot_id, subplot_id, year_measured, species_id)]
-treeData[, BA_sp := nafill(BA_sp, "nocb"), by = .(plot_id, subplot_id, year_measured, species_id)]
+treeData[,
+  BA_sp := nafill(nafill(BA_sp, "locf"), "nocb"),
+  by = .(plot_id, subplot_id, year_measured, species_id)
+]
 
 # Species relative basal area to overcome the potential opposite response of
 # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
-treeData[, relativeBA_sp := BA_sp/BA, by = .(plot_id, subplot_id, year_measured, species_id)]
-
+treeData[,
+  relativeBA_sp := BA_sp/BA_plot,
+  by = .(plot_id, subplot_id, year_measured, species_id)
+]
 # 0/0 = NA
 treeData[is.na(relativeBA_sp), relativeBA_sp := 0]
 
+# Basal area of larger individuals than the focal individual (competitive index)
+BA_comp <- function(size, plotSize, BA_ind) {
+    sapply(
+      size,
+      function(x)
+        sum(BA_ind[size > x]) * 1e4/plotSize
+    )
+}
 
+treeData[
+  status == 1,
+  BA_comp := BA_comp(dbh, unique(subPlot_size), indBA),
+  by = .(plot_id, subplot_id, year_measured)
+]
+
+# Individual basal area relative to the plot basal area
+treeData[
+  status == 1,
+  relativeBA_comp := indBA/sum(indBA),
+  by = .(plot_id, subplot_id, year_measured)
+]
+
+
+# save
 saveRDS(treeData, 'data/FIA/treeData_sStar.RDS')
