@@ -53,7 +53,12 @@ mainFolder <- file.path('rawData', 'climateData')
 minYear <- treeData[, min(year_measured) - 6]
 
 
-for(var in dir(mainFolder))
+# Define climate variables
+# Options are: `bio`, `cmi`, and `pcp`
+clim_variables <- 'bio'
+
+
+for(var in clim_variables)
 {
 
     cat('Stacking for variable:', var, '\n')
@@ -142,7 +147,7 @@ plot_xy <- plot_location %>%
 # a data.frame plot_xy_id and the variables
 var_pts <- list()
 
-for(var in dir('rawData/climateData/'))
+for(var in clim_variables)
 {
 
   cat('Extracting climate data for variable:', var, '\n')
@@ -186,7 +191,7 @@ for(var in dir('rawData/climateData/'))
 na_plots <- list()
 var_newCells <- list()
 
-for(var in dir('rawData/climateData'))
+for(var in clim_variables)
 {
 
   cat('Getting adjacent cells for NA values: ', var, '\n')
@@ -239,7 +244,7 @@ for(var in dir('rawData/climateData'))
 
 
 # Replace the NA values by the mean value of adjacent cells
-for(var in dir('rawData/climateData')) 
+for(var in clim_variables) 
 {
   cat('Replacing the NA values: ', var, '\n')
 
@@ -283,14 +288,14 @@ for(var in dir('rawData/climateData'))
 
 
 # Merge lists of year into one data.frame
-# There will be still one main list with the main variables (bio, cmi)
-
-vars_df <- list()
-for(var in dir('rawData/climateData'))
-  vars_df[[var]] <- data.table::rbindlist(var_pts[[var]], idcol = '.id')
-
-
-
+vars_df <- Reduce(
+  merge,
+  lapply(
+    var_pts,
+    function(x)
+      data.table::rbindlist(x, idcol = '.id')
+  )
+)
 
 
 
@@ -302,102 +307,15 @@ for(var in dir('rawData/climateData'))
 #------------------------------------------------------
 #------------------------------------------------------
 
-# # All temperature variables must be divided by 10 
+# All temperature variables must be divided by 10 
 T.var <- c("bio_01", "bio_02", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11")
+
+vars_df[ , (T.var) := lapply(.SD, function(x) x/10), .SDcols = T.var]
 
 # # Temperature seasonality (bio_04) must be divided by 100
 Tseason <- "bio_04"
 
-vars_df[[1]] <- vars_df[[1]] %>% 
-  dplyr::mutate_at(T.var, funs(./10)) %>%
-  dplyr::mutate_at(Tseason, funs(./100))
-
-
-
-
-
-
-#------------------------------------------------------
-#------------------------------------------------------
-
-# Rolling average
-
-#------------------------------------------------------
-#------------------------------------------------------
-
-# Long format
-IDVAR <- c('.id', 'plot_id', 'longitude', 'latitude')
-vars_df_long <- list()
-
-for(var in dir('rawData/climateData'))
-{  
-  varNames <- names(vars_df[[var]])[!names(vars_df[[var]]) %in% IDVAR]
-  vars_df_long[[var]] <- data.table::melt(
-    vars_df[[var]],
-    id.vars = IDVAR,
-    measure.vars = varNames,
-    variable.name = paste0(var, '_var'),
-    value.name = var
-  )
-}
-
-# Rolling average for the last 5 years
-vars_df_roll <- list()
-  
-# bio
-vars_df_roll[[1]] <- vars_df_long[[1]][,
-  list(
-    year = .id,
-    bio = bio,
-    bio_mean5 = frollmean(
-      bio,
-      n = 5,
-      na.rm = TRUE,
-      align = "right",
-      fill = NA
-    )
-  ),
-  by = .(plot_id, bio_var)
-]
-vars_df_roll[[1]][, year := as.integer(gsub('bio_', '', year))]
-  
-# cmi
-vars_df_roll[[2]] <- vars_df_long[[2]][,
-  list(
-    year = .id,
-    cmi = cmi,
-    cmi_mean5 = frollmean(
-      cmi,
-      n = 5,
-      na.rm = TRUE,
-      align = "right",
-      fill = NA
-    )
-  ),
-  by = .(plot_id, cmi_var)
-]
-vars_df_roll[[2]][, year := as.integer(gsub('cmi_', '', year))]
-
-
-# back to wide format
-bio_wide = dcast(
-  vars_df_roll[[1]][, .(plot_id, bio_var, year, bio_mean5)],
-  plot_id + year ~ bio_var, value.var = 'bio_mean5'
-)
-
-cmi_wide = dcast(
-  vars_df_roll[[2]][, .(plot_id, cmi_var, year, cmi_mean5)],
-  plot_id + year ~ cmi_var, value.var = 'cmi_mean5'
-)
-
-clim_dt <- merge(
-  bio_wide,
-  cmi_wide,
-  by = c('plot_id', 'year')
-)
-
-# save
-saveRDS(clim_dt, 'data/FIA/clim_dt.RDS')
+vars_df[ , (Tseason) := lapply(.SD, function(x) x/100), .SDcols = Tseason]
 
 
 
@@ -422,6 +340,90 @@ plot_location$cellID <- raster::extract(
 
 
 
+#------------------------------------------------------
+#------------------------------------------------------
+
+# Rolling average
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+
+# Prepare object to average climate data for the years within a deltaYear
+
+# function to return unique measurement years and the number of years between measurements per plot_id
+diff_yMeasured <- function(years)
+{  
+  uq_year <- sort(unique(years))
+  yr_diff <- diff(uq_year) - 1
+
+  # as first year won't be used, add zero in the first place
+  yr_diff <- c(0, yr_diff)
+
+  return( list(year_measured = uq_year, diff = yr_diff) )
+}
+
+plot_climVars <- treeData[, 
+  diff_yMeasured(year_measured),
+  by = plot_id
+]
+
+# add cellID
+plot_climVars[
+  plot_location,
+  cellID := i.cellID,
+  on = 'plot_id'
+]
+
+
+
+# Rolling average between years within the deltaYear
+roll_average <- function(clim_dt, plotId, year, diff, vars)
+{
+  # define the years to mean
+  years <- (year - diff):year
+
+  # subset clim data
+  dat <- clim_dt[plot_id == plotId & year %in% years, vars, with = FALSE]
+  
+  # calculate mean for desirable columns "vars"
+  Mean <- apply(dat, 2, mean, na.rm = TRUE)
+  SD <- apply(dat, 2, sd, na.rm = TRUE)
+
+  # add vars name and convert all to list (needed by data.table)
+  return( 
+    as.list(
+      c(
+        setNames(Mean, paste0(vars, '_mean')),
+        setNames(SD, paste0(vars, '_sd'))
+      )
+    )
+  )
+}
+
+plot_climVars[, rowID := 1:.N]
+
+out <- plot_climVars[,
+  roll_average(
+    clim_dt = vars_df,
+    plotId = plot_id,
+    year = year_measured,
+    diff = diff,
+    vars = c('bio_01', 'bio_12')
+  ),
+  by = rowID
+]
+
+plot_climVars <- merge(plot_climVars, out, by = 'rowID')
+
+plot_climVars[, c('rowID', 'diff') := NULL]
+
+# save
+saveRDS(plot_climVars, 'data/FIA/clim_dt.RDS')
+
+
+
+
 
 #------------------------------------------------------
 #------------------------------------------------------
@@ -432,19 +434,15 @@ plot_location$cellID <- raster::extract(
 #------------------------------------------------------
 
 treeData[
-  clim_dt,
+  plot_climVars,
   `:=`(
-    bio_01 = i.bio_01,
-    bio_12 = i.bio_12
+    bio_01_mean = i.bio_01_mean,
+    bio_01_sd = i.bio_01_sd,
+    bio_12_mean = i.bio_12_mean,
+    bio_12_sd = i.bio_12_sd,
+    climate_cellID = i.cellID
   ),
-  on = c(plot_id = 'plot_id', year_measured = 'year')
+  on = c(plot_id = 'plot_id', year_measured = 'year_measured')
 ]
-
-treeData[
-  plot_location,
-  climate_cellID := i.cellID,
-  on = c('plot_id')
-]
-
 
 saveRDS(treeData, 'data/FIA/treeData_sStar_clim.RDS')

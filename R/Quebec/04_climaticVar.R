@@ -17,7 +17,7 @@
 
 # Download climate data
 
-  # allYear = 1958:2018 # Can be from 1900 to 2018
+  # allYear = 1955:2018 # Can be from 1900 to 2018
   # #years = allYear[array_id]
   # years = allYear
 
@@ -31,7 +31,7 @@
   # infoSize = c(bio = 19, pcp = 12, cmi = 13)
 
   # # Resolution either "_300arcsec.zip" or "_60arcsec.zip", 300 = 10km², 60 = 2km²
-  # end = "_60arcsec.zip"
+  # end = "_300arcsec.zip"
 
   # # Where to save data
   # mainFolder = "./rawData/climateData/"
@@ -117,7 +117,7 @@
   # nb_years = length(allYear)
 
   # # Raster reference to check all years
-  # ref_coordinates_bio = raster::coordinates(raster::raster(paste0(mainDir, 'bio/', allYear[1], "/bio60_01.tif")))
+  # ref_coordinates_bio = raster::coordinates(raster::raster(paste0(mainDir, 'bio/', allYear[1], "/bio_01.tif")))
   # ref_coordinates_cmi = raster::coordinates(raster::raster(paste0(mainDir, 'cmi/', allYear[1], "/cmi60_01.tif")))
   # ref_coordinates_pcp = raster::coordinates(raster::raster(paste0(mainDir, 'pcp/', allYear[1], "/pcp60_01.tif")))
 
@@ -135,7 +135,7 @@
   #   print(paste0("year: ", allYear[i]))
 
   #   # Check within bio
-  #   current_raster = raster::raster(paste0(mainDir, 'bio/', allYear[i], "/bio60_01.tif"))
+  #   current_raster = raster::raster(paste0(mainDir, 'bio/', allYear[i], "/bio_01.tif"))
   #   coords = raster::coordinates(current_raster)
   #   print(all.equal(ref_coordinates_bio, coords))
 
@@ -153,6 +153,10 @@
 #
 
 
+# Define climate variables
+# Options are: `bio`, `cmi`, and `pcp`
+clim_variables <- 'bio'
+
 # Stack over years for each variable (bio, cmi, pcp)
 
   ### xy coordinates
@@ -169,13 +173,13 @@
   # then create a list of rasterstacks
   mainFolder <- 'rawData/climateData/'
 
-  for(var in dir(mainFolder))
+  for(var in clim_variables)
   {
 
     cat('Stacking for variable: ', var, '\n')
 
     year_folder <- list.files(paste0(mainFolder, var))
-    climate_files <- list.files(paste0(mainFolder, var, '/', year_folder[1]), pattern = '.tif')
+    climate_files <- list.files(paste0(mainFolder, var, '/', year_folder[1]), pattern = '.asc')
     
     varList <- list()
     yearList <- list()
@@ -216,7 +220,7 @@
   # a data.frame plot_xy_id and the variables
   var_pts <- list()
   
-  for(var in dir('rawData/climateData/'))
+  for(var in clim_variables)
   {
 
     cat('Extracting climate data for variable: ', var, '\n')
@@ -250,13 +254,13 @@
   # get adjacent cells for each NA cell
   crazy_plots <- list()
   var_newCells <- list()
-  for(var in dir('rawData/climateData'))
+  for(var in clim_variables)
   {
 
     cat('Getting adjacent cells for NA values: ', var, '\n')
 
     # get lat-lon of NA values (from plots that are located at the margin of the climate raster)
-    varDf <- subset(var_pts[[var]][[1]], is.na(get(paste0(var, '60_01'))), select = ID_PE)
+    varDf <- subset(var_pts[[var]][[1]], is.na(get(paste0(var, '_01'))), select = ID_PE)
 
     # add coordinates of missing plots
     varDf <- cbind(varDf, raster::coordinates(plot_xy1[plot_xy$ID_PE %in% varDf$ID_PE, ]))
@@ -293,7 +297,7 @@
   
 
   # Replace the NA values by the mean value of adjacent cells
-  for(var in dir('rawData/climateData')) 
+  for(var in clim_variables) 
   {
 
     cat('Replacing the NA values: ', var, '\n')
@@ -331,11 +335,15 @@
 
 
 # Merge lists of year into one data.frame
-  # There will be still one main list with the three variables
 
-  vars_df <- list()
-  for(var in dir('rawData/climateData'))
-    vars_df[[var]] <- data.table::rbindlist(var_pts[[var]], idcol = '.id')
+  vars_df <- Reduce(
+    merge,
+    lapply(
+      var_pts,
+      function(x)
+        data.table::rbindlist(x, idcol = '.id')
+    )
+  )
 
 #
 
@@ -344,16 +352,14 @@
 # Correction for temperature variables
 
   # # All temperature variables must be divided by 10 
-  T.var <- c("bio60_01", "bio60_02", "bio60_05", "bio60_06", "bio60_07", "bio60_08", "bio60_09", "bio60_10", "bio60_11")
+  T.var <- c("bio_01", "bio_02", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11")
+
+  vars_df[ , (T.var) := lapply(.SD, function(x) x/10), .SDcols = T.var]
 
   # # Temperature seasonality (bio_04) must be divided by 100
-  Tseason <- "bio60_04"
+  Tseason <- "bio_04"
 
-  vars_df[[1]] <- vars_df[[1]] %>% 
-    dplyr::mutate_at(T.var, funs(./10)) %>%
-    dplyr::mutate_at(Tseason, funs(./100))
-
-  vars_df[[1]] <- as.data.table(vars_df[[1]])
+  vars_df[ , (Tseason) := lapply(.SD, function(x) x/100), .SDcols = Tseason]
 
 #
 
@@ -361,6 +367,7 @@
 
 # Get cellID
   plot_coord <- plot_xy1 %>%
+    st_as_sf() %>%
     st_transform(4326) %>%
     st_coordinates()
 
@@ -370,104 +377,80 @@
     cellnumbers = TRUE
   )[, 1L] 
 
-
 #
 
 
 
-# Long format for rolling average
+# Prepare object to average climate data for the years within a deltaYear
 
-  IDVAR <- c('.id', 'ID_PE', 'X', 'Y')
-  vars_df_long <- list()
+  # function to return unique measurement years and the number of years between measurements per plot_id
+  diff_yMeasured <- function(years)
+  {  
+    uq_year <- sort(unique(years))
+    yr_diff <- diff(uq_year) - 1
+
+    # as first year won't be used, add zero in the first place
+    yr_diff <- c(0, yr_diff)
+
+    return( list(year_measured = uq_year, diff = yr_diff) )
+  }
   
-  for(var in dir('rawData/climateData'))
+  plot_climVars <- as.data.table(tree_data)[, 
+    diff_yMeasured(year_measured),
+    by = ID_PE
+  ]
+
+  # add cellID
+  plot_climVars[
+    as.data.table(plot_xy1),
+    cellID := i.cellID,
+    on = 'ID_PE'
+  ]
+
+# 
+
+
+
+# Rolling average between years within the deltaYear
+
+  roll_average <- function(clim_dt, plot_id, year, diff, vars)
   {
+    # define the years to mean
+    years <- (year - diff):year
+
+    # subset clim data
+    dat <- clim_dt[ID_PE == plot_id & year %in% years, vars, with = FALSE]
     
-    varNames <- names(vars_df[[var]])[!names(vars_df[[var]]) %in% IDVAR]
-    vars_df_long[[var]] <- data.table::melt(vars_df[[var]], id.vars = IDVAR,
-                                            measure.vars = varNames,
-                                            variable.name = paste0(var, '_var'),
-                                            value.name = var)
+    # calculate mean for desirable columns "vars"
+    Mean <- apply(dat, 2, mean, na.rm = TRUE)
+    SD <- apply(dat, 2, sd, na.rm = TRUE)
+
+    # add vars name and convert all to list (needed by data.table)
+    return( 
+      as.list(
+        c(
+          setNames(Mean, paste0(vars, '_mean')),
+          setNames(SD, paste0(vars, '_sd'))
+        )
+      )
+    )
   }
 
-#
+  plot_climVars[, rowID := 1:.N]
 
+  out <- plot_climVars[,
+    roll_average(
+      clim_dt = vars_df,
+      plot_id = ID_PE,
+      year = year_measured,
+      diff = diff,
+      vars = c('bio_01', 'bio_12')
+    ),
+    by = rowID
+  ]
 
-
-# Rolling average
-  # for 5 years before and 10 years before
-
-  vars_df_roll <- list()
-  # bio
-  vars_df_roll[[1]] <- vars_df_long[[1]][,list(year = .id,
-                                              bio = bio,
-                                              bio_mean5 = frollmean(bio, n = 5, na.rm = TRUE, align = "right", fill = NA), 
-                                              bio_mean10 = frollmean(bio, n = 10, na.rm = TRUE, align = "right", fill = NA)),
-                                              by = list(ID_PE, bio_var)]
-
-  vars_df_roll[[1]][, year := as.integer(gsub('bio_', '', year))]
+  plot_climVars <- merge(plot_climVars, out)
   
-  # cmi
-  vars_df_roll[[2]] <- vars_df_long[[2]][,list(year = .id,
-                                              cmi = cmi,
-                                              cmi_mean5 = frollmean(cmi, n = 5, na.rm = TRUE, align = "right", fill = NA), 
-                                              cmi_mean10 = frollmean(cmi, n = 10, na.rm = TRUE, align = "right", fill = NA)),
-                                              by = list(ID_PE, cmi_var)]
-
-  vars_df_roll[[2]][, year := as.integer(gsub('cmi_', '', year))]
-
-  # pcp
-  vars_df_roll[[3]] <- vars_df_long[[3]][,list(year = .id,
-                                              pcp = pcp,
-                                              pcp_mean5 = frollmean(pcp, n = 5, na.rm = TRUE, align = "right", fill = NA), 
-                                              pcp_mean10 = frollmean(pcp, n = 10, na.rm = TRUE, align = "right", fill = NA)),
-                                              by = list(ID_PE, pcp_var)]
-
-  vars_df_roll[[3]][, year := as.integer(gsub('pcp_', '', year))]
-
-
-#
-
-
-
-# Spreed climate data and merge all three variables into one single df with all info for each plot_id
-
-  # bio
-  bio <- tree_data %>%
-      dplyr::select(ID_PE, ID_PE_MES, plot_id, year_measured) %>%
-      dplyr::distinct() %>%
-      dplyr::left_join(vars_df_roll[[1]], by = c("ID_PE" = "ID_PE", "year_measured" = "year"))
-
-  # cmi
-  cmi <- tree_data %>%
-      dplyr::select(ID_PE, ID_PE_MES, plot_id, year_measured) %>%
-      dplyr::distinct() %>%
-      dplyr::left_join(vars_df_roll[[2]], by = c("ID_PE" = "ID_PE", "year_measured" = "year"))
-
-  # cmi
-  pcp <- tree_data %>%
-      dplyr::select(ID_PE, ID_PE_MES, plot_id, year_measured) %>%
-      dplyr::distinct() %>%
-      dplyr::left_join(vars_df_roll[[3]], by = c("ID_PE" = "ID_PE", "year_measured" = "year"))
-
-  
-  # spreed for each value (mean0, mean5, mean10)
-  names(bio) <- c(names(bio)[1:5], paste0('value', c(0, 5, 10)))
-  bio_s <- bio %>%
-      tidyr::pivot_wider(names_from = bio_var, values_from = c(value0, value5, value10))
-  
-  names(cmi) <- c(names(cmi)[1:5], paste0('value', c(0, 5, 10)))
-  cmi_s <- cmi %>%
-      tidyr::pivot_wider(names_from = cmi_var, values_from = c(value0, value5, value10))
-  
-  names(pcp) <- c(names(pcp)[1:5], paste0('value', c(0, 5, 10)))
-  pcp_s <- pcp %>%
-      tidyr::pivot_wider(names_from = pcp_var, values_from = c(value0, value5, value10))
-  
-  
-  # merge all variables
-  allVar_df <- bio_s %>%
-      dplyr::full_join(cmi_s, by = c("ID_PE", "ID_PE_MES", "plot_id", "year_measured")) %>%
-      dplyr::full_join(pcp_s, by = c("ID_PE", "ID_PE_MES", "plot_id", "year_measured"))
+  plot_climVars[, c('rowID', 'diff') := NULL]
 
 #
