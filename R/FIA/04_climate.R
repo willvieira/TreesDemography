@@ -297,6 +297,8 @@ vars_df <- Reduce(
   )
 )
 
+vars_df[, year_measured := gsub('.*_', '', .id)]
+
 
 
 #------------------------------------------------------
@@ -360,7 +362,7 @@ diff_yMeasured <- function(years)
   # as first year won't be used, add zero in the first place
   yr_diff <- c(0, yr_diff)
 
-  return( list(year_measured = uq_year, diff = yr_diff) )
+  return( list(year_measured = uq_year, dif = yr_diff) )
 }
 
 plot_climVars <- treeData[, 
@@ -378,13 +380,17 @@ plot_climVars[
 
 
 # Rolling average between years within the deltaYear
-roll_average <- function(clim_dt, plotId, year, diff, vars)
+roll_average <- function(clim_dt, plotId, year, dif, vars)
 {
   # define the years to mean
-  years <- (year - diff):year
+  years <- (year - dif):year
 
   # subset clim data
-  dat <- clim_dt[plot_id == plotId & year %in% years, vars, with = FALSE]
+  dat <- clim_dt[
+    plot_id == plotId &
+    year_measured %in% years,
+    vars, with = FALSE
+  ]
   
   # calculate mean for desirable columns "vars"
   Mean <- apply(dat, 2, mean, na.rm = TRUE)
@@ -408,7 +414,7 @@ out <- plot_climVars[,
     clim_dt = vars_df,
     plotId = plot_id,
     year = year_measured,
-    diff = diff,
+    dif = dif,
     vars = c('bio_01', 'bio_12')
   ),
   by = rowID
@@ -416,7 +422,7 @@ out <- plot_climVars[,
 
 plot_climVars <- merge(plot_climVars, out, by = 'rowID')
 
-plot_climVars[, c('rowID', 'diff') := NULL]
+plot_climVars[, c('rowID', 'dif') := NULL]
 
 # save
 saveRDS(plot_climVars, 'data/FIA/clim_dt.RDS')
