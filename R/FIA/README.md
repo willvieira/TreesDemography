@@ -58,3 +58,18 @@ Each of the following steps is a `R` script :
   - Remove extreme growth rate (0 < growth < 35 mm/year)
   - Keep natural dead events for mortality
   - remove already indivuduals
+
+### Ingrowth
+  - Seedlings:
+    - Fix species_id
+    - Fix count of seedlings for initial inventories where classes were used
+    - For a particular class of 6+, genarate seedling count from the population distribution (grouped species)
+    - Count number of seedling per plot/subplot/year/species
+  - Saplings:
+    - Count number of alive individuals with with dbh < 127 mm
+  - Ingrowth:
+    - Tag individuals that cross the 127 mm dbh threshold as ingrowth
+    - Recalculate all BA indices considering only adults (dbh > 127 mm) and no recruits (ingrowth)
+    - Group data by plot/subplot/year/species and transform db in a transition
+    - Adjust individual and plot variables for year0 reference
+  - Merge seedlings and saplings db to the ingrowth

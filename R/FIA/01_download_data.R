@@ -87,10 +87,9 @@ for(st in states)
     # - alternatively, subset this to only those tables you want
     #   e.g. `db_table_names <- c("SURVEY", "PLOT")`
     db_table_names <- c(
-        'TREE', 'PLOT', 'COND',
+        'TREE', 'PLOT', 'COND', 'SEEDLING',
         'SUBPLOT', 'SUBP_COND', 'SURVEY'
     )
-    db_table_names = 'SUBP_COND'
 
     # iterate through the table names and write out a csv for each table in the db
     invisible(

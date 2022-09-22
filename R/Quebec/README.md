@@ -64,3 +64,17 @@ Each of the following steps is a `R` script :
   - Filter for natual dead only
   - Remove first dead measurement for mortality
   - Create a mort column [0 - 1]
+
+### Ingrowth
+  - For ingrowth:
+    - Tag individuals that cross the 127 mm dbh threshold as ingrowth to match FIA
+    - Recalculate all BA indices considering only adults (dbh > 127 mm) and no recruits (ingrowth)
+    - Group data by plot/subplot/year/species and transform db in a transition
+    - Adjust individual and plot variables for year0 reference
+  - For seedling:
+    - Count number of seedling per plot/year/species
+  - For sapling:
+    - Classes of sapling to column
+    - Create new class of sapling between 91 and 127 mm to match to FIA
+    - Sum total saplings among all classes of size
+  - Merge seedlings and saplings db to the ingrowth
