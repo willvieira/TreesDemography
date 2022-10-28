@@ -46,7 +46,57 @@ final_transition <- copy(final_dt)
   final_transition[, state0 := state]
   final_transition[, state := NULL]
 
-  # Remove first measure with NA due to transition transformation
+#
+
+
+
+
+# shift climate data
+
+  final_transition[, nbMeasure := length(unique(year0)), by = ID_PE]
+  setorder(final_transition, cols = 'year0')
+
+  shift_cols <- function(year0, Col)
+  {
+      # define yearID
+      uqYears <- unique(year0)
+      
+      # output list
+      newCol <- rep(NA, length(year0))
+
+      for(yr in 1:(length(uqYears) -1))
+          newCol[which(year0 == uqYears[yr])] <-
+              unique(Col[which(year0 == uqYears[yr + 1])])
+
+      return( newCol )
+  }
+
+  # shift enviromental variables
+  final_transition[
+      nbMeasure > 1,
+      c('bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd') := lapply(
+          .SD,
+          function(x)
+              shift_cols(year0 = year0, Col = x)
+      ),
+      by = ID_PE,
+      .SDcols = c('bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd')
+  ]
+
+  # return to previous ordered dt
+  setorderv(
+      final_transition,
+      cols = c('ID_PE', 'year0'),
+      order = c(1, 1)
+  )
+
+
+#
+
+
+
+# Remove first measure with NA due to transition transformation
+
   final_transition <- final_transition[!is.na(deltaYear)]
 
 #
@@ -76,10 +126,7 @@ final_transition <- copy(final_dt)
 #
 
 
-# Remove extreme growth rate
-
-  # Remove negative growth rate and > 35 mm/year
-  growth_dt <- growth_dt[growth > 0 & growth < 35]
+# Remove extreme growth rate (not anymore)
 
   # Change state1 to state
   growth_dt[, state := state1]

@@ -577,8 +577,8 @@ for(plot_id in fec_dt[, unique(ID_PE)])
     st_write(bound_Qc, "data/quebec/bound_Qc.gpkg")
     saveRDS(env_data, "data/quebec/env_data.RDS")
     saveRDS(plot_climVars, "data/quebec/bio-cmi-pcp.RDS")
-    saveRDS(growth_dt, "data/quebec/growth_dt.RDS")
-    saveRDS(mort_dt, "data/quebec/mort_dt.RDS")
+    saveRDS(growth_dt, "data/quebec/growth_transition_dt.RDS")
+    saveRDS(mort_dt, "data/quebec/mort_transition_dt.RDS")
     saveRDS(fec_dt, "data/quebec/fec_dt.RDS")
 
 #
