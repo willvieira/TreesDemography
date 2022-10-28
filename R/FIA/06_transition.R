@@ -50,6 +50,46 @@ treeData[, status1 := shift(status, 1, type = 'lead'), by = tree_id]
 treeData[, status0 := status]
 treeData[, status := NULL]
 
+
+# shift climate data
+treeData[, nbMeasure := length(unique(year0)), by = plot_id]
+setorder(treeData, cols = 'year0')
+
+shift_cols <- function(year0, Col)
+{
+    # define yearID
+    uqYears <- unique(year0)
+    
+    # output list
+    newCol <- rep(NA, length(year0))
+
+    for(yr in 1:(length(uqYears) -1))
+        newCol[which(year0 == uqYears[yr])] <-
+            unique(Col[which(year0 == uqYears[yr + 1])])
+
+    return( newCol )
+}
+
+# shift enviromental variables
+treeData[
+    nbMeasure > 1,
+    c('bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd') := lapply(
+        .SD,
+        function(x)
+            shift_cols(year0 = year0, Col = x)
+    ),
+    by = plot_id,
+    .SDcols = c('bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd')
+]
+
+# return to previous ordered dt
+setorderv(
+    treeData,
+    cols = c('plot_id', 'subplot_id', 'year0'),
+    order = c(1, 1, 1)
+)
+
+
 # Remove first measure with NA due to transition transformation
 treeData <- treeData[!is.na(deltaYear)]
 
@@ -69,9 +109,6 @@ growth_dt = treeData[status1 == 1]
 
 #------------------------------------------------------
 #------------------------------------------------------
-
-# Remove extreme growth rates
-growth_dt <- growth_dt[growth > 0 & growth < 35]
 
 
 # simplify status
@@ -105,5 +142,5 @@ mort_dt[, mort := ifelse(status1 == 1, 0, 1)]
 # Save
 #------------------------------------------------------
 
-saveRDS(growth_dt, 'data/FIA/growth_dt.RDS')
-saveRDS(mort_dt, 'data/FIA/mort_dt.RDS')
+saveRDS(growth_dt, 'data/FIA/growth_transition_dt.RDS')
+saveRDS(mort_dt, 'data/FIA/mort_transition_dt.RDS')
