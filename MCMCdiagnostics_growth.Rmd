@@ -1,273 +1,188 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v8.0 - canopyDistance effect with two different parameters set"
+ subtitle: "Test v10.0 - Von Bertalanffy model"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Compare the convergence of the model using the `canopyDistance` predictor as the competition effect:
-
-- sim1: sigmoid with `Lo` [0-1] and `mid` [0.1 - 0.5] parameters
-- sim2: sigmoid with `Lo` [0-1] and `beta` [-10 - 10] parameters
+## Diagnostics for the Von Bertalanffy model
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
-suppressPackageStartupMessages(library(rstan))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
 suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
 suppressPackageStartupMessages(library(ggridges))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(DT))
-suppressPackageStartupMessages(library(data.table))
-suppressPackageStartupMessages(library(ranger))
-suppressPackageStartupMessages(library(lme4))
-suppressPackageStartupMessages(library(MuMIn))
 ```
+
+
 ```{r load simulations, echo = F}
 # Load simulation variables
-  simInfo <- yaml::read_yaml('_simulation_info.yml')
+simInfo <- yaml::read_yaml('_simulation_info.yml')
 
-  # species id
-  if(is.null(simInfo$spIds)) {
-    spIds <- readRDS('data/spIds.RDS')
-  }else {
-    spIds <- simInfo$spIds
-  }
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+simulations <- simInfo$simulations
 
-  simName <- simInfo$simName
+# List output files and set vector names to species_id
+posterior_files <- grep(
+  'posterior',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posterior_files) <- names(sort(sapply(spIds, function(x) grep(x, posterior_files))))
 
-  simulations <- simInfo$simulations
+diag_files <- grep(
+  'diagnostics',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 
-  # Human readble simName
-  sim1name <- 'Lo & mid pars'
-  sim2name <- 'Lo & beta pars'
-
-#
-
-
-# Load rStan output and scaleInfo for all species_id
-  # get output name for each species_id
-  simNames = list.files(path = paste0('output/', simName), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
-  output = simNames[grep('growthMCMC', simNames)]
-
-  for(sim in simulations) {
-    for(sp in spIds) {
-      fileName <- output[grep(paste0(sim, sp), output)]
-      assign(paste('fit', sim, sp, sep = '_'), readRDS(fileName))
-    }
-  }
-
-  # get name of parameters for each simulation
-  for(sim in simulations)
-    assign(paste0('pars_', sim), rownames(summary(get(ls(pattern = sim)[1]))[[1]]))
-
+trainData_files <- grep(
+  'trainData',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
 ```
 
 
 
 # Rhat
 
-```{r, echo = F, fig.height = 6, fig.width = 10}
-
-  # number of parameters for all simulations
-  nbParams <- prod(unlist(lapply(as.list(paste0('pars_', simulations)), function(x) length(get(x)))))
-  # create a table with Rhat for each parameter (clumn) and species_id (Rhat)
-  Rhat <- data.frame()
-  count = 1
-  for(sim in simulations) {
-    for(sp  in spIds) {
-      df <- summary(get(paste('fit', sim, sp, sep = '_')))$summary
-      dfToAdd <- data.frame(
-          sim, 
-          sp,
-          rownames(df),
-          df[, 'Rhat'],
-          row.names = NULL
-      )
-      Rhat <- rbind(Rhat, dfToAdd)
-    }
-  }
-  names(Rhat) <- c('sim', 'sp', 'pars', 'Rhat')
-
-  p <- ggplot(data = Rhat, aes(x = sp, y = Rhat)) +
-       geom_boxplot() +
-       coord_flip() +
-       facet_grid(~sim, scales = 'free_x',
-                 labeller = labeller(sim = setNames(c(sim1name, sim2name),
-                                     c('sim1', 'sim2'
-                                    )))) +
-       theme_classic()
-  print(p)
+```{r rhat, echo = F, fig.height = 7, fig.width = 7}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['rhat']] |>
+      bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = rhat, y = species_id)) +
+  geom_boxplot()
 ```
 
 
 
 # Divergent transitions
 
-```{r divergent transitions, echo = FALSE}
+```{r divergentTransitions, echo = FALSE}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+      bind_cols(species_id = .y) |>
+      mutate(chain = row_number())
+) |>
+pivot_wider(
+  names_from = chain,
+  values_from = num_divergent,
+  names_prefix = 'chain '
+) |>
+DT::datatable()
+```
 
-divergentDF <- data.frame(matrix(NA, ncol = 3))
-names(divergentDF) <- c('sim', 'sp', 'divergent')
 
-count = 1
-for(sim in simulations) {
-  for(sp in spIds) {
-    simNames <- paste('fit', sim, sp, sep = '_')
-    sampler_params <- get_sampler_params(get(simNames), inc_warmup = FALSE)
-    nbDivergent <- sum(unlist(lapply(sampler_params, function(mat) mat[, 'divergent__'])))
-    divergentDF[count, ] <- c(sim, sp, nbDivergent)
-    count = count + 1
-  }
+
+# Posterior distribution of parameters
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
+post <- map2_dfr(
+  posterior_files,
+  names(posterior_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
+)
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot(aes(x = value, y = species_id)) +
+        stat_eye() +
+        ggtitle(Par) +
+        xlab('')
+  )
 }
 ```
 
-```{r divergent table, echo = FALSE}
-DT::datatable(divergentDF)
-```
 
+# Correlation between parameters
 
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
 
-# Density plot of each parameter by species id
+parComb <- post |>
+  summarise(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
 
-```{r get MCMC sampling data, eval = TRUE,echo = F}
-    
-  # extact parameter summary for all sp * simulations
-  ext_summ <- function(fit)
-    summary(get(fit))$summary[, 4:8] %>%
-      as.data.frame() %>%
-      rownames_to_column(var = 'param')
-      
-  params_summ = map_df(
-    setNames(
-      as.list(grep('fit_', ls(), value = TRUE)),
-      grep('fit_', ls(), value = TRUE)
-    ),
-    ext_summ,
-    .id = 'sp_sim'
-  ) %>%
-  rowwise() %>%
-  mutate(
-    sim = unlist(strsplit(sp_sim, '_'))[2],
-    sp = unlist(strsplit(sp_sim, '_'))[3]
-  ) %>%
-  select(-1)
-
-
-  # function to plot parameter distribution
-  plot_parDist <- function(par_dt)
-  {
-    spIds <- unique(par_dt$sp)  
-    sims <- unique(par_dt$sim)
-
-    xLim <- range(par_dt[, 2:6])
-    yLim <- c(0.75, length(spIds) - 0.75)
-
-    simCols <- setNames(
-      c(
-        rgb(221, 170, 51, maxColorValue = 255),
-        rgb(187,85, 102, maxColorValue = 255)
-      ),
-      sims
-    )
-
-    par(xaxs = "i", las = 1, mar = c(2.5, 2, 1.5, 1.5), oma = c(1, 4, 2, .2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
-
-    plot(0, pch = '', yaxt = 'n', xlim = xLim, ylim = yLim, xlab = unique(par_dt$param), ylab = '')
-    for(Sp in 1:length(spIds))
-    {
-      for(Sim in sims)
-      {
-        par_spSim <- subset(par_dt, sp == spIds[Sp] & sim == Sim)
-        par_spSim <- apply(par_spSim[, 2:6], 2, mean)
-        segments(
-          x0 = par_spSim['2.5%'],
-          y0 = Sp + ifelse(Sim == 'sim1', +0.15, -0.15),
-          x1 = par_spSim['97.5%'],
-          y1 = Sp + ifelse(Sim == 'sim1', +0.15, -0.15),
-          col = simCols[Sim],
-          lwd = 2
-        )
-        segments(
-          x0 = par_spSim['25%'],
-          y0 = Sp + ifelse(Sim == 'sim1', +0.15, -0.15),
-          x1 = par_spSim['75%'],
-          y1 = Sp + ifelse(Sim == 'sim1', +0.15, -0.15),
-          col = simCols[Sim],
-          lwd = 4
-        )
-      }
-      abline(h = Sp + 0.5, lty = 2, col = rgb(0, 0, 0, 0.2))
-    }
-    axis(2, at = 1:length(spIds), labels = gsub('[0-9]', '', spIds))
-    legend('bottomright', legend = sims, col = simCols, bty = 'n', pch = 19)
-  }
-
-```
-
-```{r plot mcmcSample by pars, eval = T,echo = F, message=FALSE, fig.height = 7, fig.width = 7}
-
-all_pars <- unique(params_summ$param)
-fixed_pars <- grep(
-  'pdg_pmean',
-  all_pars,
-  value = TRUE,
-  invert = TRUE
-)
-random_pars <- setdiff(all_pars, fixed_pars)
-
-
-for(Par in fixed_pars)
-  plot_parDist(subset(params_summ, param == Par))
-
-plot_parDist(subset(params_summ, param %in% random_pars))
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_id) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot(aes_string(x = parComb[1, i], y = parComb[2, i])) + 
+          geom_point() +
+          facet_wrap(~ species_id) +
+          xlab(parComb[1, i]) +
+          ylab(parComb[2, i])
+  )
+}
 ```
 
 # Data distribution
 
-```{r organize data, echo = FALSE}
-growth_dt <- readRDS('data/growth_dt.RDS')
-growth_dt <- growth_dt[species_id %in% spIds]
-growth <- growth_dt[, .(plot_id, species_id, growth, dbh0, deltaYear, bio_01, bio_12, canopyDistance)]
+```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+trainData <- map2_dfr(
+  trainData_files,
+  names(trainData_files),
+  ~ readRDS(.x)
+)
 
-# transform dt
-growth <- tidyr::gather(data = growth,
-            growth, dbh0, bio_01, bio_12, canopyDistance,
-            key = 'var', value = 'value')
+treeData <- readRDS('data/treeData.RDS')
+treeData <- treeData[species_id %in% spIds]
+
+# merge with train data
+treeData[
+  trainData,
+  sampled := i.sampled,
+  on = c('tree_id', 'year_measured')
+]
+
+# split between train and everything else (merge validate with rest of data)
+treeData[, sampled2 := sampled]
+treeData[is.na(sampled), sampled2 := 'validation']
+
+treeData[,
+  time := year_measured - year_measured[which.min(year_measured)],
+  by = tree_id
+]
+
+treeData[, .(species_id, dbh, time, sampled2)] |>
+  mutate(sample = sampled2) |>
+  pivot_longer(
+    cols = c(dbh, time),
+    names_to = 'var'
+  ) |>
+  ggplot(aes(x = value, y = species_id, color = sample, fill = sample)) +
+    geom_density_ridges(alpha = 0.5) +
+    facet_wrap(~var, scales = 'free_x') +
+    xlab('')
 ```
 
-```{r plot data distribution, echo = FALSE, message=FALSE, fig.height = 7, fig.width = 10}
-ggplot(data = growth, aes(value, species_id)) +
-      geom_density_ridges_gradient() +
-      facet_grid(~var, scales = 'free_x') + #,
-      #          labeller = labeller(sim = setNames(c(sim1name,
-      #                              sim2name),
-      #                              c('sim1', 'sim2')))) +
-      theme_classic()
-rm(growth)
-```
 
 
-# Size, temperature, precipitation and competition effect
-
-```{r, echo = F, fig.height = 13, fig.width = 9}
-# Plot of size, temperature, precipitation and competition effect
-
-  # define functions of the model
-    # size effect
-    sizeEffect = function(x, Phi_opt, sigmaPhi_opt) {
-      lgPart <- (log(x/Phi_opt)/sigmaPhi_opt)^2
-      return( exp(-lgPart))
-    }
-
-    # temperature effect
-    tempEffect = function(xtemp, T_opt, sigmaT_opt) {
-      return(0.0001 + exp(-0.5*(xtemp - T_opt)^2/sigmaT_opt^2))
-    }
-
-    # precipitation effect
-    precEffect = function(xprec, P_opt, sigmaP_opt) {
-      return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
-    }
+# Predictions
 
     compEffect = function(x, params, sim) {
       if(sim == 'sim1') {
@@ -283,11 +198,11 @@ rm(growth)
 
  # define x axis
   sizex = seq(0, 1100, 0.5)
-  tempx = seq(-8, 24, 0.1)
+  tempx = seq(5, 25, 0.1)
   precx = seq(100, 2000)
 
   # species specfic colours
-  spCols <- colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(spIds))
+  spCols <- rev(RColorBrewer::brewer.pal(length(spIds), "Set3"))
   par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
   # plot size effect
   for(sim in simulations) {
@@ -372,40 +287,33 @@ rm(growth)
   legend('bottomright', legend = spIds, col = spCols, lty = 1, bty = 'n', cex = 0.9)
 ```
 
+# Out-of-bag cross-validation
 
-# Predictions
+To assess model generality we test how good the model is in predicting new observations. The following figures show a 1:1 plot of observed vs predicted data for two diferent measures: DBH size (directly predicted by the model) and annual growth rate (derived from predicted size). We also plot the distribution of the observed vs the predicted measures.
 
-```{r,echo=FALSE,fig.height = 15.5, fig.width = 12}
-growth_model <- function(sp, sim, pars, D, TP, PP, CD, indVar = FALSE)
-{
+```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
+# As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
+# So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
-  # loop to get growth in function of parameter mean, 10 or 90%
-  growth_ls <- list()
-  for(i in c('mean', 'ci10', 'ci90'))
-  {
-    param <- pars[[paste0('param_', i)]]
+# add species_id to db
+trainData[
+  treeData,
+  `:=`(
+    'species_id' = i.species_id,
+    'dbh' = i.dbh
+  ),
+  on = c('tree_id', 'year_measured')
+]
 
-    lgPart <- (log(D/param["Phi_opt"])/param["sigmaPhi_opt"])^2
+# calculate `time` from year_measured
+trainData[,
+  time := year_measured - year_measured[which.min(year_measured)],
+  by = tree_id
+]
 
-    if(sim == 'sim1') {
-      compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-0.45 * (CD - param['mid'])))))
-    }else{
-      compEffect <- (param['Lo'] + ((1 - param['Lo']) / (1 + exp(-param['beta'] * (CD)))))
-    }
-    mu_d <- param["pdg"] *
-            compEffect *
-            exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
-            exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-            exp(-lgPart)
 
-    if(!indVar)
-    {
-      growth <- mu_d
-    }else {
-      lower <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"], lower.tail = FALSE)
-      upper <- qgamma(.95, (mu_d^2/param["sigma_base"]), mu_d/param["sigma_base"])
-      growth <- data.frame(means = mu_d, lower = lower, upper = upper)
-    }
+# list to save MSE and R2 for each species to be used later
+MSE_list <- R2_list <- list()
 
     growth_ls[[i]] <- growth
   }
@@ -415,10 +323,10 @@ growth_model <- function(sp, sim, pars, D, TP, PP, CD, indVar = FALSE)
 
 
 # define classes for each predictive variables
-growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), length.out = 8)), by = species_id]
-growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), length.out = 8)), by = species_id]
-growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), length.out = 8)), by = species_id]
-growth_dt[, compc := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), length.out = 8)), by = species_id]
+growth_dt[, sizec := cut(dbh0, seq(min(dbh0), max(dbh0), 8)), by = species_id]
+growth_dt[, tempc := cut(bio_01, seq(min(bio_01), max(bio_01), 1.5)), by = species_id]
+growth_dt[, precc := cut(bio_12, seq(min(bio_12), max(bio_12), 100)), by = species_id]
+growth_dt[, compc := cut(canopyDistance, seq(min(canopyDistance), max(canopyDistance), 5)), by = species_id]
 
 # get the classe with max of individuals (best representative classe)
 growth_dt[, maxsizec := names(which.max(table(sizec))), by = species_id]
@@ -429,85 +337,72 @@ growth_dt[, maxcompc := names(which.max(table(compc))), by = species_id]
 
 for(sp in spIds)
 {
+  val_sp <- trainData[species_id == Sp & sampled == 'validation']
 
-  # plot
-  par(mfcol = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(9, 4, 1.5, 1), oma = c(7, 5, 7, .5), mgp = c(6, 2.5, 0), tck = -.008, cex.lab = 4, cex.axis = 4, cex = 0.3)
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 1k iterations of the 8000
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 1000)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 1000)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp <- merge(
+      val_sp,
+      post |>
+          filter(species_id == Sp) |>
+          pivot_wider(names_from = par, values_from = value) |>
+          as.data.table(),
+      by = c('iter')
+  )
   
-  for(sim in c('sim1', 'sim2'))
-  {  
-    # get parameters
-    fit <- get(paste('fit', sim, sp, sep = '_'))
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
 
-    # posterior distribution
-    posterior <- rstan::extract(fit)
+  # predict size
+  val_sp[,
+    pred_size := mu_Lo *
+            exp(-r * time) +
+            Lmax * (1 -exp(-r * time))
+  ]
 
-    param_summary <- summary(fit, probs = c(0.1, 0.9))$summary
-    #rownames(param_summary) <- names(posterior)
-    param_summary <- param_summary[,-c(2:3)]
+  val_sp[,
+    sigma := sqrt((exp(-2 * r * time) * sigma_Lo^2) + sigma_obs^2)
+  ]
 
-    # define parameters
-    nRow <- nrow(param_summary)
-    pars <- list(
-        param_mean = param_summary[-nRow, 1],
-        param_ci10 = param_summary[-nRow, 2],
-        param_ci90 = param_summary[-nRow, 3]
-    )
+  # simulate size from model distribution (normal dist)
+  val_sp[,
+      pred_size_random := rnorm(.N, pred_size, sigma)
+  ]
 
-    # Size effect
-    sp_dt <- growth_dt[
-      species_id == sp &
-      tempc == maxtempc &
-      precc == maxprecc &
-      compc == maxcompc
-    ]
 
-    x <- growth_dt[species_id == sp, seq(min(dbh0), max(dbh0), 0.1)]
-    growth <- growth_model(
-      sp = sp,
-      sim = sim,
-      pars = pars,
-      D = x,
-      TP = sp_dt[, mean(bio_01)],
-      PP = sp_dt[, mean(bio_12)],
-      CD = sp_dt[, mean(canopyDistance)]
-    )
-
-    sp_dt[, plot(dbh0, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(dbh0, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Size (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.3), border = NA
+      col = alpha("grey25", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
+    points(x, growth$mean, type = 'l', lwd = 2)
 
-    mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 225, cex = 1.2, line = 0.25)
+  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
+  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = tree_id]
 
-    # temperature effect
-    sp_dt <- growth_dt[
-      species_id == sp &
-      sizec == maxsizec &
-      precc == maxprecc &
-      compc == maxcompc
-    ]
+  val_sp[, obs_growth := (dbh - obs_size0)/(time - time0)]
+  val_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
+  val_sp[, pred_growth_random := (pred_size_random - pred_size_random0)/(time - time0)]
 
-    x <- growth_dt[species_id == sp, seq(min(bio_01), max(bio_01), 0.01)]
-    growth <- growth_model(
-      sp = sp,
-      sim = sim,
-      pars = pars,
-      D = sp_dt[, mean(dbh0)],
-      TP = x,
-      PP = sp_dt[, mean(bio_12)],
-      CD = sp_dt[, mean(canopyDistance)]
-    )
+  # calculate MSE
+  val_sp[, SE_size := (dbh - pred_size_random)^2]
+  val_sp[, SE_growth := (obs_growth - pred_growth_random)^2]
 
-    sp_dt[, plot(bio_01, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_01, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Mean annual temperature (°C)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.3), border = NA
+      col = alpha("grey25", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
+    points(x, growth$mean, type = 'l', lwd = 2)
 
     # Precipitation effect
     sp_dt <- growth_dt[
@@ -517,24 +412,26 @@ for(sp in spIds)
       compc == maxcompc
     ]
 
-    x <- growth_dt[species_id == sp, seq(min(bio_12), max(bio_12), 1)]
-    growth <- growth_model(
-      sp = sp,
-      sim = sim,
-      pars = pars,
-      D = sp_dt[, mean(dbh0)],
-      TP = sp_dt[, mean(bio_01)],
-      PP = x,
-      CD = sp_dt[, mean(canopyDistance)]
-    )
+  # Calculate R2 (Gelman et al 2018)
+  R2_list[[Sp]] <- val_sp |>
+    group_by(iter2) |>
+    summarise(var_size = var(pred_growth, na.rm = TRUE)) |>
+    bind_cols(iter = sampledIter) |>
+    left_join(
+      post |>
+        filter(species_id == Sp & par == 'sigma_obs') |>
+        mutate(sigma_obs = value) |>
+        select(iter, sigma_obs, species_id)
+    ) |>
+    mutate(r2 = var_size/(var_size + sigma_obs))
 
-    sp_dt[, plot(bio_12, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(bio_12, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Total annual precipitation (mm)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.3), border = NA
+      col = alpha("grey25", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
+    points(x, growth$mean, type = 'l', lwd = 2)
 
     # Competition effect
     sp_dt <- growth_dt[
@@ -555,26 +452,47 @@ for(sp in spIds)
       CD = x
     )
 
-    sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .6, col = rgb(0, 0, 0, 0.4), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
+    sp_dt[, plot(canopyDistance, growth, pch = 19, cex = .8, col = rgb(0, 0, 0, 0.6), ylim = c(0, quantile(growth, 0.99)), xlab = 'Canopy distance (m)', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))]
     polygon(
       c(x, rev(x)),
       c(growth$ci10, rev(growth$ci90)),
-      col = alpha("deepskyblue4", 0.3), border = NA
+      col = alpha("grey25", 0.1), border = NA
     )
-    points(x, growth$mean, type = 'l', lwd = 2, col = 'deepskyblue4')
+    points(x, growth$mean, type = 'l', lwd = 2)
   }
    mtext(sp, 3, outer = TRUE, cex = 1.3, line = 2.5)
 }
 ```
 
-# Out-of-bag predictions
+  # plot
+  p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
+      ggplot(aes(m_obs, m_pred)) +
+          geom_hex(bins = 100) +
+          geom_abline(slope = 1, intercept = 0) + 
+          tune::coord_obs_pred() +
+          theme(
+                legend.position="none",
+                plot.margin = margin(t = 30)
+            ) +
+          xlab('Observerd size') +
+          ylab('Predicted size')
 
-To compare the model efficiency, we plot the 1:1, and the regression line from `lm(pred_growth ~ observed_growth)` for both Bayesian and random forest methods as reference.
+  p2 <- val_sp[time > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID]  |>
+      ggplot(aes(m_obs, m_pred)) +
+          geom_hex(bins = 100) +
+          geom_abline(slope = 1, intercept = 0) +
+          xlim(-3, 20) + ylim(-3, 20) +
+          theme(
+                legend.position="none",
+                plot.margin = margin(t = 30)
+            ) +
+          xlab('Observerd growth') +
+          ylab('Predicted growth')
 
-```{r organize data by sp for OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
-  # create a list of data.table objects for each spIds
-  # For each data.table, we will get all rows that were not used in the fitting stan model
-  # I have to do it as the sampleIndices where saved when the data frame was already filtered for the specific sp
+  pred_size_matrix <- val_sp[time > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = pred_size_random) |>
+      select(-iter2) |>
+      as.matrix()
 
   oob_list <- list()
   for(sp in spIds)
@@ -583,11 +501,11 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
     db <- growth_dt[species_id == sp]
 
     # load plot_id references and update plot_id to ID_PE
-    toSub <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim1.RDS'))
+    toSub <- readRDS(paste0('MCMC/', sp, '/sampleInfo/toSub_sim1.RDS'))
     db[toSub, on = .(plot_id), plot_id_seq := i.plot_id_seq]
 
     # load rows used for stan fit
-    sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
+    sampledIndices <- readRDS(paste0('MCMC/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
 
     db <- db[!sampledIndices, ]
     db <- db[!is.na(plot_id_seq), ]
@@ -658,9 +576,10 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
     }
   }
 
-  # loop over species and simulations
-  r2Sp_ls <- list()
-  sampleN <- 30
+  pred_growth_matrix <- val_sp[time > 0 & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
+      select(-iter2) |>
+      as.matrix()
 
   for(sp in spIds)
   {
@@ -739,10 +658,17 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
 ```
 
 ```{r calculate R2 from random forest and LMM,echo=FALSE,warning=FALSE}
+  # Variables to not consider on the model
+  # Quebec
+  # varsToRm <- c("relativeBA_sp", "CAUS_DEFOL", "ETAT", "state_original", "state0", "state1", "spCode", "heightMeasured",
+  #               "height", "nbMeasure", "indBA", "BA_sp", "dbh1", "deltaYear", "year1", "sp_code", "SHAPE",
+  #               "mort", "obs", "slope_cl", "x", "y", "maxRadius", "neighborBA2", "PH_HORIZB", "POURCPIERR", 
+  #               "ORIGINE", "ORIGINE2", "PERTURB", "PERTURB2", "state", "DEFOL_MAX", "ENSOLEIL")
 
-  varsToRm <- c("relativeBA_sp", "db_origin", "dbh1",
-                "height", "indBA", "BA_sp", "plot_size",
-                "deltaYear", "deltaDbh", "year1", "status")
+  # US
+  varsToRm <- c("relativeBA_sp", "org_db_loc",
+                "height", "real_lon", "real_lat", "indBA", "BA_sp", "plot_size", "dbh1", "deltaYear", "year1", 
+                "is_dead", "mort", "nbMeasure")
 
   rf_coeff <- data.table()
   for(sp in spIds)
@@ -751,7 +677,7 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       db <- growth_dt[species_id == sp, setdiff(names(growth_dt), varsToRm), with = FALSE]
 
       # Split into training/validation data
-      sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
+      sampledIndices <- readRDS(paste0('MCMC/', sp, '/sampleInfo/sampledIndices_sim1.RDS'))
       db_training <- na.omit(db[sampledIndices, ])
       db_validation <- na.omit(db[!sampledIndices, ])
 
@@ -827,20 +753,20 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
               latex2exp::TeX(paste0('Bayesian sim1: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim1', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim1', Slope], 2))),
               latex2exp::TeX(paste0('Bayesian sim2: R^2 = ', round(reg_dt[species_id == sp & sim == 'sim2', R2], 2), '; slope = ', round(reg_dt[species_id == sp & sim == 'sim2', Slope], 2))))
     
-    # sample 10% of data
-    db <- oob_growth[species_id == sp]
-    db <- db[sample(1:nrow(db), floor(nrow(db) * 0.1))]
-
     for(sim in simulations)
     {
+      # sample 10% of data
+      dbAll <- oob_growth[species_id == sp, c('growth', grep(sim, names(oob_growth), value = TRUE)), with = FALSE]
+      db <- dbAll[sample(1:nrow(dbAll), floor(nrow(dbAll) * 0.1))]
+
       # plot deterministic growth
       plot(db[, c('growth', paste0('Gdet_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), pch = 20, col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', xaxt = 'n', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(1, labels = NA)
       if(sim == 'sim2') axis(2, labels = NA)
       abline(0, 1)
-      segments(db$growth - 0.01, db[[paste0('Gdet_ci10_', sim)]], db$growth + 0.01, db[[paste0('Gdet_ci10_', sim)]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth - 0.01, db[[paste0('Gdet_ci90_', sim)]], db$growth + 0.01, db[[paste0('Gdet_ci90_', sim)]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth , db[[paste0('Gdet_ci10_', sim)]], db$growth, db[[paste0('Gdet_ci90_', sim)]], col = rgb(0, 0, 0, 0.2)) # vertica
+      segments(db$growth - 0.01, db[[3]], db$growth + 0.01, db[[3]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[4]], db$growth + 0.01, db[[4]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[3]], db$growth, db[[4]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
       abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
       abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
@@ -848,13 +774,13 @@ To compare the model efficiency, we plot the 1:1, and the regression line from `
       mtext(ifelse(sim == 'sim1', paste('sim1:', sim1name), paste('sim2:', sim2name)), 3, at = 3, cex = 1, line = 0.25)
 
 
-      # plot growth with individual variation
-      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', pch = 20, yaxt = ifelse(sim == 'sim1', "s", "n"))
+      # plot gorwth with individual variation
+      plot(db[, c('growth', paste0('Gvar_mean_', sim)), with = FALSE], xlim = c(0, maxGrowth), ylim = c(0, maxGrowth), col = rgb(0, 0, 0, 0.3), xlab = '', ylab = '', yaxt = ifelse(sim == 'sim1', "s", "n"))
       axis(2, labels = NA)
       abline(0, 1)
-      segments(db$growth - 0.01, db[[paste0('Gvar_ci10_', sim)]], db$growth + 0.01, db[[paste0('Gvar_ci10_', sim)]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth - 0.01, db[[paste0('Gvar_ci90_', sim)]], db$growth + 0.01, db[[paste0('Gvar_ci90_', sim)]], col = rgb(0, 0, 0, 0.2))
-      segments(db$growth , db[[paste0('Gvar_ci10_', sim)]], db$growth, db[[paste0('Gvar_ci90_', sim)]], col = rgb(0, 0, 0, 0.2)) # vertica
+      segments(db$growth - 0.01, db[[6]], db$growth + 0.01, db[[6]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth - 0.01, db[[7]], db$growth + 0.01, db[[7]], col = rgb(0, 0, 0, 0.2))
+      segments(db$growth , db[[6]], db$growth, db[[7]], col = rgb(0, 0, 0, 0.2)) # vertica
       abline(get(paste0('reg_', sim)), lty = 2)
       abline(rf_coeffSp[species_id == sp]$Int_rf, rf_coeffSp[species_id == sp]$Slope_rf, lty = 3)
       abline(rf_coeffSp[species_id == sp]$Int_lmm, rf_coeffSp[species_id == sp]$Slope_lmm, lty = 4)
@@ -998,56 +924,31 @@ Furthermore, I added the `sim_full` MSE when running the random forest with all 
 
 ```
 
-```{r plot MSE,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
-  
-  # Rename rf_coeff for legend
-  rf_coeff_lg <- rf_coeff %>%
-                  pivot_longer(!species_id, names_to = 'Method', values_to = 'value') %>%
-                  mutate(
-                    Method = plyr::revalue(
-                      Method,
-                      c('MSE_rf' = 'Random forest', 'MSE_lmm' = 'LMM')
-                    )
-                  )
 
-  # For deterministic growth
-  ggplot(data = MSE_dt, aes(MSE_det, species_id, fill = sim, colour = sim)) + 
+# Mean squared error (MSE) of out-of-bag predictions
+
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+MSE_list |>
+  bind_rows() |>
+  mutate(
+    `Predicted size` = MSE_size,
+    `Predicted growth` = MSE_growth
+  ) |>
+  select(-contains('MSE')) |>
+  pivot_longer(
+    cols = contains('Predicted')
+  ) |>
+  mutate(name2 = factor(name,  levels = c('Predicted size', 'Predicted growth'))) |>
+  ggplot(aes(x = value, y = species_id)) +
     geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
-                                      yend = (length(species_id):1) + .8),
-               color = "black", alpha = 0.6) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
-                                      yend = (length(species_id):1) + .8),
-               color = "black", alpha = 0.6) +
-    xlim(0, 7.6) +
-    theme_classic() +
-    ggtitle('Deterministic growth') +
-    xlab('MSE') +
-    scale_y_discrete(limits = rev(spIds))
-
-
-  # For ind variation growth
-    ggplot(data = MSE_dt, aes(MSE_var, species_id, fill = sim, colour = sim)) + 
-      geom_density_ridges(alpha = 0.4, scale= 1.8) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'Random forest'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
-                                      yend = (length(species_id):1) + .8),
-               color = "black", alpha = 0.6) +
-    geom_segment(data = subset(rf_coeff_lg, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
-                                      yend = (length(species_id):1) + .8),
-               color = "black", alpha = 0.6) +
-    xlim(0, 7.6) +
-    theme_classic() +
-    ggtitle('Ind variable growth') +
-    xlab('MSE') +
-    scale_y_discrete(limits = rev(spIds))
-
+    facet_wrap(~name2, scales = 'free_x') +
+    xlab('Mean Squared error (MSE)') + ylab('')
 ```
 
 
 # Rsquared
 
-Rsquared values draw from the posterior distribution is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
-Like MSE, the $R^{2}$ can be compared with the ones from the random forest using the same variables along with the full model (`sim_full`). However, the $R^{2}$ of the random forest is calculated using the classical equation.
+The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
 ```{r plot Rsquared,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
   
@@ -1055,8 +956,6 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
   rf_coeff_r2 <- rf_coeff_lg %>%
                  dplyr::filter(Method %in% c('R2_rf', 'R2_lmm')) %>%
                  mutate(Method = plyr::revalue(Method, c('R2_rf' = 'Random forest', 'R2_lmm' = 'LMM')))
-
-  xMax <- max(c(rf_coeff_r2$value, MSE_dt$r2))
 
   # For deterministic growth
   ggplot(data = MSE_dt, aes(r2, species_id, fill = sim, colour = sim)) + 
@@ -1067,72 +966,13 @@ Like MSE, the $R^{2}$ can be compared with the ones from the random forest using
     geom_segment(data = subset(rf_coeff_r2, Method == 'LMM'), aes(linetype = `Method`, x = value, xend = value, y = length(species_id):1,
                                       yend = (length(species_id):1) + .8),
                color = "black", alpha = 0.6) +
-    xlim(0, xMax) +
+    xlim(0, 1) +
     theme_classic() +
     xlab('Rsquared') +
     scale_y_discrete(limits = rev(spIds))
 
 ```
 
-
-# Intraclass Correlation Coefficient (ICC)
-
-```{r calculate ICC, echo = FALSE}
-icc <- data.table()
-for(sp in spIds) {
-  for(sim in simulations) {
-    out <- rstan::extract(get(paste('fit', sim, sp, sep = '_')))
-    
-    alpha1 <- out[['pdg_psd']]^2
-    alpha2 <- out[['sigma_base']]
-    ic <- alpha1/(alpha1 + alpha2)
-
-    icc <- rbind(
-      icc,
-      data.table(
-        species_id = sp,
-        sim = sim,
-        icc = ic
-      )
-    )
-  }
-}
-```
-
-```{r plot icc,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
-# For deterministic growth
-ggplot(data = icc, aes(icc, species_id, fill = sim, colour = sim)) + 
-  geom_density_ridges(alpha = 0.4, scale= 1.8) +
-  theme_classic() +
-  xlab('ICC') +
-  scale_y_discrete(limits = rev(spIds))
-
-# create uniqueID by group to make merge possible
-MSE_dt[, ID := 1:.N, by = .(species_id, sim)]
-
-# From the rstan extract object, sample N iterations to plot R2 vs ICC dist
-icc %>%
-  group_by(species_id, sim) %>%
-  summarise(icc = sample(icc, sampleN)) %>%
-  group_by(species_id, sim) %>%
-  mutate(ID = 1:n()) %>%
-  left_join(MSE_dt, by = c('species_id', 'sim', 'ID')) %>%
-  group_by(species_id, sim) %>%
-  summarise(
-    icc_mean = mean(icc),
-    icc_min = icc_mean - sd(icc),
-    icc_max = icc_mean + sd(icc),
-    r2_mean = mean(r2),
-    r2_min = r2_mean - sd(r2),
-    r2_max = r2_mean + sd(r2)
-  ) %>%
-  ggplot(aes(r2_mean, icc_mean, color = species_id, shape = sim)) +
-    geom_point() +
-    geom_errorbar(aes(ymin = icc_min, ymax = icc_max), alpha = .5) + 
-    geom_errorbarh(aes(xmin = r2_min,xmax = r2_max), alpha = .5) +
-    theme_classic() +
-    ylab('Mean ICC')
-```
 
 # Population summary
 
@@ -1168,37 +1008,14 @@ print(p1)
 
 # Sampling time
 
-```{r sampling time, echo = FALSE}
-samplingDF <- data.frame()
-
-for(sim in simulations) {
-  for(sp in spIds) {
-    simNames <- paste('fit', sim, sp, sep = '_')
-    sumTime <- rowSums(get_elapsed_time(get(simNames)))
-    nChain <- length(sumTime)
-    df1 <- data.frame(sim = rep(sim, nChain),
-                     sp = rep(sp, nChain),
-                     time = sumTime)
-    samplingDF <- rbind(samplingDF, df1)
-  }
-}
-
-samplingDF$time <- samplingDF$time/60/60
-```
-
-```{r plot sampling time, echo = FALSE, fig.height = 6, fig.width = 12}
-
-p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
-      geom_boxplot() +
-      facet_grid(~sp) +
-      theme_classic() +
-      ylab('Time (h)')
-print(p)
-```
-```{r plot sampling time2, echo = FALSE, fig.height = 5, fig.width = 6}
-p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
-      geom_boxplot() +
-      theme_classic() +
-      ylab('Time (h)')
-print(p)
+```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['time']][['chains']] |>
+    bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = total/3600, y = species_id)) +
+  geom_boxplot() +
+  xlab('Fit time (hours)')
 ```
