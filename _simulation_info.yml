@@ -1,29 +1,28 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ["19489BETPAP", "183295PICGLA", "19481BETALL", "19462FAGGRA",
-        "28728ACERUB", "18032ABIBAL", "195773POPTRE",
-        "28731ACESAC", "183319PINBAN", "18034PICRUB", "183397TSUCAN",
-        "19408QUERUB", "19290QUEALB", "505490THUOCC"]
-# Which vital rates to run
+spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+        '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+        '183319PINBAN']
+# Which vital rates to run (growth, mort, fec)
 vitalRates: ["growth"]
-# Max interation in the MCMC
-maxIter: 7000
-# Number of cores and chains (to be ran in parallel)
-nC: 3
-# Size of transition measurements to be sampled from the population
+# Source of data (vector must much the same as `vitalRates`)
+dataSources: ["data/treeData.RDS"]
+# number of iteration MCMC (inclusing warmup)
+maxIter: 4000
+# Number of cores and chains
+nC: 4
+# number of observations to use in the model fit
 sampleSize: 20000
 # The main folder name
-simName: "BAvsCanopy"
-# Specific simulations (must match with the files names to run MCMC)
-simulations: ["sim1", "sim2"]
+simName: "bertalanffy_intercept"
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v9.0
+## Growth test - v10.0
 
-## Competition with BA vs canopy distance using the new data base and more flexible 4 parameters sigmoid function for canopy distance:
-
-# - sim1: sigmoid with `Lo` [0-1], `mid` [0.1 - 0.5], and `beta` [-10 - 10] parameters
-# - sim2: BA with simple negative exponential
+## A new equation Von Bertalanffy (VB) to predict future size of trees
+# Testing VB equation with a simple intercept for each species
