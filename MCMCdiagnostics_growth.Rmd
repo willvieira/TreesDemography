@@ -205,7 +205,7 @@ post |>
 
 To assess model generality we test how good the model is in predicting new observations. The following figures show a 1:1 plot of observed vs predicted data for two diferent measures: DBH size (directly predicted by the model) and annual growth rate (derived from predicted size). We also plot the distribution of the observed vs the predicted measures.
 
-```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 12}
+```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
 # As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
@@ -314,7 +314,6 @@ for(Sp in spIds)
     c('MSE', 'R2'),
     ~ get(paste0(.x, '_list')) |>
         bind_rows() |>
-        select(iter, species_id, r2) |>
         saveRDS(file = file.path(
           'output',
           simName,
@@ -329,7 +328,10 @@ for(Sp in spIds)
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) + 
           tune::coord_obs_pred() +
-          theme(legend.position="none") +
+          theme(
+                legend.position="none",
+                plot.margin = margin(t = 30)
+            ) +
           xlab('Observerd size') +
           ylab('Predicted size')
 
@@ -338,7 +340,10 @@ for(Sp in spIds)
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
           xlim(-3, 20) + ylim(-3, 20) +
-          theme(legend.position="none") +
+          theme(
+                legend.position="none",
+                plot.margin = margin(t = 30)
+            ) +
           xlab('Observerd growth') +
           ylab('Predicted growth')
 
