@@ -49,6 +49,9 @@
 
 - Canopy distance with 3 parameters vs basal area ([link v9.0](https://willvieira.github.io/TreesDemography/growth/BAvsCanopy.html))
 
+- Von Bertalanffy intercept model with parametric starting size ([link v10.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_intercept.html))
+
+
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))

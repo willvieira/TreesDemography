@@ -51,6 +51,8 @@ navbar:
           href: growth/canopyDistanceFunB.html
         - text: "Competition predictor 2"
           href: growth/BAvsCanopy.html
+        - text: "Von Bertalanffy intercept"
+          href: growth/bertalanffy_intercept.html
     - text: "Recruitment"
       icon: fa-tree
       menu:
