@@ -143,6 +143,10 @@ growth_dt[,
   by = tree_id
 ]
 
+## define start_size for each individual tree
+growth_dt[,
+  start_size := dbh[which(time == 0)], by = tree_id
+]
 
 
 ## run the model
@@ -154,7 +158,8 @@ growth_dt[,
       data = list(
           N = growth_dt[sampled == 'training', .N],
           obs_size = growth_dt[sampled == 'training', dbh],
-          time = growth_dt[sampled == 'training', time]
+          time = growth_dt[sampled == 'training', time],
+          start_size = growth_dt[sampled == 'training', start_size]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -187,20 +192,16 @@ growth_dt[,
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh and [2] time
-    # post is matrix of [, r, sigma_obs, sigma_Lo, Lmax, mu_Lo]
-    Mean <- post[, 5] *
+    # dt is vector of [1] dbh, [2] time, and [3] start_size
+    # post is matrix of [, r, sigma_obs, Lmax]
+    Mean <- dt[3] *
         exp(-post[, 1] * dt[2]) +
-        post[, 4] * (1 - exp(-post[, 1] * dt[2]))
-    
-    Sigma <- sqrt(
-      (exp(-2 * post[, 1] * dt[2]) * post[, 3]^2) + post[, 2]^2
-    )
+        post[, 3] * (1 - exp(-post[, 1] * dt[2]))
 
     dnorm(
       x = dt[1],
       mean = Mean,
-      sd = Sigma,
+      sd = post[, 2],
       log = log
     )
   }
@@ -234,7 +235,7 @@ growth_dt[,
       llfun_bertalanffy, 
       log = FALSE, # relative_eff wants likelihood not log-likelihood values
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-      data = growth_dt[sampled == 'training', .(dbh, time)], 
+      data = growth_dt[sampled == 'training', .(dbh, time, start_size)], 
       draws = post_dist_lg,
       cores = sim_info$nC
   )
@@ -247,7 +248,7 @@ growth_dt[,
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = growth_dt[sampled == 'training', .(dbh, time)]
+      data = growth_dt[sampled == 'training', .(dbh, time, start_size)]
   )
 
 ##

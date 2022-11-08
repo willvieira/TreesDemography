@@ -11,6 +11,7 @@
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(purrr))
 suppressPackageStartupMessages(library(ggpubr))
@@ -174,8 +175,8 @@ treeData[, .(species_id, dbh, time, sampled2)] |>
     cols = c(dbh, time),
     names_to = 'var'
   ) |>
-  ggplot(aes(x = value, y = species_id, color = sample, fill = sample)) +
-    geom_density_ridges(alpha = 0.5) +
+  ggplot(aes(x = value, y = species_id, fill = sample)) +
+    geom_density_ridges(alpha = 0.7, color = NA) +
     facet_wrap(~var, scales = 'free_x') +
     xlab('')
 ```
@@ -209,22 +210,22 @@ To assess model generality we test how good the model is in predicting new obser
 # As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
+# calculate start_size for each tree_id
+treeData[,
+  start_size := dbh[which(time == 0)], by = tree_id
+]
+
 # add species_id to db
 trainData[
   treeData,
   `:=`(
     'species_id' = i.species_id,
-    'dbh' = i.dbh
+    'dbh' = i.dbh,
+    'time' = i.time,
+    'start_size' = i.start_size
   ),
   on = c('tree_id', 'year_measured')
 ]
-
-# calculate `time` from year_measured
-trainData[,
-  time := year_measured - year_measured[which.min(year_measured)],
-  by = tree_id
-]
-
 
 # list to save MSE and R2 for each species to be used later
 MSE_list <- R2_list <- list()
@@ -245,6 +246,7 @@ for(Sp in spIds)
       val_sp,
       post |>
           filter(species_id == Sp) |>
+          select(-species_id) |>
           pivot_wider(names_from = par, values_from = value) |>
           as.data.table(),
       by = c('iter')
@@ -256,18 +258,14 @@ for(Sp in spIds)
 
   # predict size
   val_sp[,
-    pred_size := mu_Lo *
+    pred_size := start_size *
             exp(-r * time) +
             Lmax * (1 -exp(-r * time))
   ]
 
-  val_sp[,
-    sigma := sqrt((exp(-2 * r * time) * sigma_Lo^2) + sigma_obs^2)
-  ]
-
   # simulate size from model distribution (normal dist)
   val_sp[,
-      pred_size_random := rnorm(.N, pred_size, sigma)
+      pred_size_random := rnorm(.N, pred_size, sigma_obs)
   ]
 
 
@@ -308,19 +306,6 @@ for(Sp in spIds)
         select(iter, sigma_obs, species_id)
     ) |>
     mutate(r2 = var_size/(var_size + sigma_obs))
-
-  # save MSE and R2 to be used for model comparison
-  map_dfr(
-    c('MSE', 'R2'),
-    ~ get(paste0(.x, '_list')) |>
-        bind_rows() |>
-        saveRDS(file = file.path(
-          'output',
-          simName,
-          paste0(.x, '_', Sp, '.RDS')
-      )
-    )
-  )
 
   # plot
   p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
@@ -376,14 +361,34 @@ for(Sp in spIds)
     )
   )
 }
+
+# save MSE and R2 to be used for model comparison
+invisible(
+    map_dfr(
+    c('MSE', 'R2'),
+    ~ get(paste0(.x, '_list')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          'output', 
+          simName,
+          paste0(.x, '.RDS')
+      )
+    )
+  )
+)
 ```
 
 
 # Mean squared error (MSE) of out-of-bag predictions
 
-```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
-MSE_list |>
-  bind_rows() |>
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7.5, fig.width = 8}
+sim_toLoad <- c('bertalanffy_intercept', simName)
+
+  map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'MSE.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
   mutate(
     `Predicted size` = MSE_size,
     `Predicted growth` = MSE_growth
@@ -393,8 +398,8 @@ MSE_list |>
     cols = contains('Predicted')
   ) |>
   mutate(name2 = factor(name,  levels = c('Predicted size', 'Predicted growth'))) |>
-  ggplot(aes(x = value, y = species_id)) +
-    geom_density_ridges(alpha = 0.4, scale= 1.8) +
+  ggplot(aes(x = value, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~name2, scales = 'free_x') +
     xlab('Mean Squared error (MSE)') + ylab('')
 ```
@@ -404,11 +409,42 @@ MSE_list |>
 
 The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-```{r plot Rsquared,echo=FALSE,fig.height = 6, fig.width = 7, warning=FALSE, message=FALSE}
-R2_list |>
-  bind_rows() |>
-  ggplot(aes(x = r2, y = species_id)) +
-    geom_density_ridges(alpha = 0.4, scale= 1.8)
+```{r plot Rsquared,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = r2, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) + xlim(0, .02)
+```
+
+# Leave-one-out cross-validation to compare models
+
+```{r loo, echo = FALSE, warning=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  ggplot(aes(x = value, y = species_id, color = sim)) +
+    geom_point() +
+    facet_wrap(~ variable, scales = 'free_x') +
+    xlab('') + ylab('')
+
 ```
 
 
