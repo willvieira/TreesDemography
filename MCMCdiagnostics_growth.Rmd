@@ -98,6 +98,7 @@ post <- map2_dfr(
   posterior_files,
   names(posterior_files),
   ~ readRDS(.x) |>
+    filter(par %in% c('r', 'sigma_obs', 'Lmax')) |>
     bind_cols(species_id = .y)
 )
 
@@ -140,6 +141,31 @@ for(i in 1:ncol(parComb))
   )
 }
 ```
+
+## Correlation between Lo parameter and start size data
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
+post_Lo <- map2_dfr(
+  posterior_files,
+  names(posterior_files),
+  ~ readRDS(.x) |>
+    filter(!par %in% c('r', 'sigma_obs', 'Lmax')) |>
+    bind_cols(species_id = .y)
+)
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot(aes(x = value, y = species_id)) +
+        stat_eye() +
+        ggtitle(Par) +
+        xlab('')
+  )
+}
+```
+
 
 # Data distribution
 

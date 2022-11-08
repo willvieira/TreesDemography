@@ -148,6 +148,19 @@ growth_dt[,
   start_size := dbh[which(time == 0)], by = tree_id
 ]
 
+## define tree_id in sequence to be used in stan
+tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
+toSub <- data.table(
+  tree_id = tree_id_uq,
+  tree_id_seq = 1:length(tree_id_uq)
+)
+
+growth_dt[
+  toSub,
+  tree_id_seq := i.tree_id_seq,
+  on = 'tree_id'
+]
+
 
 ## run the model
 
@@ -159,7 +172,9 @@ growth_dt[,
           N = growth_dt[sampled == 'training', .N],
           obs_size = growth_dt[sampled == 'training', dbh],
           time = growth_dt[sampled == 'training', time],
-          start_size = growth_dt[sampled == 'training', start_size]
+          Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
+          start_size = growth_dt[!is.na(tree_id_seq), unique(start_size), by = tree_id_seq][, V1],
+          tree_id = growth_dt[sampled == 'training', tree_id_seq]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -192,12 +207,18 @@ growth_dt[,
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, and [3] start_size
-    # post is matrix of [, r, sigma_obs, Lmax]
-    Mean <- dt[3] *
+    # dt is vector of [1] dbh, [2] time, and [3] tree_id_seq
+    # post is matrix of [, r, sigma_obs, Lmax, Lo[1]..., Lo[Nt]]
+
+    # start_size in function of tree_id
+    startSize_par <- post_dist_lg[, paste0('Lo[', dt[3], ']')]
+
+    # mean
+    Mean <- startSize_par *
         exp(-post[, 1] * dt[2]) +
         post[, 3] * (1 - exp(-post[, 1] * dt[2]))
 
+    # likelihood
     dnorm(
       x = dt[1],
       mean = Mean,
@@ -231,14 +252,23 @@ growth_dt[,
   # compute relative efficiency
   # this is slow and optional but is recommended to allow for adjusting PSIS
   # effective sample size based on MCMC effective sample size)
-  r_eff <- loo::relative_eff(
-      llfun_bertalanffy, 
-      log = FALSE, # relative_eff wants likelihood not log-likelihood values
-      chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-      data = growth_dt[sampled == 'training', .(dbh, time, start_size)], 
-      draws = post_dist_lg,
-      cores = sim_info$nC
-  )
+  keepTrying <- TRUE; nTry = 1
+  while(keepTrying & nTry < 10) {
+    r_eff <- loo::relative_eff(
+        llfun_bertalanffy, 
+        log = FALSE, # relative_eff wants likelihood not log-likelihood values
+        chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+        data = growth_dt[sampled == 'training', .(dbh, time, tree_id_seq)], 
+        draws = post_dist_lg,
+        cores = sim_info$nC
+    )
+
+    if(is.numeric(r_eff[1])) {
+      keepTrying <- FALSE
+    }else{
+      nTry <- nTry + 1
+    }
+  }
 
   # Loo using x samples
   loo_obj <-
@@ -248,7 +278,7 @@ growth_dt[,
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = growth_dt[sampled == 'training', .(dbh, time, start_size)]
+      data = growth_dt[sampled == 'training', .(dbh, time, tree_id_seq)]
   )
 
 ##
@@ -257,20 +287,23 @@ growth_dt[,
 
 ## save output
 
-  # # save stan fit
-  # md_out$save_object(
-  #   file = file.path(
-  #     'output',
-  #     paste0('stanFit_', sp, '.RDS')
-  #   )
-  # )
-
-  # save posterior drawss
+  # posterior of population level parameters
   saveRDS(
-    post_dist,
+    post_dist |>
+      filter(!grepl(pattern = '\\[', par)),
     file = file.path(
       'output',
-      paste0('posterior_', sp, '.RDS')
+      paste0('posteriorPop_', sp, '.RDS')
+    )
+  )
+
+  # posterior of tree_id Lo parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'Lo', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorLo_', sp, '.RDS')
     )
   )
 
@@ -285,7 +318,7 @@ growth_dt[,
 
   # save train and validate data
   saveRDS(
-    growth_dt[, .(tree_id, year_measured, sampled)],
+    growth_dt[, .(tree_id, tree_id_seq, year_measured, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
