@@ -1,19 +1,23 @@
-# Species id: define spId code or NULL to run for all species
-spIds: ["ABIBAL", "ACEPEN", "ACESAC", "ACESPI", "BETALL",
-        "BETPAP", "FAGGRA", "FRAAME", "OSTVIR", "PICGLA",
-        "PICMAR", "PICRUB", "TILAME"]
+# Species id
+spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+        '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+        '183319PINBAN']
 # Which vital rates to run
 vitalRates: ["recruit"]
-# Max interation in the MCMC
-maxIter: 800000
-# Number of cores and chains (to be ran in parallel)
-nC: 3
-# Size of transition measurements to be sampled from the population
-sampleSize: NA
-# The main folder name
-simName: "seedSource"
-# Specific simulations (must match with the files names to run MCMC)
-simulations: ["neighborOnly", "neighborPlusRandom"]
+# Source of data (vector must much the same as `vitalRates`)
+dataSources: ["data/fec_dt.RDS"]
+# number of iteration MCMC (inclusing warmup)
+maxIter: 4000
+# Number of cores and chains
+nC: 4
+# number of observations to use in the model fit
+sampleSize: 20000
+# The simulation and folder name
+simName: "intercept"
+# simulations to compare with
+simCompare: []
 
 
 ##################################
@@ -22,7 +26,6 @@ simulations: ["neighborOnly", "neighborPlusRandom"]
 
 ## Recruitmenet test - v2.0
 
-## Instead of considering adults only within site, get source from neighbor sites
-
-## - sim1: neighbor source only
-## - sim2: neighbor source with a extra source of random seeds arriving from long distance dispersion
+## New model:
+# recruit ~ poisson(lambda)
+# lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
