@@ -15,15 +15,15 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffyInt_startSize_par"
+simName: "bertalanffyInt_randomPlot"
 # simulations to compare with
-simCompare: ["bertalanffy_intercept", "bertalanffyInt_startSize"]
+simCompare: ["bertalanffyInt_startSize"]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v12.0
+## Growth test - v13.0 - multilevel r parameter at the plot level
 ## A new equation Von Bertalanffy (VB) to predict future size of trees
 
-# Version 11.0 of VB model used the real data for the start_size of an individual tree. Now to account for measurement error, let the start_size for each individual tree be parameter derived from a submodel integrating the same measurement error from the mail model.
+# Using data start_size from V11.0, let's control the plot variation growth by making the r parameter vary in function of plot_id

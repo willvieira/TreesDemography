@@ -148,17 +148,17 @@ growth_dt[,
   start_size := dbh[which(time == 0)], by = tree_id
 ]
 
-## define tree_id in sequence to be used in stan
-tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
+## define plot_id in sequence to be used in stan
+plot_id_uq <- growth_dt[sampled == 'training', unique(plot_id)]
 toSub <- data.table(
-  tree_id = tree_id_uq,
-  tree_id_seq = 1:length(tree_id_uq)
+  plot_id = plot_id_uq,
+  plot_id_seq = 1:length(plot_id_uq)
 )
 
 growth_dt[
   toSub,
-  tree_id_seq := i.tree_id_seq,
-  on = 'tree_id'
+  plot_id_seq := i.plot_id_seq,
+  on = 'plot_id'
 ]
 
 
@@ -172,9 +172,9 @@ growth_dt[
           N = growth_dt[sampled == 'training', .N],
           obs_size = growth_dt[sampled == 'training', dbh],
           time = growth_dt[sampled == 'training', time],
-          Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
-          start_size = growth_dt[!is.na(tree_id_seq), unique(start_size), by = tree_id_seq][, V1],
-          tree_id = growth_dt[sampled == 'training', tree_id_seq]
+          start_size = growth_dt[sampled == 'training', start_size],
+          Np = growth_dt[sampled == 'training', length(unique(plot_id))],
+          plot_id = growth_dt[sampled == 'training', plot_id_seq]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -207,22 +207,23 @@ growth_dt[
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, and [3] tree_id_seq
-    # post is matrix of [, r, sigma_obs, Lmax, Lo[1]..., Lo[Nt]]
+    # dt is vector of [1] dbh, [2] time, [3] start_size, and [4] plot_id_seq
 
-    # start_size in function of tree_id
-    startSize_par <- post_dist_lg[, paste0('Lo[', dt[3], ']')]
+    # Add plot_id random effect 
+    rPlot_log <- post_dist_lg[, paste0('rPlot_log[', dt[4], ']')]
+    rPlot <- exp(post[, 'r'] + rPlot_log)
+    
+    # time component of the model
+    rPlotTime <- exp(-rPlot * dt[2])
 
     # mean
-    Mean <- startSize_par *
-        exp(-post[, 1] * dt[2]) +
-        post[, 3] * (1 - exp(-post[, 1] * dt[2]))
+    Mean <- dt[3] * rPlotTime + post[, 'Lmax'] * (1 - rPlotTime)
 
     # likelihood
     dnorm(
       x = dt[1],
       mean = Mean,
-      sd = post[, 2],
+      sd = post[, 'sigma_obs'],
       log = log
     )
   }
@@ -258,7 +259,10 @@ growth_dt[
         llfun_bertalanffy, 
         log = FALSE, # relative_eff wants likelihood not log-likelihood values
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-        data = growth_dt[sampled == 'training', .(dbh, time, tree_id_seq)], 
+        data = growth_dt[
+          sampled == 'training',
+          .(dbh, time, start_size, plot_id_seq)
+        ], 
         draws = post_dist_lg,
         cores = sim_info$nC
     )
@@ -278,7 +282,10 @@ growth_dt[
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = growth_dt[sampled == 'training', .(dbh, time, tree_id_seq)]
+      data = growth_dt[
+        sampled == 'training',
+        .(dbh, time, start_size, plot_id_seq)
+      ]
   )
 
 ##
@@ -300,10 +307,10 @@ growth_dt[
   # posterior of tree_id Lo parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'Lo', par)),
+      filter(grepl(pattern = 'rPlot_log', par)),
     file = file.path(
       'output',
-      paste0('posteriorLo_', sp, '.RDS')
+      paste0('posteriorrPlot_', sp, '.RDS')
     )
   )
 
@@ -318,7 +325,7 @@ growth_dt[
 
   # save train and validate data
   saveRDS(
-    growth_dt[, .(tree_id, tree_id_seq, year_measured, sampled)],
+    growth_dt[, .(tree_id, plot_id_seq, year_measured, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
