@@ -295,7 +295,7 @@ for(Sp in spIds)
   ]
 
   # Calculate R2 (Gelman et al 2018)
-  R2_list[[Sp]] <- val_sp |>
+  R2gel <- val_sp |>
     group_by(iter2) |>
     summarise(var_size = var(pred_size, na.rm = TRUE)) |>
     bind_cols(iter = sampledIter) |>
@@ -305,7 +305,25 @@ for(Sp in spIds)
         mutate(sigma_obs = value) |>
         select(iter, sigma_obs, species_id)
     ) |>
-    mutate(r2 = var_size/(var_size + sigma_obs))
+    mutate(R2gelman_size = var_size/(var_size + sigma_obs^2)) |>
+    select(iter, iter2, species_id, R2gelman_size) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- merge(
+    R2gel,
+    val_sp[,
+      .(
+        R2reg_size = get_r2(dbh, pred_size_random),
+        R2reg_growth = get_r2(obs_growth, pred_growth_random)
+      ), 
+      by = iter2
+    ],
+    by = 'iter2'
+  )
 
   # plot
   p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
@@ -409,14 +427,42 @@ sim_toLoad <- c('bertalanffy_intercept', simName)
 
 The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-```{r plot Rsquared,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
-  ggplot(aes(x = r2, y = species_id, fill = sim)) +
-    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA)
+  ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
+      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+      xlab('Rsquared (Gelman 2018)')
+```
+
+We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values. This approach was used for the size predictions from the model, and the growth predictions derived from the size predictions.
+
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  mutate(
+    `R2 predicted size` = R2reg_size,
+    `R2 predicted growth` = R2reg_growth
+  ) |>
+  select(species_id, iter2, sim, contains('R2 predicted')) |>
+  pivot_longer(
+    cols = contains('R2 predicted'),
+    names_to = 'par',
+    values_to = 'value'
+  ) |>
+  mutate(
+    par2 = factor(par,  levels = c('R2 predicted size', 'R2 predicted growth'))
+  ) |>
+  ggplot(aes(x = value, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    facet_wrap(~par2, scales = 'free_x') +
+    xlab('Rsquared (linear regression)')
 ```
 
 # Leave-one-out cross-validation to compare models
