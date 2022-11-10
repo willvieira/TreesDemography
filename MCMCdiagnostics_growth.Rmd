@@ -32,12 +32,19 @@ simName <- simInfo$simName
 simulations <- simInfo$simulations
 
 # List output files and set vector names to species_id
-posterior_files <- grep(
-  'posterior',
+posteriorPop_files <- grep(
+  'posteriorPop',
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
-names(posterior_files) <- names(sort(sapply(spIds, function(x) grep(x, posterior_files))))
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+
+posteriorLo_files <- grep(
+  'posteriorLo',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorLo_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorLo_files))))
 
 diag_files <- grep(
   'diagnostics',
@@ -54,7 +61,46 @@ trainData_files <- grep(
 names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
 ```
 
+```{r load dataset,echo =FALSE}
+trainData <- map2_dfr(
+  trainData_files,
+  names(trainData_files),
+  ~ readRDS(.x)
+)
 
+treeData <- readRDS('data/treeData.RDS')
+treeData <- treeData[species_id %in% spIds]
+
+# calculate time since first measurement
+treeData[,
+  time := year_measured - year_measured[which.min(year_measured)],
+  by = tree_id
+]
+
+# calculate start_size for each tree_id
+treeData[,
+  start_size := dbh[which(time == 0)], by = tree_id
+]
+
+# merge with train data
+treeData[
+  trainData,
+  sampled := i.sampled,
+  on = c('tree_id', 'year_measured')
+]
+
+# add species_id to trainData
+trainData[
+  treeData,
+  `:=`(
+    'species_id' = i.species_id,
+    'dbh' = i.dbh,
+    'time' = i.time,
+    'start_size' = i.start_size
+  ),
+  on = c('tree_id', 'year_measured')
+]
+```
 
 # Rhat
 
@@ -95,10 +141,9 @@ DT::datatable()
 
 ```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
 post <- map2_dfr(
-  posterior_files,
-  names(posterior_files),
+  posteriorPop_files,
+  names(posteriorPop_files),
   ~ readRDS(.x) |>
-    filter(par %in% c('r', 'sigma_obs', 'Lmax')) |>
     bind_cols(species_id = .y)
 )
 
@@ -142,58 +187,39 @@ for(i in 1:ncol(parComb))
 }
 ```
 
+
 ## Correlation between Lo parameter and start size data
 
-```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
-post_Lo <- map2_dfr(
-  posterior_files,
-  names(posterior_files),
-  ~ readRDS(.x) |>
-    filter(!par %in% c('r', 'sigma_obs', 'Lmax')) |>
-    bind_cols(species_id = .y)
-)
-
-for(Par in unique(post$par))
+```{r posterior_Lo, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
+corrLo_ls <- list()
+for(Sp in spIds[1:4])
 {
-  print(
-    post |>
-      filter(par == Par) |>
-      ggplot(aes(x = value, y = species_id)) +
-        stat_eye() +
-        ggtitle(Par) +
-        xlab('')
-  )
+  corrLo_ls[[Sp]] <- readRDS(posteriorLo_files[Sp]) |>
+    mutate(tree_id_seq = parse_number(par)) |>
+    left_join(
+      trainData[
+        species_id == Sp & !is.na(tree_id_seq),
+        .(start_size = unique(start_size)),
+        by = tree_id_seq
+      ]
+    ) |>
+    ggplot(aes(start_size, y = value)) +
+      geom_hex(bins = 60) +
+      geom_abline(intercept = 0, slope = 1) +
+      tune::coord_obs_pred() +
+      theme(legend.position="none")
 }
+
+ggpubr::ggarrange(plotlist = corrLo_ls)
 ```
 
 
 # Data distribution
 
 ```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
-trainData <- map2_dfr(
-  trainData_files,
-  names(trainData_files),
-  ~ readRDS(.x)
-)
-
-treeData <- readRDS('data/treeData.RDS')
-treeData <- treeData[species_id %in% spIds]
-
-# merge with train data
-treeData[
-  trainData,
-  sampled := i.sampled,
-  on = c('tree_id', 'year_measured')
-]
-
 # split between train and everything else (merge validate with rest of data)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
-
-treeData[,
-  time := year_measured - year_measured[which.min(year_measured)],
-  by = tree_id
-]
 
 treeData[, .(species_id, dbh, time, sampled2)] |>
   mutate(sample = sampled2) |>
@@ -236,23 +262,6 @@ To assess model generality we test how good the model is in predicting new obser
 # As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
-# calculate start_size for each tree_id
-treeData[,
-  start_size := dbh[which(time == 0)], by = tree_id
-]
-
-# add species_id to db
-trainData[
-  treeData,
-  `:=`(
-    'species_id' = i.species_id,
-    'dbh' = i.dbh,
-    'time' = i.time,
-    'start_size' = i.start_size
-  ),
-  on = c('tree_id', 'year_measured')
-]
-
 # list to save MSE and R2 for each species to be used later
 MSE_list <- R2_list <- list()
 
@@ -284,16 +293,12 @@ for(Sp in spIds)
 
   # predict size
   val_sp[,
-    pred_size := start_size *
-            exp(-r * time) +
-            Lmax * (1 -exp(-r * time))
+    pred_size := rnorm(.N, start_size, sigma_obs) *
+                  exp(-r * time) + Lmax * (1 -exp(-r * time))
   ]
 
   # simulate size from model distribution (normal dist)
-  val_sp[,
-      pred_size_random := rnorm(.N, pred_size, sigma_obs)
-  ]
-
+  val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
 
   # calculate observed and predicted growth 
   val_sp[, time0 := shift(time, type = 'lag'), by = tree_id]
@@ -408,7 +413,7 @@ invisible(
 # Mean squared error (MSE) of out-of-bag predictions
 
 ```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7.5, fig.width = 8}
-sim_toLoad <- c('bertalanffy_intercept', simName)
+sim_toLoad <- c(simInfo$simCompare, simName)
 
   map_dfr(
     sim_toLoad,
