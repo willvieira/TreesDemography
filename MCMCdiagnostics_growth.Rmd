@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v10.0 - Von Bertalanffy model"
+ subtitle: "Test v11.0 - Von Bertalanffy model - use start_size data"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -297,7 +297,7 @@ for(Sp in spIds)
   # Calculate R2 (Gelman et al 2018)
   R2_list[[Sp]] <- val_sp |>
     group_by(iter2) |>
-    summarise(var_size = var(pred_growth, na.rm = TRUE)) |>
+    summarise(var_size = var(pred_size, na.rm = TRUE)) |>
     bind_cols(iter = sampledIter) |>
     left_join(
       post |>
@@ -416,7 +416,7 @@ map_dfr(
       bind_cols(sim = .x)
   ) |>
   ggplot(aes(x = r2, y = species_id, fill = sim)) +
-    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) + xlim(0, .02)
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA)
 ```
 
 # Leave-one-out cross-validation to compare models
