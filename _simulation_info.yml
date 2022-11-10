@@ -17,7 +17,7 @@ sampleSize: 20000
 # The simulation and folder name
 simName: "bertalanffyInt_startSize_par"
 # simulations to compare with
-simCompare: ["bertalanffy_intercept", "bertalanffyInt_startSize"]
+simCompare: ["bertalanffyInt_startSize"]
 
 ##################################
 ########## DESCRIPTION  ##########

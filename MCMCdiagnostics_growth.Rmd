@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v10.0 - Von Bertalanffy model"
+ subtitle: "Test v12.0 - Von Bertalanffy model - using parametric start_size with measurement error"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -188,29 +188,38 @@ for(i in 1:ncol(parComb))
 ```
 
 
-## Correlation between Lo parameter and start size data
+# Correlation between Lo parameter and start size data
 
-```{r posterior_Lo, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
-corrLo_ls <- list()
-for(Sp in spIds[1:4])
+```{r posterior_Lo, eval = TRUE,echo = F,warning=FALSE, message=FALSE, fig.height = 4.5, fig.width = 8}
+for(Sp in seq(1, 17, 2))
 {
-  corrLo_ls[[Sp]] <- readRDS(posteriorLo_files[Sp]) |>
-    mutate(tree_id_seq = parse_number(par)) |>
-    left_join(
-      trainData[
-        species_id == Sp & !is.na(tree_id_seq),
-        .(start_size = unique(start_size)),
-        by = tree_id_seq
-      ]
-    ) |>
-    ggplot(aes(start_size, y = value)) +
-      geom_hex(bins = 60) +
-      geom_abline(intercept = 0, slope = 1) +
-      tune::coord_obs_pred() +
-      theme(legend.position="none")
+  plot_ls <- list()
+  for(i in 0:1) {
+    if(Sp == 17 & i == 1)
+      next
+    
+    plot_ls[[i+1]] <- readRDS(posteriorLo_files[spIds[Sp + i]]) |>
+      mutate(tree_id_seq = parse_number(par)) |>
+      left_join(
+        trainData[
+          species_id == spIds[Sp + i] & !is.na(tree_id_seq),
+          .(start_size = unique(start_size)),
+          by = tree_id_seq
+        ]
+      ) |>
+      ggplot(aes(start_size, y = value)) +
+        geom_hex(bins = 60) +
+        geom_abline(intercept = 0, slope = 1) +
+        tune::coord_obs_pred() +
+        theme(legend.position="none") +
+        xlab('Observed start_size (mm)') +
+        ylab('Predicted start_size Lo (mm)') +
+        ggtitle(spIds[Sp + i])
+  }
+  print(
+    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2)
+  )
 }
-
-ggpubr::ggarrange(plotlist = corrLo_ls)
 ```
 
 
@@ -328,7 +337,7 @@ for(Sp in spIds)
   # Calculate R2 (Gelman et al 2018)
   R2_list[[Sp]] <- val_sp |>
     group_by(iter2) |>
-    summarise(var_size = var(pred_growth, na.rm = TRUE)) |>
+    summarise(var_size = var(pred_size, na.rm = TRUE)) |>
     bind_cols(iter = sampledIter) |>
     left_join(
       post |>
@@ -412,7 +421,7 @@ invisible(
 
 # Mean squared error (MSE) of out-of-bag predictions
 
-```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7.5, fig.width = 8}
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
 sim_toLoad <- c(simInfo$simCompare, simName)
 
   map_dfr(
@@ -447,7 +456,7 @@ map_dfr(
       bind_cols(sim = .x)
   ) |>
   ggplot(aes(x = r2, y = species_id, fill = sim)) +
-    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) + xlim(0, .02)
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA)
 ```
 
 # Leave-one-out cross-validation to compare models
