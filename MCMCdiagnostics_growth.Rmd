@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v10.0 - Von Bertalanffy model"
+ subtitle: "Test v13.0 - Von Bertalanffy model - plot random effect on r paramter"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -32,12 +32,19 @@ simName <- simInfo$simName
 simulations <- simInfo$simulations
 
 # List output files and set vector names to species_id
-posterior_files <- grep(
-  'posterior',
+posteriorPop_files <- grep(
+  'posteriorPop',
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
-names(posterior_files) <- names(sort(sapply(spIds, function(x) grep(x, posterior_files))))
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+
+posteriorrPlot_files <- grep(
+  'posteriorrPlot',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
 
 diag_files <- grep(
   'diagnostics',
@@ -54,7 +61,48 @@ trainData_files <- grep(
 names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
 ```
 
+```{r load dataset,echo =FALSE}
+trainData <- map2_dfr(
+  trainData_files,
+  names(trainData_files),
+  ~ readRDS(.x)
+)
 
+treeData <- readRDS('data/treeData.RDS')
+treeData <- treeData[species_id %in% spIds]
+
+# calculate time since first measurement
+treeData[,
+  time := year_measured - year_measured[which.min(year_measured)],
+  by = tree_id
+]
+
+# calculate start_size for each tree_id
+treeData[,
+  start_size := dbh[which(time == 0)], by = tree_id
+]
+
+# merge with train data
+treeData[
+  trainData,
+  sampled := i.sampled,
+  on = c('tree_id', 'year_measured')
+]
+
+# add species_id to trainData
+trainData[
+  treeData,
+  `:=`(
+    'plot_id' = i.plot_id,
+    'species_id' = i.species_id,
+    'dbh' = i.dbh,
+    'time' = i.time,
+    'start_size' = i.start_size
+  ),
+  on = c('tree_id', 'year_measured')
+]
+
+```
 
 # Rhat
 
@@ -95,10 +143,9 @@ DT::datatable()
 
 ```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
 post <- map2_dfr(
-  posterior_files,
-  names(posterior_files),
+  posteriorPop_files,
+  names(posteriorPop_files),
   ~ readRDS(.x) |>
-    filter(par %in% c('r', 'sigma_obs', 'Lmax')) |>
     bind_cols(species_id = .y)
 )
 
@@ -119,7 +166,6 @@ for(Par in unique(post$par))
 # Correlation between parameters
 
 ```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
-
 parComb <- post |>
   summarise(uqPar = unique(par)) |>
   pull(uqPar) |>
@@ -142,27 +188,76 @@ for(i in 1:ncol(parComb))
 }
 ```
 
-## Correlation between Lo parameter and start size data
 
-```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
-post_Lo <- map2_dfr(
-  posterior_files,
-  names(posterior_files),
-  ~ readRDS(.x) |>
-    filter(!par %in% c('r', 'sigma_obs', 'Lmax')) |>
-    bind_cols(species_id = .y)
-)
+# Plot random effect
 
-for(Par in unique(post$par))
+```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
+for(Sp in spIds)
 {
-  print(
-    post |>
-      filter(par == Par) |>
-      ggplot(aes(x = value, y = species_id)) +
-        stat_eye() +
-        ggtitle(Par) +
-        xlab('')
-  )
+    r_pop <- post |>
+        filter(species_id == Sp & par == 'r') |>
+        mutate(r_pop = value) |>
+        select(r_pop, iter)
+
+    r_mean <- r_pop |>
+        summarise(r_mean = mean(exp(r_pop))) |>
+        pull(r_mean)
+
+    dt_toPlot <- readRDS(posteriorrPlot_files[Sp]) |>
+            mutate(plot_id_seq = parse_number(par)) |>
+            left_join(
+              r_pop
+            ) |>
+            mutate(r_real = exp(value + r_pop)) |>
+            left_join(
+              trainData[
+                species_id == Sp & !is.na(plot_id_seq),
+                .(plot_id = unique(plot_id)),
+                by = plot_id_seq
+              ]
+            ) |>
+            left_join(
+              treeData[, 
+                .(
+                  latitude = unique(latitude),
+                  BA_plot = mean(BA_plot),
+                  bio_01_mean = mean(bio_01_mean)
+                ), 
+                by = plot_id 
+              ]
+            ) |>
+            filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
+            mutate(plot_id = fct_reorder(plot_id, latitude))
+    
+    print(
+      ggarrange(
+          dt_toPlot |>
+              ggplot(aes(y = plot_id, x = r_real, color = bio_01_mean)) +
+                stat_pointinterval(alpha = .7, size = .1) +
+                geom_vline(
+                  xintercept = r_mean, color = 'red', alpha = .8
+                ) +
+                xlab('r') + ylab('plot_id (ordered by latitude)') +
+                theme(
+                  legend.position = 'top',
+                  axis.text.y = element_blank()
+                ) +
+                labs(subtitle = Sp),
+          dt_toPlot |>
+              ggplot(aes(y = plot_id, x = r_real, color = BA_plot)) +
+                stat_pointinterval(alpha = .7, size = .1) +
+                geom_vline(
+                  xintercept = r_mean, color = 'red', alpha = .8
+                ) +
+                xlab('r') + ylab('') +
+                theme(
+                  legend.position = 'top',
+                  axis.text.y = element_blank()
+                ) +
+                labs(subtitle = ''),
+          ncol = 2
+      )
+    )
 }
 ```
 
@@ -170,30 +265,9 @@ for(Par in unique(post$par))
 # Data distribution
 
 ```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
-trainData <- map2_dfr(
-  trainData_files,
-  names(trainData_files),
-  ~ readRDS(.x)
-)
-
-treeData <- readRDS('data/treeData.RDS')
-treeData <- treeData[species_id %in% spIds]
-
-# merge with train data
-treeData[
-  trainData,
-  sampled := i.sampled,
-  on = c('tree_id', 'year_measured')
-]
-
 # split between train and everything else (merge validate with rest of data)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
-
-treeData[,
-  time := year_measured - year_measured[which.min(year_measured)],
-  by = tree_id
-]
 
 treeData[, .(species_id, dbh, time, sampled2)] |>
   mutate(sample = sampled2) |>
@@ -220,7 +294,7 @@ post |>
   ) |>
   group_by(species_id) |>
   expand_grid(time = seq(0, 2000, 100)) |>
-  mutate(Lt = Lmax * (1 - exp(-r * time))) |>
+  mutate(Lt = Lmax * (1 - exp(-exp(r) * time))) |>
   ggplot(aes(x = time, y = Lt, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
         scale_fill_brewer() +
@@ -235,23 +309,6 @@ To assess model generality we test how good the model is in predicting new obser
 ```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
 # As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
-
-# calculate start_size for each tree_id
-treeData[,
-  start_size := dbh[which(time == 0)], by = tree_id
-]
-
-# add species_id to db
-trainData[
-  treeData,
-  `:=`(
-    'species_id' = i.species_id,
-    'dbh' = i.dbh,
-    'time' = i.time,
-    'start_size' = i.start_size
-  ),
-  on = c('tree_id', 'year_measured')
-]
 
 # list to save MSE and R2 for each species to be used later
 MSE_list <- R2_list <- list()
@@ -268,39 +325,65 @@ for(Sp in spIds)
   val_sp[, iter := sampledIter, by = obsID]
 
   # merge global parameters
-  val_sp <- merge(
-      val_sp,
-      post |>
-          filter(species_id == Sp) |>
-          select(-species_id) |>
-          pivot_wider(names_from = par, values_from = value) |>
-          as.data.table(),
-      by = c('iter')
-  )
+  val_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        as.data.table(),
+    `:=`(
+      r = i.r,
+      sigma_plot = i.sigma_plot,
+      sigma_obs = i.sigma_obs,
+      Lmax = i.Lmax
+    ),
+    on = 'iter'
+  ]
   
+  # merge plot_id parameters if plot is present in validation data
+  val_sp[
+    readRDS(posteriorrPlot_files[Sp]) |>
+      mutate(
+        plot_id_seq = parse_number(par),
+        rPlot_log = value
+      ) |>
+      select(iter, plot_id_seq, rPlot_log) |>
+      setDT(),
+    rPlot_log := i.rPlot_log,
+    on = c('iter', 'plot_id_seq')
+  ]
+
+  # for the plots not used in the fit model, generate the rPlot_log
+  # value from the population distribution
+  val_sp[
+    is.na(plot_id_seq),
+    rPlot_log := rnorm(.N, 0, sigma_plot)
+  ]
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
 
+  # compute r plot specific parameter
+  val_sp[,
+    r_plot := exp(r + rPlot_log)
+  ]
+
   # predict size
   val_sp[,
     pred_size := start_size *
-            exp(-r * time) +
-            Lmax * (1 -exp(-r * time))
+                  exp(-r_plot * time) + Lmax * (1 -exp(-r_plot * time))
   ]
 
   # simulate size from model distribution (normal dist)
-  val_sp[,
-      pred_size_random := rnorm(.N, pred_size, sigma_obs)
-  ]
-
+  val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
 
   # calculate observed and predicted growth 
-  val_sp[, time0 := shift(time, type = 'lag'), by = tree_id]
-  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = tree_id]
+  val_sp[, time0 := shift(time, type = 'lag'), by = .(iter2, tree_id)]
+  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = .(iter2, tree_id)]
 
-  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
-  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = tree_id]
+  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = .(iter2, tree_id)]
+  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = .(iter2, tree_id)]
 
   val_sp[, obs_growth := (dbh - obs_size0)/(time - time0)]
   val_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
@@ -321,9 +404,9 @@ for(Sp in spIds)
   ]
 
   # Calculate R2 (Gelman et al 2018)
-  R2_list[[Sp]] <- val_sp |>
+  R2gel <- val_sp |>
     group_by(iter2) |>
-    summarise(var_size = var(pred_growth, na.rm = TRUE)) |>
+    summarise(var_size = var(pred_size, na.rm = TRUE)) |>
     bind_cols(iter = sampledIter) |>
     left_join(
       post |>
@@ -331,7 +414,25 @@ for(Sp in spIds)
         mutate(sigma_obs = value) |>
         select(iter, sigma_obs, species_id)
     ) |>
-    mutate(r2 = var_size/(var_size + sigma_obs))
+    mutate(R2gelman_size = var_size/(var_size + sigma_obs^2)) |>
+    select(iter, iter2, species_id, R2gelman_size) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- merge(
+    R2gel,
+    val_sp[,
+      .(
+        R2reg_size = get_r2(dbh, pred_size_random),
+        R2reg_growth = get_r2(obs_growth, pred_growth_random)
+      ), 
+      by = iter2
+    ],
+    by = 'iter2'
+  )
 
   # plot
   p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
@@ -346,7 +447,7 @@ for(Sp in spIds)
           xlab('Observerd size') +
           ylab('Predicted size')
 
-  p2 <- val_sp[time > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID]  |>
+  p2 <- val_sp[time > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
@@ -407,8 +508,8 @@ invisible(
 
 # Mean squared error (MSE) of out-of-bag predictions
 
-```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7.5, fig.width = 8}
-sim_toLoad <- c('bertalanffy_intercept', simName)
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+sim_toLoad <- c(simInfo$simCompare, simName)
 
   map_dfr(
     sim_toLoad,
@@ -435,14 +536,42 @@ sim_toLoad <- c('bertalanffy_intercept', simName)
 
 The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-```{r plot Rsquared,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
-  ggplot(aes(x = r2, y = species_id, fill = sim)) +
-    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) + xlim(0, .02)
+  ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
+      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+      xlab('Rsquared (Gelman 2018)')
+```
+
+We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values. This approach was used for the size predictions from the model, and the growth predictions derived from the size predictions.
+
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  mutate(
+    `R2 predicted size` = R2reg_size,
+    `R2 predicted growth` = R2reg_growth
+  ) |>
+  select(species_id, iter2, sim, contains('R2 predicted')) |>
+  pivot_longer(
+    cols = contains('R2 predicted'),
+    names_to = 'par',
+    values_to = 'value'
+  ) |>
+  mutate(
+    par2 = factor(par,  levels = c('R2 predicted size', 'R2 predicted growth'))
+  ) |>
+  ggplot(aes(x = value, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    facet_wrap(~par2, scales = 'free_x') +
+    xlab('Rsquared (linear regression)')
 ```
 
 # Leave-one-out cross-validation to compare models

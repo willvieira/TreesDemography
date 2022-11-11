@@ -304,7 +304,7 @@ growth_dt[
     )
   )
 
-  # posterior of tree_id Lo parameters
+  # posterior of plot_id parameters
   saveRDS(
     post_dist |>
       filter(grepl(pattern = 'rPlot_log', par)),
