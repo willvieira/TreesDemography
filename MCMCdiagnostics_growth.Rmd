@@ -270,11 +270,11 @@ for(Sp in spIds)
 
 
   # calculate observed and predicted growth 
-  val_sp[, time0 := shift(time, type = 'lag'), by = tree_id]
-  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = tree_id]
+  val_sp[, time0 := shift(time, type = 'lag'), by = .(iter2, tree_id)]
+  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = .(iter2, tree_id)]
 
-  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
-  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = tree_id]
+  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = .(iter2, tree_id)]
+  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = .(iter2, tree_id)]
 
   val_sp[, obs_growth := (dbh - obs_size0)/(time - time0)]
   val_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
