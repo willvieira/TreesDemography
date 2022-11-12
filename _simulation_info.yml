@@ -15,15 +15,18 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffyInt_randomPlot"
+simName: "bertalanffy_randomPlot_BA"
 # simulations to compare with
-simCompare: ["bertalanffyInt_startSize", "bertalanffyInt_startSize_par"]
+simCompare: [
+        "bertalanffyInt_startSize",
+        "bertalanffyInt_startSize_par",
+        "bertalanffyInt_randomPlot"
+]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v13.0 - multilevel r parameter at the plot level
-## A new equation Von Bertalanffy (VB) to predict future size of trees
+## Growth test - v14.0 - multilevel r parameter at the plot level with plot basal area effect
 
-# Using data start_size from V11.0, let's control the plot variation growth by making the r parameter vary in function of plot_id
+# Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area

@@ -174,7 +174,8 @@ growth_dt[
           time = growth_dt[sampled == 'training', time],
           start_size = growth_dt[sampled == 'training', start_size],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
-          plot_id = growth_dt[sampled == 'training', plot_id_seq]
+          plot_id = growth_dt[sampled == 'training', plot_id_seq],
+          BA_comp = growth_dt[sampled == 'training', BA_comp]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -207,14 +208,14 @@ growth_dt[
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, [3] start_size, and [4] plot_id_seq
+    # dt is vector of [1] dbh, [2] time, [3] start_size, [4] plot_id_seq, and [5] BA_comp
 
     # Add plot_id random effect 
     rPlot_log <- post_dist_lg[, paste0('rPlot_log[', dt[4], ']')]
-    rPlot <- exp(post[, 'r'] + rPlot_log)
+    rPlot_beta <- exp(post[, 'r'] + rPlot_log + dt[5] * post[, 'beta'])
     
     # time component of the model
-    rPlotTime <- exp(-rPlot * dt[2])
+    rPlotTime <- exp(-rPlot_beta * dt[2])
 
     # mean
     Mean <- dt[3] * rPlotTime + post[, 'Lmax'] * (1 - rPlotTime)
@@ -261,7 +262,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, time, start_size, plot_id_seq)
+          .(dbh, time, start_size, plot_id_seq, BA_comp)
         ], 
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -284,7 +285,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, time, start_size, plot_id_seq)
+        .(dbh, time, start_size, plot_id_seq, BA_comp)
       ]
   )
 

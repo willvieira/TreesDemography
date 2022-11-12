@@ -5,6 +5,7 @@ data {
   vector[N] start_size;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=0> plot_id;
+  vector[N] BA_comp;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -16,6 +17,7 @@ parameters {
   real<lower=0> sigma_plot;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
+  real beta;
 }
 model {
   // priors
@@ -24,9 +26,10 @@ model {
   sigma_plot ~ exponential(3);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
+  beta ~ normal(0, 1);
 
-  // add plot random effect
-  vector[N] rPlot = exp(r + rPlot_log[plot_id]);
+  // add plot random effect and BA effect
+  vector[N] rPlot = exp(r + rPlot_log[plot_id] + BA_comp * beta);
 
   // pre calculate component of the model mean
   vector[N] rPlotTime = exp(-rPlot .* time);
