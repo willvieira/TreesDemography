@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v13.0 - Von Bertalanffy model - plot random effect on r paramter"
+ subtitle: "Test v14.0 - Von Bertalanffy model - r in function of BA_comp"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -97,7 +97,8 @@ trainData[
     'species_id' = i.species_id,
     'dbh' = i.dbh,
     'time' = i.time,
-    'start_size' = i.start_size
+    'start_size' = i.start_size,
+    'BA_comp' = i.BA_comp
   ),
   on = c('tree_id', 'year_measured')
 ]
@@ -398,7 +399,8 @@ for(Sp in spIds)
       r = i.r,
       sigma_plot = i.sigma_plot,
       sigma_obs = i.sigma_obs,
-      Lmax = i.Lmax
+      Lmax = i.Lmax,
+      beta = i.beta
     ),
     on = 'iter'
   ]
@@ -429,7 +431,7 @@ for(Sp in spIds)
 
   # compute r plot specific parameter
   val_sp[,
-    r_plot := exp(r + rPlot_log)
+    r_plot := exp(r + rPlot_log + BA_comp * beta)
   ]
 
   # predict size
@@ -532,13 +534,13 @@ for(Sp in spIds)
       pred_size_matrix
   )
 
-  pred_growth_matrix <- val_sp[time > 0 & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
+  pred_growth_matrix <- val_sp[time > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
       select(-iter2) |>
       as.matrix()
 
   p4 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & time > 0, obs_growth],
+      val_sp[iter2 == 1 & time > 0 & !is.na(obs_growth), obs_growth],
       pred_growth_matrix
   )
 
