@@ -97,6 +97,92 @@ fix_resur <- function(x)
 }
 treeData[isGood == FALSE, status := fix_resur(status), by = tree_id]
 
+# For those plots/subplots that had status changed,
+# recalculate all competition metrics
+plots_to_calculate <- unique(
+    treeData[is.na(indBA) & isGood == FALSE & status == 1, .(plot_id, subplot_id)]
+)
+
+# Individual BA
+treeData[
+    is.na(indBA) & status == 1,
+    indBA := pi * (dbh/(2 * 1000))^2
+]
+
+for(i in 1:nrow(plots_to_calculate))
+{
+    pt_i <- plots_to_calculate$plot_id[i]
+    spt_i <- plots_to_calculate$subplot_id[i]
+
+    # clean cols to be recalculated
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i,
+        c('BA_plot', 'BA_sp') := NA
+    ]
+
+    # calculate plot basal area (BA in m2/ha)
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i & status == 1,
+        BA_plot := sum(indBA) * 1e4/subPlot_size,
+        by = year_measured
+    ]
+
+    # fill NAs of BA (due to dead trees) with the value from the plot
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i,
+        BA_plot := nafill(nafill(BA_plot, "locf"), "nocb"),
+        by = year_measured
+    ]
+
+    # species basal area per plot (BA_sp) as a proxy of seed source
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i & status == 1,
+        BA_sp := sum(indBA) * 1e4/subPlot_size,
+        by = .(year_measured, species_id)
+    ]
+
+    # fill NAs the same as for BA
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i,
+        BA_sp := nafill(nafill(BA_sp, "locf"), "nocb"),
+        by = .(year_measured, species_id)
+    ]
+
+    # Species relative basal area to overcome the potential opposite response of
+    # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i,
+        relativeBA_sp := BA_sp/BA_plot,
+        by = .(year_measured, species_id)
+    ]
+    # 0/0 = NA
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i & is.na(relativeBA_sp), relativeBA_sp := 0
+    ]
+
+    # Basal area of larger individuals than the focal individual (competitive index)
+    BA_comp <- function(size, plotSize, BA_ind) {
+        sapply(
+        size,
+        function(x)
+            sum(BA_ind[size > x]) * 1e4/plotSize
+        )
+    }
+
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i & status == 1,
+        BA_comp := BA_comp(dbh, unique(subPlot_size), indBA),
+        by = .(year_measured)
+    ]
+
+    # Individual basal area relative to the plot basal area
+    treeData[
+        plot_id == pt_i & subplot_id == spt_i & status == 1,
+        relativeBA_comp := indBA/sum(indBA),
+        by = .(year_measured)
+    ]
+}
+
 
 
 # Remove already dead trees (that were never observed alive)
