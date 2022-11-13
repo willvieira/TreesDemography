@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v2.0 - seed source from neighbor"
+ subtitle: "Test v2.0 - Ingrowth model accounting for ingrowth and mortality of new individuals"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -9,148 +9,132 @@
 - sim2: neighbor source with a extra source of random seeds arriving from long distance dispersion
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
-suppressPackageStartupMessages(require(RColorBrewer))
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(ggpubr))
-suppressPackageStartupMessages(library(ggridges))
-suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
 suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(jagsUI))
-suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
 ```
 ```{r load simulations, echo = F}
 # Load simulation variables
+simInfo <- yaml::read_yaml('_simulation_info.yml')
 
-  simInfo <- yaml::read_yaml('_simulation_info.yml')
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+simulations <- simInfo$simulations
 
-  # species id
-  if(is.null(simInfo$spIds)) {
-    spIds <- readRDS('data/spIds.RDS')
-  }else {
-    spIds <- simInfo$spIds
-  }
+# List output files and set vector names to species_id
+posteriorPop_files <- grep(
+  'posteriorPop',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
 
-  simName <- simInfo$simName
+diag_files <- grep(
+  'diagnostics',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 
-  simulations <- simInfo$simulations
+# trainData_files <- grep(
+#   'trainData',
+#   dir(file.path('output', simName), full.names = TRUE),
+#   value = TRUE
+# )
+# names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
+```
 
-  # Human readble simName
-  sim1name <- 'No fast transition'
-  sim2name <- 'Fast transition'
 
-#
-
-
-# Load rStan output and scaleInfo for all species_id
-  # get output name for each species_id
-  simNames = list.files(path = paste('output', simName, sep = '/'), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
-
-  for(sim in simulations) {
-    for(sp in spIds) {
-      assign(
-        paste('fit', sim, sp, sep = '_'),
-        readRDS(paste0('output/', simName, '/', 'out_', paste0('sim', which(sim == simulations)), sp, '_', simName, '.RDS'))
-      )
-    }
-  }
-
-  # get name of parameters for each simulation
-  for(sim in simulations)
-    assign(paste0('pars_', sim), setdiff(get(ls(pattern = sim)[1])$parameters, 'Ntotal'))
-
-#
-
-###########################################
-# Diagnostics
-###########################################
+```{r load dataset,echo =FALSE}
+fec_dt <- readRDS('data/fec_dt.RDS')
+fec_dt <- fec_dt[species_id %in% spIds]
 ```
 
 # Rhat
 
 ```{r, echo = F, fig.height = 5, fig.width = 10}
-
-  Rhat <- data.table()
-  for(sim in simulations)
-  {
-    for(sp in spIds)
-    {
-      rhat_simSp <- get(paste('fit', sim, sp, sep = '_'))$Rhat
-      rhat_pars <- unlist(rhat_simSp[names(rhat_simSp) %in% get(paste0('pars_', sim))])
-
-      Rhat <- rbind(
-        Rhat,
-        data.table(
-          sim = sim,
-          sp = sp,
-          pars = names(rhat_pars),
-          rhat = rhat_pars
-        )
-      )
-    }
-  }
-
-  p <- ggplot(data = Rhat, aes(x = sp, y = rhat)) +
-         geom_boxplot() +
-         coord_flip() +
-         facet_grid(~sim,
-                   labeller = labeller(sim = setNames(c(sim1name, sim2name),
-                                     c('sim1', 'sim2'
-                                    )))) +
-       theme_classic()
-  print(p)
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['rhat']] |>
+      bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = rhat, y = species_id)) +
+  geom_boxplot()
 ```
 
+# Divergent transitions
 
-# Trace and density plot of each parameter by species id
-
-```{r get MCMC sampling data, echo = F}
-  # Prepare data
-  # Data frame with sim, sp_id, pars and value
-  # Value is all MCMC samples after warmup for all chains together
-
-  mcmcSampleDF <- data.table()
-  for(sim in simulations)
-  {
-    for(sp in spIds)
-    {
-      simObj <- get(paste('fit', sim, sp, sep = '_'))
-
-      # get samples and filter the parameters of interest
-      sim_samples <- do.call(rbind, simObj$samples) %>%
-        as.data.frame() %>%
-        select(!contains('Ntotal')) %>%
-        pivot_longer(
-          cols = everything(),
-          names_to = 'pars', 
-          values_to = 'value'
-        ) %>%
-        mutate(
-          sim = sim,
-          sp = sp
-        )
-
-      # merge
-      mcmcSampleDF <- rbind(
-        mcmcSampleDF,
-        sim_samples
-      )
-    }
-  }
+```{r divergentTransitions, echo = FALSE}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+      bind_cols(species_id = .y) |>
+      mutate(chain = row_number())
+) |>
+pivot_wider(
+  names_from = chain,
+  values_from = num_divergent,
+  names_prefix = 'chain '
+) |>
+DT::datatable()
 ```
 
-```{r plot mcmcSample by pars, echo = F, message=FALSE, fig.height = 6, fig.width = 9}
+# Posterior distribution of parameters
 
-  for(par in unique(mcmcSampleDF$pars))
-  {
-    p <- mcmcSampleDF %>%
-      filter(pars == par) %>%
-      ggplot(aes(value, sp, fill = sim, color = sim)) +
-         geom_density_ridges(alpha = 0.5) +
-         theme_classic() +
-         xlab(par)
-    print(p)
-  }
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
+post <- map2_dfr(
+  posteriorPop_files,
+  names(posteriorPop_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
+)
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot(aes(x = value, y = species_id)) +
+        stat_eye() +
+        ggtitle(Par) +
+        xlab('')
+  )
+}
+```
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
+parComb <- post |>
+  summarise(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_id) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot(aes_string(x = parComb[1, i], y = parComb[2, i])) + 
+          geom_point() +
+          facet_wrap(~ species_id) +
+          xlab(parComb[1, i]) +
+          ylab(parComb[2, i])
+  )
+}
 ```
 
 
