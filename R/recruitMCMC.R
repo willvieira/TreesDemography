@@ -50,65 +50,83 @@ recruit_dt <- dataSource[species_id == sp]
 # remove NA plots
 recruit_dt <- recruit_dt[!is.na(plot_id)]
 
-if(recruit_dt[, .N] > sampleSize)
-{ 
-    # number of measurement by plot_id
-    recruit_dt[, nbMeasure := length(unique(year0)) + 1, by = plot_id]
+# if(recruit_dt[, .N] > sampleSize)
+# { 
+#     # number of measurement by plot_id
+#     recruit_dt[, nbMeasure := length(unique(year0)) + 1, by = plot_id]
     
-    # number of obs per number of measurement
-    nbObs <- recruit_dt[, .N, by = nbMeasure][order(nbMeasure, decreasing = TRUE)]
+#     # number of obs per number of measurement
+#     nbObs <- recruit_dt[, .N, by = nbMeasure][order(nbMeasure, decreasing = TRUE)]
     
-    # define filter of nbMeasurement
-    max_nbMeasure <- nbObs[cumsum(N) > sampleSize, max(nbMeasure)]
+#     # define filter of nbMeasurement
+#     max_nbMeasure <- nbObs[cumsum(N) > sampleSize, max(nbMeasure)]
 
-    # select plots to keep
-    recruit_dt[nbMeasure > max_nbMeasure, sampled := 'training']
+#     # select plots to keep
+#     recruit_dt[nbMeasure > max_nbMeasure, sampled := 'training']
 
-    # In case the selected plots with higher number of measurement is not
-    # enougth to `sampleSize`, complete the sampled list by selecting plots
-    # with `nbMeasure` lower than the `max_nbMeasure` threshold
-    if(recruit_dt[sampled == 'training', .N] < sampleSize)
-    {
-        # define how many obs are still needed to reach `sampleSize`
-        nMissing <- sampleSize - recruit_dt[sampled == 'training', .N]
+#     # In case the selected plots with higher number of measurement is not
+#     # enougth to `sampleSize`, complete the sampled list by selecting plots
+#     # with `nbMeasure` lower than the `max_nbMeasure` threshold
+#     if(recruit_dt[sampled == 'training', .N] < sampleSize)
+#     {
+#         # define how many obs are still needed to reach `sampleSize`
+#         nMissing <- sampleSize - recruit_dt[sampled == 'training', .N]
         
-        # list the number of obs per plot_it that were not selected yet
-        nbObs <- recruit_dt[
-            nbMeasure > (max_nbMeasure - 1) & is.na(sampled),
-            .N,
-            by = plot_id
-        ]
+#         # list the number of obs per plot_it that were not selected yet
+#         nbObs <- recruit_dt[
+#             nbMeasure > (max_nbMeasure - 1) & is.na(sampled),
+#             .N,
+#             by = plot_id
+#         ]
 
-        # sample random available plot up to reach `sampleSize`
-        nbObs[, sampled := FALSE]
-        keepSampling <- TRUE
+#         # sample random available plot up to reach `sampleSize`
+#         nbObs[, sampled := FALSE]
+#         keepSampling <- TRUE
         
-        while(keepSampling) {
+#         while(keepSampling) {
 
-            # sample random plot
-            selected_plot <- nbObs[sampled == FALSE, sample(plot_id, 1)]
-            nbObs[plot_id == selected_plot, sampled := TRUE]
+#             # sample random plot
+#             selected_plot <- nbObs[sampled == FALSE, sample(plot_id, 1)]
+#             nbObs[plot_id == selected_plot, sampled := TRUE]
 
-            keepSampling <- ifelse(
-                nbObs[sampled == TRUE, sum(N)] < nMissing,
-                TRUE, FALSE
-            )
+#             keepSampling <- ifelse(
+#                 nbObs[sampled == TRUE, sum(N)] < nMissing,
+#                 TRUE, FALSE
+#             )
             
-            # make sure there are enough plots to sample
-            if(keepSampling)
-                if(nbObs[sampled == FALSE, .N] < 1)
-                    keepSampling <- FALSE
-        }
+#             # make sure there are enough plots to sample
+#             if(keepSampling)
+#                 if(nbObs[sampled == FALSE, .N] < 1)
+#                     keepSampling <- FALSE
+#         }
 
-        recruit_dt[
-            plot_id %in% nbObs[sampled == TRUE, plot_id],
-            sampled := 'training'
-        ]
-    }
+#         recruit_dt[
+#             plot_id %in% nbObs[sampled == TRUE, plot_id],
+#             sampled := 'training'
+#         ]
+#     }
 
-    # what is not sampled, will be validation data
-    recruit_dt[is.na(sampled), sampled := 'validation']
-}
+#     # what is not sampled, will be validation data
+#     recruit_dt[is.na(sampled), sampled := 'validation']
+# }
+
+##
+
+
+
+## define plot_id in sequence to be used in stan
+
+  plot_id_uq <- recruit_dt[, unique(plot_id)]
+  toSub <- data.table(
+    plot_id = plot_id_uq,
+    plot_id_seq = 1:length(plot_id_uq)
+  )
+
+  recruit_dt[
+    toSub,
+    plot_id_seq := i.plot_id_seq,
+    on = 'plot_id'
+  ]
 
 ##
 
@@ -124,7 +142,9 @@ if(recruit_dt[, .N] > sampleSize)
           N = recruit_dt[, .N],
           nbRecruit = recruit_dt[, nbRecruit],
           plot_size = recruit_dt[, plot_size],
-          deltaTime = recruit_dt[, deltaYear_plot]
+          deltaTime = recruit_dt[, deltaYear_plot],
+          Np = recruit_dt[, length(unique(plot_id_seq))],
+          plot_id = recruit_dt[, plot_id_seq]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,

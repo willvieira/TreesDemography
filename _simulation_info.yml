@@ -13,19 +13,21 @@ maxIter: 4000
 # Number of cores and chains
 nC: 4
 # number of observations to use in the model fit
-sampleSize: 20000
+sampleSize: NA
 # The simulation and folder name
-simName: "intercept"
+simName: "rec_m_randomPlot"
 # simulations to compare with
-simCompare: []
+simCompare: ["intercept"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v2.0
+## Recruitmenet test - v3.0
 
 ## New model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
+
+# V3.0 makes the ingrowth parameter `m` vary in function of plot_id
