@@ -138,483 +138,242 @@ for(i in 1:ncol(parComb))
 ```
 
 
-# Predictions (observed vs predicted)
+# Data distribution
 
-```{r predictFunction,echo=FALSE}
-out_sp <- readRDS('data/RESEF/jags_data.RDS')
-
-# load tree_data to generate unique subplot_ID by each plot_id
-subplotList <- readRDS('data/RESEF/tree_data.RDS')[, unique(subplot_id), by = plot_id]
-
-# Given a site ID (and the list of all subplot_ids)
-# return the 8 site ID around the target site (+ target site ID)
-getNeighbour <- function(site, subplotList)
-{
-    plot_ID <- gsub('_.*', '', site)
-    subplot_ID <- gsub('.*_', '', site)
-    
-    # get first and second element of subplot id
-    firstEl <- as.numeric(substring(subplot_ID, 1, 1))
-    secondEl <- as.numeric(substring(subplot_ID, 2, 2))
-
-    # get max of x and y over all subplots within a plot
-    all_subplots <- subplotList[plot_id == plot_ID, V1]
-    max_X <- max(as.numeric(substring(all_subplots, 1, 1)))
-    max_Y <- max(as.numeric(substring(all_subplots, 2, 2)))
-
-    # create a vector
-    firstEl_vec <- c(firstEl - 1, firstEl, firstEl + 1)
-    secondEl_vec <- c(secondEl - 1, secondEl, secondEl + 1)
-
-    # expand possibilites
-    exp_mt <- expand.grid(firstEl_vec, secondEl_vec)
-
-    # Remove negative plots
-    exp_mt <- exp_mt[!apply(exp_mt, 1, function(x) any(x < 0)), ]
-
-    # Remove subplots outside plot (bigger than max_*)
-    exp_mt <- exp_mt[!exp_mt$Var1 > max_X, ]
-    exp_mt <- exp_mt[!exp_mt$Var2 > max_Y, ]
-
-    # reduce expanded matrix in a vector combining first and second element
-    paste0(
-        plot_ID,
-        '_',
-        paste0(exp_mt$Var1, exp_mt$Var2)
-    )
-}
-
-
-siteNames <- rownames(out_sp[[1]])
-neighbour_ls <- sapply(siteNames, getNeighbour, subplotList)
-
-pred_sim1 <- function(newdata, params, neighbour, maxTime)
-{
-  nSites <- dim(newdata)[1]
-
-  # add more years to newdata so we can predit on the future
-  extraYears <- maxTime - dim(newdata)[2]
-  newdata_future <- aperm(apply(newdata, c(1, 3), c, setNames(rep(NA, extraYears), 8:(extraYears+dim(newdata)[2]))), c(2, 1, 3))
-
-  # Transfrom array of [site, time, stage] into data.frame of one dimension
-  newdata_lg <- reshape2::melt(newdata_future) %>%
-    mutate(
-      site = as.factor(Var1),
-      year = as.factor(Var2),
-      state = as.factor(Var3),
-      obs = value,
-      pred = ifelse(year == 1, obs, NA)
-    ) %>%
-    select(site, year, state, obs, pred)
- 
-  # run model for time 2 to 7
-  for(Time in 2:dim(newdata_future)[2])
-  {
-    # estimate survival
-    for(state in 1:4)
-      assign(
-        paste0('S_', state),
-        rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
-      )
-
-    # get adult N from neighbor
-    neigh_t0 <- sapply(
-      subset(newdata_lg, year == Time-1 & state == 4)$site,
-      function(x)
-        sum(subset(newdata_lg, year == Time-1 & state == 4 & site %in% neighbour[[as.character(x)]])$pred)
-    )
-    
-    # Estimate recruitment for sapling and transition to next stage
-    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * neigh_t0 + params$gamma[2])
-    for(state in 2:4)
-      assign(
-        paste0('G_', state),
-        rbinom(n = nSites, size = get(paste0('S_', state-1)), prob = params$theta[state-1])
-      )
-
-    # Sum all stages to get total N at each site j in each year t
-    # And append to data.frame
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 1)] <- S_1 + G_1 - G_2
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 2)] <- S_2 + G_2 - G_3
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 3)] <- S_3 + G_3 - G_4
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 4)] <- S_4 + G_4
-  }
-
-  return( newdata_lg )
-}
-
-
-
-pred_sim2 <- function(newdata, params, neighbour, maxTime)
-{
-  nSites <- dim(newdata)[1]
-
-  # add more years to newdata so we can predit on the future
-  extraYears <- maxTime - dim(newdata)[2]
-  newdata_future <- aperm(apply(newdata, c(1, 3), c, setNames(rep(NA, extraYears), 8:(extraYears+dim(newdata)[2]))), c(2, 1, 3))
-
-  # Transfrom array of [site, time, stage] into data.frame of one dimension
-  newdata_lg <- reshape2::melt(newdata_future) %>%
-    mutate(
-      site = as.factor(Var1),
-      year = as.factor(Var2),
-      state = as.factor(Var3),
-      obs = value,
-      pred = ifelse(year == 1, obs, NA)
-    ) %>%
-    select(site, year, state, obs, pred)
-
-  # run model for time 2 to 7
-  for(Time in 2:dim(newdata_future)[2])
-  {
-    # estimate survival
-    for(state in 1:4)
-      assign(
-        paste0('S_', state),
-        rbinom(n = nSites, size = subset(newdata_lg, year == Time-1 & state == state)$pred, prob = params$omega[state])
-      )
-
-    # get adult N from neighbor
-    neigh_t0 <- sapply(
-      subset(newdata_lg, year == Time-1 & state == 4)$site,
-      function(x)
-        sum(subset(newdata_lg, year == Time-1 & state == 4 & site %in% neighbour[[as.character(x)]])$pred)
-    )
-
-    # Estimate recruitment for sapling and transition to next stage
-    G_1 <- rpois(n = nSites, lambda = params$gamma[1] * neigh_t0 + params$gamma[2])
-    for(state in 2:4)
-      assign(
-        paste0('G_', state),
-        rbinom(n = nSites, size = get(paste0('S_', state-1)), prob = params$theta[state-1])
-      )
-    G_5 <- rpois(n = nSites, lambda = params$gamma[3])
-
-    # Sum all stages to get total N at each site j in each year t
-    # And append to data.frame
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 1)] <- S_1 + G_1 - G_2
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 2)] <- S_2 + G_2 + G_5 - G_3
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 3)] <- S_3 + G_3 - G_4
-    newdata_lg$pred[which(newdata_lg$year == Time & newdata_lg$state == 4)] <- S_4 + G_4
-  }
-
-  return( newdata_lg )
-}
-
-
-maxTime = 15
-totalRep = 30
-pred_dt <- data.table()
-
-for(sp in spIds)
-{
-  # load data
-  newdata <- out_sp[[sp]]
-
-  # get predictions
-  for(rep in 1:totalRep)
-  {
-    ## sim1
-    preddata <- pred_sim1(newdata, get(paste0('fit_', simulations[1], '_', sp))$mean, neighbour_ls, maxTime)
-    
-    # add species and rep info
-    preddata$sp <- sp
-    preddata$rep <- as.factor(rep)
-    preddata$sim <- simulations[1]
-    
-    pred_dt <- rbind(
-      pred_dt, 
-      preddata
-    )
-
-    ## sim2
-    preddata <- pred_sim2(newdata, get(paste0('fit_', simulations[2], '_', sp))$mean, neighbour_ls, maxTime)
-    
-    # add species and rep info
-    preddata$sp <- sp
-    preddata$rep <- as.factor(rep)
-    preddata$sim <- simulations[2]
-    
-    pred_dt <- rbind(
-      pred_dt, 
-      preddata
-    )
-  }
-}
+```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+fec_dt[, .(species_id, nbRecruit, deltaYear_plot)] |>
+  pivot_longer(
+    cols = c(nbRecruit, deltaYear_plot),
+    names_to = 'var'
+  ) |>
+  ggplot(aes(x = value, y = species_id)) +
+    geom_density_ridges(alpha = 0.7, color = NA) +
+    facet_wrap(~var, scales = 'free_x') +
+    xlab('')
 ```
 
 
-## Year group
+# Predictions
 
-```{r plotPrediction_state, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 15, fig.width = 10}
-for(spId in spIds)
+```{r,echo=FALSE,fig.height = 6.5, fig.width = 8}
+post |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(deltaYear = seq(0, 50, .5)) |>
+  mutate(
+    lambda = m * 399 * (1 - p^deltaYear)/(1 - p)
+  ) |>
+  ggplot(aes(x = deltaYear, y = lambda, color = species_id)) +
+        stat_lineribbon(.width = 0.95, alpha = .8) +
+        scale_fill_brewer() +
+        #theme(legend.position="none") +
+        ylab('Number of ingrowth recruits') + xlab('Delta time (years)')
+```
+
+# Cross-validation
+
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height =4.5, fig.width = 9}
+# As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
+# So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
+
+# list to save MSE and R2 for each species to be used later
+MSE_list <- R2_list <- list()
+
+for(Sp in spIds)
 {
-  maxAxis <- pred_dt %>% 
-    filter(sp == spId & year %in% 2:7) %>%
+  val_sp <- fec_dt[species_id == Sp]
+
+  # remove NAs
+  val_sp <- val_sp[!is.na(deltaYear_plot), .(species_id, nbRecruit, deltaYear_plot, plot_size)]
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 1k iterations of the 8000
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 1000)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 1000)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        as.data.table(),
+    `:=`(
+      m = i.m,
+      p = i.p
+    ),
+    on = 'iter'
+  ]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
+
+  # predict number of recruit
+  val_sp[,
+    lambda :=  m *
+               plot_size *
+               (1 - p^deltaYear_plot)/(1 - p)
+  ]
+
+  # simulate nbRecruit from model distribution (Poisson dist)
+  val_sp[, lambda_random := rpois(.N, lambda)]
+
+  # calculate MSE
+  val_sp[, SE := (nbRecruit - lambda_random)^2]
+  
+  # mean SE over all observations for each iteration and save to list
+  MSE_list[[Sp]] <- val_sp[, 
+    .(
+      MSE = mean(SE, na.rm = TRUE),
+      species_id = Sp
+    ),
+    by = iter2
+  ]
+
+  # Calculate R2 (Gelman et al 2018)
+  R2gel <- val_sp |>
+    group_by(iter2) |>
     summarise(
-      maxPred = quantile(pred, na.rm = TRUE, probs = 0.975),
-      maxObs = quantile(obs, na.rm = TRUE, probs = 0.975),
-      maxTotal = max(maxPred, maxObs)
-    ) %>%
-    select(maxTotal) %>%
-    as.numeric()
-  wrapNames <- c(
-    setNames(simulations, simulations),
-    setNames(paste0('year ', unique(pred_dt$year)), unique(pred_dt$year))
+      var_lambda = var(lambda, na.rm = TRUE),
+      mean_lambda = mean(lambda, na.rm = TRUE)      
+    ) |>
+    bind_cols(
+      iter = sampledIter,
+      species_id = Sp
+    ) |>
+    mutate(
+      R2gelman = var_lambda/(var_lambda + mean_lambda)
+    ) |>
+    select(iter, iter2, species_id, R2gelman) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- merge(
+    R2gel,
+    val_sp[,
+      .(R2reg = get_r2(nbRecruit, lambda_random)), 
+      by = iter2
+    ],
+    by = 'iter2'
   )
 
-  p <- pred_dt %>%
-    filter(sp == spId & year %in% 2:7) %>%
-    group_by(sim, site, state, year) %>%
-    summarise(
-      pred_mean = mean(pred),
-      obs_mean = mean(obs)
-    ) %>%
-    ggplot(aes(obs_mean, pred_mean)) +
-      geom_point(alpha = 0.5, size = 0.4) +
-      geom_abline(intercept = 0, alpha = 0.3) +
-      facet_grid(year ~ sim, labeller = as_labeller(wrapNames)) +
-      stat_regline_equation(
-        aes(label =  paste(..adj.rr.label.., sep = "~~~~")),
-        label.x.npc = 0.8,
-        size = 2.5
-      ) +
-      xlim(0, maxAxis) + ylim(0, maxAxis) +
-      xlab('Observed N') + ylab('Predicted N (mean of 10 repetitions)') +
-      ggtitle(spId)
+  # plot
+  p1 <- val_sp[,.(m_obs=mean(nbRecruit), m_pred=mean(lambda)), by = obsID] |>
+    ggplot(aes(m_obs, m_pred)) +
+          geom_point(alpha = .4, size = .5) +
+          geom_abline(slope = 1, intercept = 0) + 
+          tune::coord_obs_pred() +
+          theme(
+                legend.position="none",
+                plot.margin = margin(t = 30)
+            ) +
+          xlab('Observerd nbRecruit') +
+          ylab('Predicted nbRecruit')
 
-  print(p)
-}
-```
 
-## State group
+  pred_matrix <- val_sp[, .(lambda_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = lambda_random) |>
+      select(-iter2) |>
+      as.matrix()
 
-```{r plotPrediction_year, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 12, fig.width = 10}
-for(spId in spIds)
-{
-  maxAxis <- pred_dt %>% 
-    filter(sp == spId & year %in% 2:7) %>%
-    summarise(
-      maxPred = quantile(pred, na.rm = TRUE, probs = 0.975),
-      maxObs = quantile(obs, na.rm = TRUE, probs = 0.975),
-      maxTotal = max(maxPred, maxObs)
-    ) %>%
-    select(maxTotal) %>%
-    as.numeric()
-  wrapNames <- c(
-    setNames(simulations, simulations),
-    setNames(paste0('state ', unique(pred_dt$state)), unique(pred_dt$state))
+  xLim_max <- val_sp[, quantile(nbRecruit, probs = 0.99) + 1]
+  p2 <- ppc_dens_overlay(
+      val_sp[iter2 == 1, nbRecruit],
+      pred_matrix[sample(1:nrow(pred_matrix), 200), ]
+  ) +
+  xlim(0, xLim_max) +
+  xlab('nbRecruit')
+
+  print(
+    ggpubr::ggarrange(
+        p1, p2,
+        ncol = 2,
+        labels = Sp,
+        font.label = list(size = 9, face = 'bold')
+    )
   )
-
-  p <- pred_dt %>%
-    filter(sp == spId & year != 1) %>%
-    group_by(sim, site, state, year) %>%
-    summarise(
-      pred_mean = mean(pred),
-      obs_mean = mean(obs)
-    ) %>%
-    ggplot(aes(obs_mean, pred_mean)) +
-      geom_point(alpha = 0.5, size = 0.4) +
-      geom_abline(intercept = 0, alpha = 0.3) +
-      facet_grid(state ~ sim, labeller = as_labeller(wrapNames)) +
-      stat_regline_equation(
-        aes(label =  paste(..adj.rr.label.., sep = "~~~~")),
-        label.x.npc = 0.8,
-        size = 2.5
-      ) +
-      xlim(0, maxAxis) + ylim(0, maxAxis) +
-      xlab('Observed N') + ylab('Predicted N (mean of 10 repetitions)') +
-      ggtitle(spId)
-
-  print(p)
 }
-```
 
-
-## Rsquared summary
-
-```{r r2pred, echo = FALSE}
-r2_state <- pred_dt %>%
-    split(list(.$sp, .$sim, .$state)) %>%
-    map(~lm(pred ~ obs, data = .)) %>%
-    map(summary) %>%
-    map_dbl(~.$r.squared) %>%
-    as.data.frame() %>%
-    rename(., r2 = .) %>%
-    rownames_to_column() %>%
-    mutate(
-        sp = gsub('\\..*', '', rowname),
-        sim = map_chr(strsplit(rowname, '\\.'), function(x) x[2]),
-        state = as.factor(gsub('.*\\.', '', rowname))
-    ) %>%
-    select(sp, sim, state, r2)
-
-r2_year <- pred_dt %>%
-    mutate(year = as.numeric(year)) %>%
-    filter(year %in% 2:7) %>%
-    split(list(.$sp, .$sim, .$year)) %>%
-    map(~lm(pred ~ obs, data = .)) %>%
-    map(summary) %>%
-    map_dbl(~.$r.squared) %>%
-    as.data.frame() %>%
-    rename(., r2 = .) %>%
-    rownames_to_column() %>%
-    mutate(
-        sp = gsub('\\..*', '', rowname),
-        sim = map_chr(strsplit(rowname, '\\.'), function(x) x[2]),
-        year = as.factor(gsub('.*\\.', '', rowname))
-    ) %>%
-    select(sp, sim, year, r2)
-```
-
-
-```{r plot_r2_a, echo = FALSE, fig.height = 6, fig.width = 9}
-r2_state %>%
-    ggplot(aes(r2, sp, fill = sim, color = sim)) +
-        geom_point() +
-        facet_wrap(~state)
-```
-
-```{r plot_r2_b, echo = FALSE, fig.height = 7, fig.width = 9}
-
-r2_year %>%
-    ggplot(aes(r2, sp, fill = sim, color = sim)) +
-        geom_point() +
-        facet_wrap(~year)
-```
-
-## Mean observed & predicted
-
-```{r calculateMEANobs, echo=FALSE, message=FALSE, warning=FALSE}
-obs_timeseries = pred_dt %>%
-  group_by(sp, sim, state, year) %>%
-  summarise(
-    obs_mean   = mean(obs, na.rm = TRUE),
-    obs_upper  = quantile(obs, na.rm = TRUE, probs = 0.975),
-    obs_lower  = quantile(obs, na.rm = TRUE, probs = 0.025),
-    pred_mean  = mean(pred, na.rm = TRUE),
-    pred_upper = quantile(pred, na.rm = TRUE, probs = 0.975),
-    pred_lower = quantile(pred, na.rm = TRUE, probs = 0.025)
+# save MSE and R2 to be used for model comparison
+invisible(
+    map_dfr(
+    c('MSE', 'R2'),
+    ~ get(paste0(.x, '_list')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          'output', 
+          simName,
+          paste0(.x, '.RDS')
+      )
+    )
   )
+)
 ```
 
 
-```{r plotMEANobs, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 5, fig.width = 10}
+# Mean squared error (MSE)
 
-for(spId in spIds)
-{
-  yMax <- obs_timeseries %>%
-    filter(sp == spId & year %in% 1:7) %>%
-    group_by(sp, sim, state) %>%
-    summarise(
-      maxObs   = max(obs_upper, na.rm = T),
-      maxPred  = max(pred_upper, na.rm = T),
-      maxValue = max(maxObs, maxPred)
-    ) %>%
-    select(sim, state, maxValue)
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+sim_toLoad <- c(simInfo$simCompare, simName)
 
-  #xMax <- max(as.numeric(pred_dt$year))
-  xMax = 7
-
-  par(mfrow = c(2, 4), las = 1, mar = c(3, 3, 0.5, 0.2), oma = c(0, 0, 4, 2), mgp = c(1.5, 0.3, 0), tck = -.008)
-  for(Sim in simulations)
-  {
-    for(st in 1:4)
-    {
-      st_dt <- obs_timeseries %>% filter(sp == spId & sim == Sim & state == st)
-      plot(0, pch = '', xlim = c(1, xMax), ylim = c(0, subset(yMax, sim == Sim & state == st)$maxValue), xlab = 'Year', ylab = ifelse(st == 1, 'N', ''))
-      # Observed
-      polygon(
-        x = c(1:7, rev(1:7)),
-        y = c(st_dt$obs_upper[1:7], rev(st_dt$obs_lower[1:7])),
-        col = rgb(253,172,83,120, maxColorValue = 255),
-        border = NA
-      )
-      lines(st_dt$obs_mean, lwd = 3, col = rgb(253,172,83,255, maxColorValue = 255))
-      # pedicted
-      polygon(
-        x = c(st_dt$year, rev(st_dt$year)),
-        y = c(st_dt$pred_upper, rev(st_dt$pred_lower)),
-        col = rgb(155,183,212,120, maxColorValue = 255),
-        border = NA
-      )
-      lines(st_dt$pred_mean, lwd = 3, col = rgb(155,183,212,255, maxColorValue = 255))
-      if(Sim == simulations[1]) mtext(paste('state', st), 3, line = 0)
-    }
-    mtext(Sim, 4, las = 0, line = 0.5)
-  }
-  legend('topleft', legend = c('Observed', 'predidcted'), lty = 1, col = c(rgb(253,172,83,255, maxColorValue = 255), rgb(155,183,212,255, maxColorValue = 255)), bty = 'n', cex = .9)
-  mtext(spId, 3, outer = TRUE, line = 1)
-}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'MSE.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = MSE, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    xlab('Mean Squared error (MSE)') + ylab('')
 ```
 
 
-## Mean Squared Error
+# Rsquared
 
-```{r calculateMSE, echo=FALSE, message=FALSE, warning=FALSE}
+The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-# lower_MSE <- pred_dt %>%
-#   group_by(sp, sim, site, state, year) %>%
-#   summarise(
-#     pred_mean = mean(pred),
-#     obs_mean = mean(obs)
-#   ) %>%
-#   filter(!is.na(obs_mean)) %>%
-#   group_by(sp, sim, site, state) %>%
-#   summarise(
-#     MSE = mean((obs_mean - pred_mean)^2)
-#   ) %>%
-#   filter(MSE > 1) %>%
-#   group_by(sp, sim, site) %>%
-#   summarise(
-#     meanMSE = mean(MSE)
-#   ) %>%
-#   group_by(sp, sim) %>%
-#   filter(rank(meanMSE) %in% 1:5)
-
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = R2gelman, y = species_id, fill = sim)) +
+      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+      xlab('Rsquared (Gelman 2018)')
 ```
 
-```{r plotlowerMSE, echo=FALSE, message=FALSE, warning=FALSE, fig.height = 3, fig.width = 10}
-# plot_bestSite <- function(spId, Site)
-# {
-#   yMax <- pred_dt %>%
-#     filter(sp == spId & site == Site) %>%
-#     summarise(
-#       maxObs = max(obs, na.rm = T),
-#       maxPred = max(pred, na.rm = T),
-#       maxValue = max(maxObs, maxPred)
-#     ) %>%
-#     select(maxValue) %>%
-#     as.numeric()
+We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values.
 
-#  # get max and min value of repetitions
-#  pred_lc <- pred_dt %>%
-#     filter(sp == spId & site == Site) %>%
-#     group_by(state, year) %>%
-#     summarise(
-#       pred_upper = max(pred),
-#       pred_lower = min(pred),
-#       obs = mean(obs)
-#     )
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = R2reg, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    xlab('Rsquared (linear regression)')
+```
 
-#   par(mfrow = c(1, 4), las = 1, mar = c(3, 3, 4, 0.2), mgp = c(1.5, 0.3, 0), tck = -.008)
-#   for(st in 1:4)
-#   {
-#     plot(0, pch = '', xlim = c(2, maxTime), ylim = c(0, yMax), xlab = 'Year', ylab = ifelse(st == 1, 'N', ''))
+# Sampling time
 
-#     polygon(
-#       x = c(1:maxTime, maxTime:1),
-#       y = c(subset(pred_lc, state == st)$pred_upper, rev(subset(pred_lc, state == st)$pred_lower)),
-#       border = NA,
-#       col = '#c0bcbc'
-#     )
-#     lines(subset(pred_lc, state == st)$obs, lwd = 1.6)
-#     mtext(paste('state', st), 3, line = 0)
-#   }
-#   mtext(paste0(spId, '; site:', Site), 3, outer = TRUE, line = -2)
-# }
-
-
-# for(i in 1:nrow(lower_MSE))
-#   plot_bestSite(spId = lower_MSE$sp[i], Site = lower_MSE$site[i])
+```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['time']][['chains']] |>
+    bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = total/3600, y = species_id)) +
+  geom_boxplot() +
+  xlab('Fit time (hours)')
 ```
