@@ -5,9 +5,6 @@
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
-- sim1: neighbor source only
-- sim2: neighbor source with a extra source of random seeds arriving from long distance dispersion
-
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(cmdstanr))
@@ -60,7 +57,7 @@ fec_dt <- fec_dt[species_id %in% spIds]
 
 # Rhat
 
-```{r, echo = F, fig.height = 5, fig.width = 10}
+```{r, echo = F,fig.height = 7, fig.width = 7}
 map2_dfr(
   diag_files,
   names(diag_files),
