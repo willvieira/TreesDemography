@@ -323,6 +323,41 @@ print(
         xlab('Total annual precipitation') +
         ylab('Plot random effect')
 )
+
+# save plot effect ot be used against future models
+plotEffect |>
+  select(species_id, plot_id, m_rReal) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanPlotEffect_rReal.RDS'
+    )
+  )
+```
+
+
+# Changes in plot random effect from past models
+
+Compare plot random effect with last model to check how variance is changing. 
+
+```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
+sim_toLoad <- c(simInfo$simCompare[length(simInfo$simCompare)], simName)
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'meanPlotEffect_rReal.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  pivot_wider(
+    names_from = sim,
+    values_from = m_rReal
+  ) |>
+  ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
+    geom_point(size = 0.8, alpha = .7) +
+    geom_abline(intercept = 0, slope = 1) +
+    #tune::coord_obs_pred() +
+    facet_wrap(~species_id, scales = 'free')
 ```
 
 
@@ -382,10 +417,11 @@ for(Sp in spIds)
   val_sp <- trainData[species_id == Sp & sampled == 'validation']
 
   # replicate each observation by N_iteration to accommodate the parameters draw
-  # Using only 1k iterations of the 8000
+  # Using only 300 iterations of the 8000 to speed calculation as the final
+  # result is quite similar to use the 8000 iteractions
   val_sp[, obsID := .I]
-  val_sp <- val_sp[rep(obsID, each = 1000)]
-  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 1000)
+  val_sp <- val_sp[rep(obsID, each = 200)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 200)
   val_sp[, iter := sampledIter, by = obsID]
 
   # merge global parameters
