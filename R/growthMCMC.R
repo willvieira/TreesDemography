@@ -211,7 +211,7 @@ growth_dt[
     # dt is vector of [1] dbh, [2] time, [3] start_size, [4] plot_id_seq, and [5] BA_comp
 
     # Add plot_id random effect 
-    rPlot_log <- post_dist_lg[, paste0('rPlot_log[', dt[4], ']')]
+    rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
     rPlot_beta <- exp(post[, 'r'] + rPlot_log + dt[5] * post[, 'beta'])
     
     # time component of the model
