@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v2.0 - Ingrowth model accounting for ingrowth and mortality of new individuals"
+ subtitle: "Test v3.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect on ingrowth rate `m`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -34,6 +34,14 @@ posteriorPop_files <- grep(
 )
 names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
 
+posteriormPlot_files <- grep(
+  'posteriormPlot',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriormPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriormPlot_files))))
+
+
 diag_files <- grep(
   'diagnostics',
   dir(file.path('output', simName), full.names = TRUE),
@@ -41,18 +49,28 @@ diag_files <- grep(
 )
 names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 
-# trainData_files <- grep(
-#   'trainData',
-#   dir(file.path('output', simName), full.names = TRUE),
-#   value = TRUE
-# )
-# names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
+toSub_files <- grep(
+  'toSub',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(toSub_files) <- names(sort(sapply(spIds, function(x) grep(x, toSub_files))))
 ```
 
 
 ```{r load dataset,echo =FALSE}
 fec_dt <- readRDS('data/fec_dt.RDS')
 fec_dt <- fec_dt[species_id %in% spIds]
+
+plot_summary <- fec_dt[,  
+                  .( 
+                    latitude = unique(latitude), 
+                    BA_plot = mean(BA_plot, na.rm = TRUE), 
+                    bio_01_mean = mean(bio_01_mean, na.rm = TRUE), 
+                    bio_12_mean = mean(bio_12_mean, na.rm = TRUE) 
+                  ),  
+                  by = plot_id  
+                ]
 ```
 
 # Rhat
@@ -135,6 +153,142 @@ for(i in 1:ncol(parComb))
 ```
 
 
+# Plot random effect
+
+```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
+plotEffect_ls <- list()
+for(Sp in spIds)
+{
+  m_pop <- post |>
+    filter(species_id == Sp & par == 'mPop_log') |>
+    mutate(mPop_log = value) |>
+    select(mPop_log, iter)
+
+  m_mean <- m_pop |>
+    summarise(m_mean = mean(exp(mPop_log))) |>
+    pull(m_mean)
+
+  toSub_sp <- readRDS(toSub_files[Sp]) |>
+    left_join(
+      plot_summary
+    )
+
+  dt_toPlot <- readRDS(posteriormPlot_files[Sp]) |>
+    mutate(plot_id_seq = parse_number(par)) |>
+    left_join(
+      m_pop
+    ) |>
+    mutate(m = exp(value + mPop_log)) |>
+    left_join(
+      toSub_sp
+    )
+
+  # save plot effect mean to plot against other variables
+  # in the next code block
+  plotEffect_ls[[Sp]] <- dt_toPlot |>
+    group_by(par) |>
+    mutate(
+      m_mean = mean(m),
+      m_pop = exp(mPop_log)
+    ) |>
+    ungroup() |>
+    filter(iter == 1) |>
+    select(
+      plot_id, plot_id_seq, m_mean, m_pop, latitude,
+      BA_plot, bio_01_mean, bio_12_mean
+    )
+  
+  # filter to remove some plots so figure is liseable
+  dt_toPlot <- dt_toPlot |>
+    filter(plot_id_seq %in% sample(plot_id_seq, 500)) |>
+    mutate(plot_id = fct_reorder(plot_id, latitude))
+
+  print(
+    ggarrange(
+      dt_toPlot |>
+        ggplot(aes(y = plot_id, x = m, color = bio_01_mean)) +
+          stat_pointinterval(alpha = .7, size = .1) +
+          geom_vline(
+            xintercept = m_mean, color = 'red', alpha = .8
+          ) +
+          xlab('m') + ylab('plot_id (ordered by latitude)') +
+          theme(
+            legend.position = 'top',
+            axis.text.y = element_blank()
+          ) +
+          labs(subtitle = Sp),
+      dt_toPlot |>
+        ggplot(aes(y = plot_id, x = m, color = BA_plot)) +
+          stat_pointinterval(alpha = .7, size = .1) +
+          geom_vline(
+            xintercept = m_mean, color = 'red', alpha = .8
+          ) +
+          xlab('m') + ylab('') +
+          theme(
+            legend.position = 'top',
+            axis.text.y = element_blank()
+          ) +
+          labs(subtitle = ''),
+      ncol = 2
+    )
+  )
+}
+
+# save plot effect ot be used against future models
+plotEffect_ls |>
+  bind_rows(.id = 'species_id') |>
+  select(species_id, plot_id, m_mean) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanPlotEffect_m.RDS'
+    )
+  )
+
+```
+
+
+## Plot random effect in function of annual mean temperature and basal area
+
+```{r plot_randomEffect2, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 12}
+# merge list of sepecies
+plotEffect <- plotEffect_ls |>
+  bind_rows(.id = 'species_id')
+
+m_pop <- plotEffect |>
+  group_by(species_id) |>
+  summarise(m = unique(m_pop))
+
+print(
+  plotEffect |>
+    ggplot(aes(x = bio_01_mean, log(m_mean), color = BA_plot)) +
+        geom_point(size = 0.4, alpha = 0.8) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
+        xlab('Annual mean temperature') +
+        ylab('Plot random effect')
+)
+print(
+  plotEffect |>
+    ggplot(aes(x = BA_plot, log(m_mean), color = bio_01_mean)) +
+        geom_point(size = 0.6) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
+        xlab('Plot basal area') +
+        ylab('Plot random effect')
+)
+print(
+  plotEffect |>
+    ggplot(aes(x = bio_12_mean, log(m_mean), color = BA_plot)) +
+        geom_point(size = 0.6) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
+        xlab('Total annual precipitation') +
+        ylab('Plot random effect')
+)
+```
+
 # Data distribution
 
 ```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
@@ -161,7 +315,7 @@ post |>
   group_by(species_id) |>
   expand_grid(deltaYear = seq(0, 50, .5)) |>
   mutate(
-    lambda = m * 399 * (1 - p^deltaYear)/(1 - p)
+    lambda = exp(mPop_log) * 399 * (1 - p^deltaYear)/(1 - p)
   ) |>
   ggplot(aes(x = deltaYear, y = lambda, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
@@ -183,14 +337,24 @@ for(Sp in spIds)
 {
   val_sp <- fec_dt[species_id == Sp]
 
+  # merge plot_id sequence
+  val_sp[
+    readRDS(toSub_files[Sp]),
+    plot_id_seq := i.plot_id_seq,
+    on = 'plot_id'
+  ]
+
   # remove NAs
-  val_sp <- val_sp[!is.na(deltaYear_plot), .(species_id, nbRecruit, deltaYear_plot, plot_size)]
+  val_sp <- val_sp[
+    !is.na(deltaYear_plot),
+    .(plot_id, plot_id_seq, species_id, nbRecruit, deltaYear_plot, plot_size)
+  ]
 
   # replicate each observation by N_iteration to accommodate the parameters draw
   # Using only 1k iterations of the 8000
   val_sp[, obsID := .I]
-  val_sp <- val_sp[rep(obsID, each = 1000)]
-  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 1000)
+  val_sp <- val_sp[rep(obsID, each = 200)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 200)
   val_sp[, iter := sampledIter, by = obsID]
 
   # merge global parameters
@@ -201,15 +365,33 @@ for(Sp in spIds)
         pivot_wider(names_from = par, values_from = value) |>
         as.data.table(),
     `:=`(
-      m = i.m,
-      p = i.p
+      mPop_log = i.mPop_log,
+      p = i.p,
+      sigma_plot = i.sigma_plot
     ),
     on = 'iter'
+  ]
+
+  # merge plot specific parameters
+  val_sp[
+    readRDS(posteriormPlot_files[Sp]) |>
+      mutate(
+        plot_id_seq = parse_number(par)
+      ) |>
+      select(iter, plot_id_seq, value) |>
+      setDT(),
+    mPlot_log := i.value,
+    on = c('iter', 'plot_id_seq')
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
+
+  # compute m plot specific parameter
+  val_sp[,
+    m := exp(mPop_log + mPlot_log)
+  ]
 
   # predict number of recruit
   val_sp[,
@@ -361,6 +543,33 @@ map_dfr(
     xlab('Rsquared (linear regression)')
 ```
 
+
+# Leave-one-out cross-validation to compare models
+
+```{r loo, echo = FALSE, warning=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  ggplot(aes(x = value, y = species_id, color = sim)) +
+    geom_point() +
+    facet_wrap(~ variable, scales = 'free_x') +
+    xlab('') + ylab('')
+```
 # Sampling time
 
 ```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
