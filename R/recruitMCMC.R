@@ -179,9 +179,13 @@ recruit_dt <- recruit_dt[!is.na(plot_id)]
   {
     # dt is vector of [1] nbRecruit, [2] plot_size, and [3] deltaTime
     # post is a matrix of nrow draws and ncol paramaters
-
+  
+    # Add plot_id random effect 
+    mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
+    mPlot <- exp(post[, 'mPop_log'] + mPlot_log)
+    
     # mean
-    Mean <- post[, 'm'] * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
+    Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
 
     # likelihood
     dpois(
@@ -220,7 +224,7 @@ recruit_dt <- recruit_dt[!is.na(plot_id)]
     llfun_recruit, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
     chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot)], 
+    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq)], 
     draws = post_dist_lg,
     cores = sim_info$nC
   )
@@ -233,7 +237,7 @@ recruit_dt <- recruit_dt[!is.na(plot_id)]
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot)]
+      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq)]
   )
 
 ##
@@ -244,10 +248,21 @@ recruit_dt <- recruit_dt[!is.na(plot_id)]
 
   # posterior of population level parameters
   saveRDS(
-    post_dist,
+    post_dist |>
+      filter(par %in% c('mPop_log', 'p', 'sigma_plot')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
+    )
+  )
+
+  # posterior of plot_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'mPlot_log', par)),
+    file = file.path(
+      'output',
+      paste0('posteriormPlot_', sp, '.RDS')
     )
   )
 
@@ -261,13 +276,13 @@ recruit_dt <- recruit_dt[!is.na(plot_id)]
   )
 
   # save train and validate data
-#   saveRDS(
-#     recruit_dt[, .(plot_id, year0, sampled)],
-#       file = file.path(
-#       'output',
-#       paste0('trainData_', sp, '.RDS')
-#     )
-#   )
+  saveRDS(
+    toSub,
+      file = file.path(
+      'output',
+      paste0('toSub_', sp, '.RDS')
+    )
+  )
 
   # save Loo
   saveRDS(

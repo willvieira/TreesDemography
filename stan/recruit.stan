@@ -7,7 +7,7 @@ data {
   array[N] int<lower=0> plot_id;
 }
 parameters {
-  real<lower=0> mPop_log;
+  real mPop_log;
   real<lower=0,upper=1> p;
   vector[Np] mPlot_log;
   real<lower=0> sigma_plot;
