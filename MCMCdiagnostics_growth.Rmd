@@ -115,7 +115,8 @@ map2_dfr(
       bind_cols(species_id = .y)
 ) |>
 ggplot(aes(x = rhat, y = species_id)) +
-  geom_boxplot()
+  geom_boxplot() +
+  theme_minimal()
 ```
 
 
@@ -158,7 +159,8 @@ for(Par in unique(post$par))
       ggplot(aes(x = value, y = species_id)) +
         stat_eye() +
         ggtitle(Par) +
-        xlab('')
+        xlab('') +
+        theme_minimal()
   )
 }
 ```
@@ -184,7 +186,8 @@ for(i in 1:ncol(parComb))
           geom_point() +
           facet_wrap(~ species_id) +
           xlab(parComb[1, i]) +
-          ylab(parComb[2, i])
+          ylab(parComb[2, i]) +
+          theme_minimal()
   )
 }
 ```
@@ -301,7 +304,8 @@ print(
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Annual mean temperature') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 
 print(
@@ -311,7 +315,8 @@ print(
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Plot basal area') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 
 print(
@@ -321,7 +326,8 @@ print(
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Total annual precipitation') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 
 # save plot effect ot be used against future models
@@ -357,7 +363,8 @@ map_dfr(
     geom_point(size = 0.8, alpha = .7) +
     geom_abline(intercept = 0, slope = 1) +
     #tune::coord_obs_pred() +
-    facet_wrap(~species_id, scales = 'free')
+    facet_wrap(~species_id, scales = 'free') +
+    theme_minimal()
 ```
 
 
@@ -377,14 +384,17 @@ treeData[, .(species_id, dbh, time, sampled2)] |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
     geom_density_ridges(alpha = 0.7, color = NA) +
     facet_wrap(~var, scales = 'free_x') +
-    xlab('')
+    xlab('') +
+    theme_minimal()
 ```
 
 
 
 # Predictions
 
-```{r,echo=FALSE,fig.height = 6.5, fig.width = 8}
+## Size in function of time
+
+```{r sizePred,echo=FALSE,fig.height = 6.5, fig.width = 8}
 post |>
   filter(par %in% c('r', 'Lmax')) |>
   pivot_wider(
@@ -397,9 +407,134 @@ post |>
   ggplot(aes(x = time, y = Lt, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
         scale_fill_brewer() +
-        #theme(legend.position="none") +
-        ylab('DBH size (mmm)') + xlab('Time (years)')
+        ylab('DBH size (mmm)') + xlab('Time (years)') +
+        theme_minimal()
 ```
+
+## Basal area effect
+
+```{r sizePred2,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('r', 'beta')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(BA_comp = seq(0, 120, 5)) |>
+  mutate(
+    BAeffect = BA_comp * beta,
+    r_BA = exp(r + BAeffect)
+  ) |>
+  select(iter, species_id, BA_comp, BAeffect, r_BA) |>
+  pivot_longer(
+    cols = c('BAeffect', 'r_BA'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('BAeffect', 'r_BA'), labels = c('BA_comp effect on r parameter', 'r parameter'))
+  ) |>
+  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.95, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Basal area competition') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+    
+```
+
+
+## Growth in function of Basal area competition
+
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
+# get only training data
+train <- trainData[sampled == 'training']
+
+# compute growth
+train[, time0 := shift(time, type = 'lag'), by = tree_id]
+train[, dbh0 := shift(dbh, type = 'lag'), by = tree_id]
+train[, growth := (dbh - dbh0)/(time - time0)]
+
+# remove NA
+train <- train[time > 0]
+
+# prepare parameters
+post_mean <- post |>
+  filter(par %in% c('Lmax', 'beta')) |>
+  group_by(species_id, par) |>
+  summarise(value_mean = mean(value)) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value_mean
+  ) |>
+  setDT()
+
+# plot per species_id
+for(sp_seq in seq(1, 17, 2)) 
+{
+  plot_ls <- list()
+  for(i in 0:1)
+  {
+    if(sp_seq == 17 & i == 1)
+      next
+
+    Sp <- spIds[sp_seq + i]
+
+    train_sp <- train[species_id == Sp]
+
+    # sample few tree_ids that have at least 2 measures
+    tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
+    train_sp <- train_sp[tree_id %in% tree_ids]
+
+    # add parameters
+    train_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
+    train_sp[
+      plotEffect |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        setDT(),
+      r_plot := i.m_rReal,
+      on = 'plot_id'
+    ]
+
+    # compute BA effect on r
+    train_sp[, r_plotBA := exp(log(r_plot) + BA_comp * beta)]
+    
+    # predict size
+    train_sp[,
+      pred_size := start_size *
+                  exp(-r_plotBA * time) +
+                  Lmax * (1 -exp(-r_plotBA * time))
+    ]
+
+    # compute growth from predicted size
+    train_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
+    train_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
+
+    plot_ls[[i+1]] <- train_sp |>
+        filter(!is.na(pred_growth)) |>
+        mutate(obs_growth = growth) |>
+        select(BA_comp, obs_growth, pred_growth) |>
+        pivot_longer(
+          cols = contains('growth'),
+          names_to = 'sim'
+        ) |>
+        ggplot(aes(x = BA_comp, y = value, color = sim)) +
+          geom_point(alpha = .5, size = .5) +
+          geom_smooth(method = 'lm') +
+          xlab('Basal area competition') +
+          ylab(ifelse(i == 0, 'Growth', '')) +
+          labs(subtitle = Sp) +
+          theme_minimal() 
+  }
+  print(
+    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
+  )
+}
+```
+
 
 # Out-of-bag cross-validation
 
@@ -528,7 +663,9 @@ for(Sp in spIds)
     val_sp[,
       .(
         R2reg_size = get_r2(dbh, pred_size_random),
-        R2reg_growth = get_r2(obs_growth, pred_growth_random)
+        R2reg_growth = get_r2(obs_growth, pred_growth_random),
+        R2reg_size_mean = get_r2(dbh, pred_size),
+        R2reg_growth_mean = get_r2(obs_growth, pred_growth)
       ), 
       by = iter2
     ],
@@ -541,6 +678,7 @@ for(Sp in spIds)
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) + 
           tune::coord_obs_pred() +
+          theme_minimal() +
           theme(
                 legend.position="none",
                 plot.margin = margin(t = 30)
@@ -552,7 +690,8 @@ for(Sp in spIds)
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
-          xlim(-3, 20) + ylim(-3, 20) +
+          xlim(-4, 20) + ylim(-4, 20) +
+          theme_minimal() +
           theme(
                 legend.position="none",
                 plot.margin = margin(t = 30)
@@ -568,7 +707,8 @@ for(Sp in spIds)
   p3 <- ppc_dens_overlay(
       val_sp[iter2 == 1 & time > 0, dbh],
       pred_size_matrix
-  )
+  ) +
+  xlab('Obs vs predicted size') + ylab('')
 
   pred_growth_matrix <- val_sp[time > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
@@ -578,7 +718,9 @@ for(Sp in spIds)
   p4 <- ppc_dens_overlay(
       val_sp[iter2 == 1 & time > 0 & !is.na(obs_growth), obs_growth],
       pred_growth_matrix
-  )
+  ) +
+  xlab('Obs vs predicted growth') +
+  xlim(-15, 20)
 
   print(
     ggpubr::ggarrange(
@@ -609,7 +751,7 @@ invisible(
 
 # Mean squared error (MSE) of out-of-bag predictions
 
-```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 9}
 sim_toLoad <- c(simInfo$simCompare, simName)
 
   map_dfr(
@@ -629,7 +771,40 @@ sim_toLoad <- c(simInfo$simCompare, simName)
   ggplot(aes(x = value, y = species_id, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~name2, scales = 'free_x') +
-    xlab('Mean Squared error (MSE)') + ylab('')
+    xlab('Mean Squared error (MSE)') + ylab('') +
+    theme_bw() + 
+    theme(legend.position = 'bottom')
+```
+
+
+# Intraclass Correlation Coefficient (ICC)
+
+```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+post |>
+  filter(grepl('sigma', par)) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id, iter) |>
+  summarise(
+    icc = sigma_plot/(sigma_plot + sigma_obs)
+  ) |>
+  saveRDS(
+    file = paste0('output/', simName, 'ICC.RDS')
+  )
+
+
+# compare between all simulations with random effects
+map_dfr(
+    sim_toLoad[c(3, 4)],
+    ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = icc, y = species_id, fill = sim)) +
+      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+      xlab('ICC') +
+      theme_minimal()
 ```
 
 
@@ -645,12 +820,13 @@ map_dfr(
   ) |>
   ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
       geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-      xlab('Rsquared (Gelman 2018)')
+      xlab('Rsquared (Gelman 2018)') +
+      theme_minimal()
 ```
 
 We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values. This approach was used for the size predictions from the model, and the growth predictions derived from the size predictions.
 
-```{r plot Rsquared_regression,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 8, fig.width = 9, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
@@ -672,12 +848,14 @@ map_dfr(
   ggplot(aes(x = value, y = species_id, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~par2, scales = 'free_x') +
-    xlab('Rsquared (linear regression)')
+    xlab('Rsquared (linear regression)') +
+    theme_bw() +
+    theme(legend.position = 'bottom')
 ```
 
 # Leave-one-out cross-validation to compare models
 
-```{r loo, echo = FALSE, warning=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
+```{r loo, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     spIds,
     ~ map2(
@@ -699,8 +877,9 @@ map_dfr(
   ggplot(aes(x = value, y = species_id, color = sim)) +
     geom_point() +
     facet_wrap(~ variable, scales = 'free_x') +
-    xlab('') + ylab('')
-
+    xlab('') + ylab('') +
+    theme_bw() +
+    theme(legend.position = 'bottom')
 ```
 
 
@@ -715,5 +894,6 @@ map2_dfr(
 ) |>
 ggplot(aes(x = total/3600, y = species_id)) +
   geom_boxplot() +
-  xlab('Fit time (hours)')
+  xlab('Fit time (hours)') +
+  theme_minimal()
 ```
