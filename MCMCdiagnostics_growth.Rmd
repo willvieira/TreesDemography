@@ -791,7 +791,7 @@ post |>
     icc = sigma_plot/(sigma_plot + sigma_obs)
   ) |>
   saveRDS(
-    file = paste0('output/', simName, 'ICC.RDS')
+    file = paste0('output/', simName, '/ICC.RDS')
   )
 
 
