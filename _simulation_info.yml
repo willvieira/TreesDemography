@@ -15,18 +15,26 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_randomPlot_BA"
+simName: "bertalanffy_BA_sigmoid"
 # simulations to compare with
 simCompare: [
         "bertalanffyInt_startSize",
         "bertalanffyInt_startSize_par",
-        "bertalanffyInt_randomPlot"
+        "bertalanffyInt_randomPlot",
+        "bertalanffy_BA"
 ]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v14.0 - multilevel r parameter at the plot level with plot basal area effect
+## Growth test - v15.0 - multilevel r parameter at the plot level with plot basal area effect
 
-# Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
+# Model 14.0 had a negative exponential effect of BA_comp on r.
+# This version will use a sigmoid function to model BA_comp effects on r.
+# The idea is to capture the fact that - maybe - when BA_comp is low, a small increase in BA_comp does have much importance on r. If true, the sigmoid function is more appropriated than the negative exponential.
+
+# R code example:
+# BA_comp <- seq(0, 120)
+# plot(BA_comp, exp(BA_comp * -0.03), type = 'l', ylim = c(0, 1), ylab = 'BA_comp effect on r')
+# lines(exp(BA_comp^2 * 1/2 * -0.03^2), col = 2)

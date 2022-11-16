@@ -212,7 +212,9 @@ growth_dt[
 
     # Add plot_id random effect 
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
-    rPlot_beta <- exp(post[, 'r'] + rPlot_log + dt[5] * post[, 'beta'])
+    rPlot_beta <- exp(
+      post[, 'r'] + rPlot_log + dt[5]^2 * 1/2 * - post[, 'beta']^2
+    )
     
     # time component of the model
     rPlotTime <- exp(-rPlot_beta * dt[2])

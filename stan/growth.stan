@@ -17,7 +17,7 @@ parameters {
   real<lower=0> sigma_plot;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
-  real beta;
+  real<lower=0> beta;
 }
 model {
   // priors
@@ -26,10 +26,12 @@ model {
   sigma_plot ~ exponential(3);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
-  beta ~ normal(0, 1);
+  beta ~ gamma(1, 1);
 
   // add plot random effect and BA effect
-  vector[N] rPlot = exp(r + rPlot_log[plot_id] + BA_comp * beta);
+  vector[N] rPlot = exp(
+      r + rPlot_log[plot_id] + square(BA_comp) * 1/2 * -square(beta)
+    );
 
   // pre calculate component of the model mean
   vector[N] rPlotTime = exp(-rPlot .* time);
