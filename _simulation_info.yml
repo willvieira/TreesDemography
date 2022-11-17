@@ -15,19 +15,20 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: NA
 # The simulation and folder name
-simName: "rec_m_randomPlot"
+simName: "rec_m_randomPlot_BA"
 # simulations to compare with
-simCompare: ["intercept"]
+simCompare: ["intercept", "rec_m_randomPlot"]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v3.0
+## Recruitmenet test - v4.0
 
 ## New model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
 
-# V3.0 makes the ingrowth parameter `m` vary in function of plot_id
+# Add non linear BA effect on the m parameter to account for light competition
+# Also add an offset to the BA function given the relativeBA_adult_sp to account for seed source
