@@ -50,6 +50,9 @@ recruit_dt <- dataSource[species_id == sp]
 # remove NA plots
 recruit_dt <- recruit_dt[!is.na(plot_id)]
 
+# remove NA Basal area
+recruit_dt <- recruit_dt[!is.na(BA_adult)]
+
 # if(recruit_dt[, .N] > sampleSize)
 # { 
 #     # number of measurement by plot_id
