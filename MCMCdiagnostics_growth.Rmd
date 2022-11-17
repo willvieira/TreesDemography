@@ -318,7 +318,9 @@ for(Sp in spIds)
     val_sp[,
       .(
         R2reg_size = get_r2(dbh, pred_size_random),
-        R2reg_growth = get_r2(obs_growth, pred_growth_random)
+        R2reg_growth = get_r2(obs_growth, pred_growth_random),
+        R2reg_size_mean = get_r2(dbh, pred_size),
+        R2reg_growth_mean = get_r2(obs_growth, pred_growth)
       ), 
       by = iter2
     ],
@@ -447,8 +449,8 @@ map_dfr(
       bind_cols(sim = .x)
   ) |>
   mutate(
-    `R2 predicted size` = R2reg_size,
-    `R2 predicted growth` = R2reg_growth
+    `R2 predicted size` = R2reg_size_mean,
+    `R2 predicted growth` = R2reg_growth_mean
   ) |>
   select(species_id, iter2, sim, contains('R2 predicted')) |>
   pivot_longer(
