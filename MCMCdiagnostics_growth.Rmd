@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v14.0 - Von Bertalanffy model - r in function of BA_comp"
+ subtitle: "Test v15.0 - Von Bertalanffy model - r in function of BA_comp"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -802,8 +802,8 @@ map_dfr(
       bind_cols(sim = .x)
   ) |>
   mutate(
-    `R2 predicted size` = R2reg_size,
-    `R2 predicted growth` = R2reg_growth
+    `R2 predicted size` = R2reg_size_mean,
+    `R2 predicted growth` = R2reg_growth_mean
   ) |>
   select(species_id, iter2, sim, contains('R2 predicted')) |>
   pivot_longer(
@@ -861,15 +861,15 @@ map_dfr(
         by = c('iter', 'species_id')
       )
   ) |>
-  select(iter2, species_id, icc, R2reg_growth) |>
+  select(iter2, species_id, icc, R2reg_growth_mean) |>
   group_by(species_id) |>
   summarise(
     icc_mean = mean(icc),
     icc_min = quantile(icc, probs = .05),
     icc_max = quantile(icc, probs = .95),
-    r2_mean = mean(R2reg_growth),
-    r2_min = quantile(R2reg_growth, probs = .05),
-    r2_max = quantile(R2reg_growth, probs = .95)
+    r2_mean = mean(R2reg_growth_mean),
+    r2_min = quantile(R2reg_growth_mean, probs = .05),
+    r2_max = quantile(R2reg_growth_mean, probs = .95)
   ) |>
   ggplot(aes(icc_mean, r2_mean, color = species_id)) +
     geom_point() +
