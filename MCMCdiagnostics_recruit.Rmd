@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v3.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect on ingrowth rate `m`"
+ subtitle: "Test v4.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect and basal area efffects on ingrowth rate `m`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -63,14 +63,14 @@ fec_dt <- readRDS('data/fec_dt.RDS')
 fec_dt <- fec_dt[species_id %in% spIds]
 
 plot_summary <- fec_dt[,  
-                  .( 
-                    latitude = unique(latitude), 
-                    BA_plot = mean(BA_plot, na.rm = TRUE), 
-                    bio_01_mean = mean(bio_01_mean, na.rm = TRUE), 
-                    bio_12_mean = mean(bio_12_mean, na.rm = TRUE) 
-                  ),  
-                  by = plot_id  
-                ]
+  .( 
+    latitude = unique(latitude), 
+    BA_plot = mean(BA_plot, na.rm = TRUE), 
+    bio_01_mean = mean(bio_01_mean, na.rm = TRUE), 
+    bio_12_mean = mean(bio_12_mean, na.rm = TRUE) 
+  ),  
+  by = plot_id  
+]
 ```
 
 # Rhat
@@ -347,7 +347,10 @@ for(Sp in spIds)
   # remove NAs
   val_sp <- val_sp[
     !is.na(deltaYear_plot),
-    .(plot_id, plot_id_seq, species_id, nbRecruit, deltaYear_plot, plot_size)
+    .(
+      plot_id, plot_id_seq, species_id, nbRecruit, deltaYear_plot,
+      plot_size, BA_adult, relativeBA_adult_sp
+    )
   ]
 
   # replicate each observation by N_iteration to accommodate the parameters draw
@@ -367,7 +370,9 @@ for(Sp in spIds)
     `:=`(
       mPop_log = i.mPop_log,
       p = i.p,
-      sigma_plot = i.sigma_plot
+      sigma_plot = i.sigma_plot,
+      beta = i.beta,
+      m_immig = i.m_immig
     ),
     on = 'iter'
   ]
@@ -388,9 +393,10 @@ for(Sp in spIds)
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
 
-  # compute m plot specific parameter
+  # compute m plot specific parameter with BA effect
   val_sp[,
-    m := exp(mPop_log + mPlot_log)
+    m := exp(mPop_log + mPlot_log + BA_adult^2 * 1/2 * -beta^2) *
+         relativeBA_adult_sp + m_immig
   ]
 
   # predict number of recruit
@@ -439,7 +445,10 @@ for(Sp in spIds)
   R2_list[[Sp]] <- merge(
     R2gel,
     val_sp[,
-      .(R2reg = get_r2(nbRecruit, lambda_random)), 
+      .(
+        R2reg = get_r2(nbRecruit, lambda_random),
+        R2reg_mean = get_r2(nbRecruit, lambda)
+      ), 
       by = iter2
     ],
     by = 'iter2'

@@ -147,7 +147,6 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           plot_size = recruit_dt[, plot_size],
           deltaTime = recruit_dt[, deltaYear_plot],
           BA_adult = recruit_dt[, BA_adult],
-          relativeBA_adult_sp = recruit_dt[, relativeBA_adult_sp],
           Np = recruit_dt[, length(unique(plot_id_seq))],
           plot_id = recruit_dt[, plot_id_seq]
       ),
@@ -174,6 +173,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     rhat = md_out$summary() |> select(variable, rhat),
     time = md_out$time()
   )
+
 ##
 
 
@@ -182,12 +182,15 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # Function to compute log-likelihood
   recruit_model <- function(dt, post, log)
   {
-    # dt is vector of [1] nbRecruit, [2] plot_size, and [3] deltaTime
+    # dt is vector of [1] nbRecruit, [2] plot_size, [3] deltaTime,
+    # and [4] plot_id_seq, and [5] BA_adult
     # post is a matrix of nrow draws and ncol paramaters
   
     # Add plot_id random effect 
     mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
-    mPlot <- exp(post[, 'mPop_log'] + mPlot_log)
+    mPlot <- exp(
+      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta']
+    )
     
     # mean
     Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
@@ -229,7 +232,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     llfun_recruit, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
     chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq)], 
+    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult)], 
     draws = post_dist_lg,
     cores = sim_info$nC
   )
@@ -242,7 +245,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq)]
+      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult)]
   )
 
 ##
@@ -254,7 +257,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p', 'sigma_plot')),
+      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
