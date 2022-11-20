@@ -289,6 +289,31 @@ print(
 )
 ```
 
+
+# Changes in plot random effect from past models
+
+Compare plot random effect with last model to check how variance is changing.
+
+```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
+sim_toLoad <- c(simInfo$simCompare[length(simInfo$simCompare)], simName)
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'meanPlotEffect_m.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  pivot_wider(
+    names_from = sim,
+    values_from = m_mean
+  ) |>
+  ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
+    geom_point(size = 0.8, alpha = .7) +
+    geom_abline(intercept = 0, slope = 1) +
+    #tune::coord_obs_pred() +
+    facet_wrap(~species_id, scales = 'free') +
+    theme_minimal()
+```
+
+
 # Data distribution
 
 ```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
@@ -305,6 +330,8 @@ fec_dt[, .(species_id, nbRecruit, deltaYear_plot)] |>
 
 
 # Predictions
+
+## Ingrowth in function of time
 
 ```{r,echo=FALSE,fig.height = 6.5, fig.width = 8}
 post |>
@@ -323,6 +350,114 @@ post |>
         #theme(legend.position="none") +
         ylab('Number of ingrowth recruits') + xlab('Delta time (years)')
 ```
+
+## Basal area effect
+
+```{r sizePred2,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('mPop_log', 'beta')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(BA_adult = seq(0, 120, 5)) |>
+  mutate(
+    BAeffect = BA_adult * beta,
+    m = exp(mPop_log + BAeffect)
+  ) |>
+  select(iter, species_id, BA_adult, BAeffect, m) |>
+  pivot_longer(
+    cols = c('BAeffect', 'm'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('BAeffect', 'm'), labels = c('BA_adult effect on r parameter', 'm parameter'))
+  ) |>
+  ggplot(aes(x = BA_adult, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.95, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Basal area competition') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+    
+```
+
+
+## Growth in function of Basal area competition
+
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
+# prepare parameters
+post_mean <- post |>
+  filter(par %in% c('mPop_log', 'p', 'beta')) |>
+  group_by(species_id, par) |>
+  summarise(value_mean = mean(value)) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value_mean
+  ) |>
+  setDT()
+# plot per species_id
+for(sp_seq in seq(1, 17, 2)) 
+{
+  plot_ls <- list()
+  for(i in 0:1)
+  {
+    if(sp_seq == 17 & i == 1)
+      next
+
+    Sp <- spIds[sp_seq + i]
+
+    fec_sp <- fec_dt[species_id == Sp]
+    # sample few tree_ids that have at least 2 measures
+    tree_ids <- fec_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
+    fec_sp <- fec_sp[tree_id %in% tree_ids]
+    # add parameters
+    fec_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
+    fec_sp[
+      plotEffect |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        setDT(),
+      r_plot := i.m_rReal,
+      on = 'plot_id'
+    ]
+    # compute BA effect on r
+    fec_sp[, r_plotBA := exp(log(r_plot) + BA_comp * beta)]
+    
+    # predict size
+    fec_sp[,
+      pred_size := start_size *
+                  exp(-r_plotBA * time) +
+                  Lmax * (1 -exp(-r_plotBA * time))
+    ]
+    # compute growth from predicted size
+    fec_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
+    fec_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
+    plot_ls[[i+1]] <- fec_sp |>
+        filter(!is.na(pred_growth)) |>
+        mutate(obs_growth = growth) |>
+        select(BA_comp, obs_growth, pred_growth) |>
+        pivot_longer(
+          cols = contains('growth'),
+          names_to = 'sim'
+        ) |>
+        ggplot(aes(x = BA_comp, y = value, color = sim)) +
+          geom_point(alpha = .5, size = .5) +
+          geom_smooth(method = 'lm') +
+          xlab('Basal area competition') +
+          ylab(ifelse(i == 0, 'Growth', '')) +
+          labs(subtitle = Sp) +
+          theme_minimal() 
+  }
+  print(
+    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
+  )
+}
+```
+
 
 # Cross-validation
 
