@@ -11,6 +11,7 @@
 
 library(data.table)
 library(cmdstanr)
+library(loo)
 library(tidyverse)
 
 set.seed(0.0)
@@ -146,6 +147,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           nbRecruit = recruit_dt[, nbRecruit],
           plot_size = recruit_dt[, plot_size],
           deltaTime = recruit_dt[, deltaYear_plot],
+          BA_adult_sp = recruit_dt[, BA_adult_sp],
           BA_adult = recruit_dt[, BA_adult],
           Np = recruit_dt[, length(unique(plot_id_seq))],
           plot_id = recruit_dt[, plot_id_seq]
@@ -176,79 +178,6 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
 
 ##
 
-
-## Approximate LOO-CV using subsampling
-
-  # Function to compute log-likelihood
-  recruit_model <- function(dt, post, log)
-  {
-    # dt is vector of [1] nbRecruit, [2] plot_size, [3] deltaTime,
-    # and [4] plot_id_seq, and [5] BA_adult
-    # post is a matrix of nrow draws and ncol paramaters
-  
-    # Add plot_id random effect 
-    mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
-    mPlot <- exp(
-      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta']
-    )
-    
-    # mean
-    Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
-
-    # likelihood
-    dpois(
-      x = dt[1],
-      lambda = Mean,
-      log = log
-    )
-  }
-
-  llfun_recruit <- function(data_i, draws, log = TRUE)
-    apply(
-      data_i,
-      1,
-      function(x, y)
-        recruit_model(
-          x,
-          y,
-          log = log
-        ),
-        y = draws
-    )
-
-  # Matrix of posterior draws
-  post_dist_lg <- post_dist |>
-    pivot_wider(
-      names_from = par,
-      values_from = value
-    ) |>
-    select(-iter) |>
-    as.matrix()
-
-  # compute relative efficiency
-  # this is slow and optional but is recommended to allow for adjusting PSIS
-  # effective sample size based on MCMC effective sample size)
-  r_eff <- loo::relative_eff(
-    llfun_recruit, 
-    log = FALSE, # relative_eff wants likelihood not log-likelihood values
-    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult)], 
-    draws = post_dist_lg,
-    cores = sim_info$nC
-  )
-
-  # Loo using x samples
-  loo_obj <-
-    loo::loo_subsample(
-      llfun_recruit,
-      observations = recruit_dt[, floor(.N/10)], # take a subsample of size x
-      cores = sim_info$nC,
-      r_eff = r_eff, 
-      draws = post_dist_lg,
-      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult)]
-  )
-
-##
 
 
 
@@ -290,6 +219,91 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       'output',
       paste0('toSub_', sp, '.RDS')
     )
+  )
+
+##
+
+
+
+## Approximate LOO-CV using subsampling
+
+  # Function to compute log-likelihood
+  recruit_model <- function(dt, post, log)
+  {
+    # dt is vector of [1] nbRecruit, [2] plot_size, [3] deltaTime,
+    # [4] plot_id_seq, [5] BA_adult_sp, and [6] BA_adult
+    # post is a matrix of nrow draws and ncol paramaters
+  
+    # Add plot_id random effect 
+    mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
+    mPlot <- exp(
+      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta_m']
+    )
+    
+    p <- exp(
+      -exp(
+        post[, 'p_log']
+      ) +
+      dt[6]^2 * 1/2 * -post[, 'beta_p']^2
+    )
+
+    # mean
+    Mean <- mPlot * dt[2] * (1 - p^dt[3]) / (1 - p)
+
+    if(any(Mean < 0))
+      cat(sum(Mean < 0), ' negative values!!\n')
+      
+    # likelihood
+    dpois(
+      x = dt[1],
+      lambda = Mean,
+      log = log
+    )
+  }
+
+  llfun_recruit <- function(data_i, draws, log = TRUE)
+    apply(
+      data_i,
+      1,
+      function(x, y)
+        recruit_model(
+          x,
+          y,
+          log = log
+        ),
+        y = draws
+    )
+
+  # Matrix of posterior draws
+  post_dist_lg <- post_dist |>
+    pivot_wider(
+      names_from = par,
+      values_from = value
+    ) |>
+    select(-iter) |>
+    as.matrix()
+
+  # compute relative efficiency
+  # this is slow and optional but is recommended to allow for adjusting PSIS
+  # effective sample size based on MCMC effective sample size)
+  r_eff <- relative_eff(
+    llfun_recruit, 
+    log = FALSE, # relative_eff wants likelihood not log-likelihood values
+    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)], 
+    draws = post_dist_lg,
+    cores = sim_info$nC
+  )
+
+  # Loo using x samples
+  loo_obj <-
+    loo_subsample(
+      llfun_recruit,
+      observations = recruit_dt[, floor(.N/10)], # take a subsample of size x
+      cores = sim_info$nC,
+      r_eff = r_eff, 
+      draws = post_dist_lg,
+      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)]
   )
 
   # save Loo
