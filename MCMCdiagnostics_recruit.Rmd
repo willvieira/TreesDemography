@@ -66,6 +66,7 @@ plot_summary <- fec_dt[,
   .( 
     latitude = unique(latitude), 
     BA_plot = mean(BA_plot, na.rm = TRUE), 
+    BA_adult = mean(BA_adult, na.rm = TRUE),
     bio_01_mean = mean(bio_01_mean, na.rm = TRUE), 
     bio_12_mean = mean(bio_12_mean, na.rm = TRUE) 
   ),  
@@ -83,7 +84,8 @@ map2_dfr(
       bind_cols(species_id = .y)
 ) |>
 ggplot(aes(x = rhat, y = species_id)) +
-  geom_boxplot()
+  geom_boxplot() +
+  theme_minimal()
 ```
 
 # Divergent transitions
@@ -122,7 +124,8 @@ for(Par in unique(post$par))
       ggplot(aes(x = value, y = species_id)) +
         stat_eye() +
         ggtitle(Par) +
-        xlab('')
+        xlab('') +
+        theme_minimal()
   )
 }
 ```
@@ -147,7 +150,8 @@ for(i in 1:ncol(parComb))
           geom_point() +
           facet_wrap(~ species_id) +
           xlab(parComb[1, i]) +
-          ylab(parComb[2, i])
+          ylab(parComb[2, i]) +
+          theme_minimal()
   )
 }
 ```
@@ -212,6 +216,7 @@ for(Sp in spIds)
             xintercept = m_mean, color = 'red', alpha = .8
           ) +
           xlab('m') + ylab('plot_id (ordered by latitude)') +
+          theme_minimal() +
           theme(
             legend.position = 'top',
             axis.text.y = element_blank()
@@ -224,6 +229,7 @@ for(Sp in spIds)
             xintercept = m_mean, color = 'red', alpha = .8
           ) +
           xlab('m') + ylab('') +
+          theme_minimal() +
           theme(
             legend.position = 'top',
             axis.text.y = element_blank()
@@ -262,30 +268,36 @@ m_pop <- plotEffect |>
 
 print(
   plotEffect |>
-    ggplot(aes(x = bio_01_mean, log(m_mean), color = BA_plot)) +
+    ggplot(aes(x = bio_01_mean, log(m_mean), color = BA_adult)) +
         geom_point(size = 0.4, alpha = 0.8) +
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
         xlab('Annual mean temperature') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 print(
   plotEffect |>
-    ggplot(aes(x = BA_plot, log(m_mean), color = bio_01_mean)) +
-        geom_point(size = 0.6) +
+    mutate(
+      db_origin = as.factor(ifelse(grepl('\\.', plot_id), 'FIA', 'Quebec'))
+    ) |>
+    ggplot(aes(x = BA_adult, log(m_mean), color = db_origin)) +
+        geom_point(size = 0.6, alpha = 0.5) +
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
         xlab('Plot basal area') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 print(
   plotEffect |>
-    ggplot(aes(x = bio_12_mean, log(m_mean), color = BA_plot)) +
+    ggplot(aes(x = bio_12_mean, log(m_mean), color = BA_adult)) +
         geom_point(size = 0.6) +
         facet_wrap(~species_id, scales = 'free') +
         geom_hline(data = m_pop, aes(yintercept = log(m)), color = 'red') +
         xlab('Total annual precipitation') +
-        ylab('Plot random effect')
+        ylab('Plot random effect') +
+        theme_minimal()
 )
 ```
 
@@ -317,15 +329,16 @@ map_dfr(
 # Data distribution
 
 ```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
-fec_dt[, .(species_id, nbRecruit, deltaYear_plot)] |>
+fec_dt[, .(species_id, nbRecruit, deltaYear_plot, BA_adult)] |>
   pivot_longer(
-    cols = c(nbRecruit, deltaYear_plot),
+    cols = c(nbRecruit, deltaYear_plot, BA_adult),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id)) +
     geom_density_ridges(alpha = 0.7, color = NA) +
     facet_wrap(~var, scales = 'free_x') +
-    xlab('')
+    xlab('') +
+    theme_minimal()
 ```
 
 
@@ -347,6 +360,7 @@ post |>
   ggplot(aes(x = deltaYear, y = lambda, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
         scale_fill_brewer() +
+        theme_minimal() +
         #theme(legend.position="none") +
         ylab('Number of ingrowth recruits') + xlab('Delta time (years)')
 ```
@@ -372,7 +386,7 @@ post |>
     names_to = 'sim'
   ) |>
   mutate(
-    sim = factor(sim, levels = c('BAeffect', 'm'), labels = c('BA_adult effect on r parameter', 'm parameter'))
+    sim = factor(sim, levels = c('BAeffect', 'm'), labels = c('BA_adult effect on m parameter', 'm parameter'))
   ) |>
   ggplot(aes(x = BA_adult, y = value, color = species_id)) +
     stat_lineribbon(.width = 0.95, alpha = .8) +
@@ -386,7 +400,7 @@ post |>
 ```
 
 
-## Growth in function of Basal area competition
+## Ingrowth in function of Basal area of adults
 
 ```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
 # prepare parameters
@@ -399,6 +413,7 @@ post_mean <- post |>
     values_from = value_mean
   ) |>
   setDT()
+
 # plot per species_id
 for(sp_seq in seq(1, 17, 2)) 
 {
@@ -411,46 +426,56 @@ for(sp_seq in seq(1, 17, 2))
     Sp <- spIds[sp_seq + i]
 
     fec_sp <- fec_dt[species_id == Sp]
-    # sample few tree_ids that have at least 2 measures
-    tree_ids <- fec_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
-    fec_sp <- fec_sp[tree_id %in% tree_ids]
+
     # add parameters
-    fec_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
+    fec_sp[,
+      c('beta', 'mPop_log', 'p') := post_mean[
+        species_id == Sp,
+        .(beta, mPop_log, p)
+      ]
+    ]
+
     fec_sp[
       plotEffect |>
         filter(species_id == Sp) |>
         select(-species_id) |>
         setDT(),
-      r_plot := i.m_rReal,
+      m_mean := i.m_mean,
       on = 'plot_id'
     ]
-    # compute BA effect on r
-    fec_sp[, r_plotBA := exp(log(r_plot) + BA_comp * beta)]
+
+    # compute BA effect on m
+    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * beta)]
     
-    # predict size
+    # predict recruit
     fec_sp[,
-      pred_size := start_size *
-                  exp(-r_plotBA * time) +
-                  Lmax * (1 -exp(-r_plotBA * time))
+      pred_nbRecruit := m_plotBA *
+                  plot_size *
+                  (1 - p^deltaYear_plot)/(1 - p)
     ]
-    # compute growth from predicted size
-    fec_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
-    fec_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
+
+    fec_sp[,
+      pred_nbRecruit_random := rpois(.N, pred_nbRecruit)
+    ]
+
+    # plot
     plot_ls[[i+1]] <- fec_sp |>
-        filter(!is.na(pred_growth)) |>
-        mutate(obs_growth = growth) |>
-        select(BA_comp, obs_growth, pred_growth) |>
+        filter(!is.na(pred_nbRecruit)) |>
+        mutate(
+          obs_nbRecruit = nbRecruit
+        ) |>
+        select(BA_adult, obs_nbRecruit, pred_nbRecruit_random) |>
         pivot_longer(
-          cols = contains('growth'),
+          cols = contains('Recruit'),
           names_to = 'sim'
         ) |>
-        ggplot(aes(x = BA_comp, y = value, color = sim)) +
+        ggplot(aes(x = BA_adult, y = value, color = sim)) +
           geom_point(alpha = .5, size = .5) +
-          geom_smooth(method = 'lm') +
-          xlab('Basal area competition') +
-          ylab(ifelse(i == 0, 'Growth', '')) +
+          geom_smooth(method = 'gam') +
+          xlab('Basal area of adults') +
+          ylab(ifelse(i == 0, 'nbRecruit', '')) +
           labs(subtitle = Sp) +
-          theme_minimal() 
+          theme_minimal()
   }
   print(
     ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
@@ -481,7 +506,7 @@ for(Sp in spIds)
 
   # remove NAs
   val_sp <- val_sp[
-    !is.na(deltaYear_plot),
+    !is.na(BA_adult),
     .(
       plot_id, plot_id_seq, species_id, nbRecruit, deltaYear_plot,
       plot_size, BA_adult, relativeBA_adult_sp
@@ -506,8 +531,7 @@ for(Sp in spIds)
       mPop_log = i.mPop_log,
       p = i.p,
       sigma_plot = i.sigma_plot,
-      beta = i.beta,
-      m_immig = i.m_immig
+      beta = i.beta
     ),
     on = 'iter'
   ]
@@ -530,8 +554,10 @@ for(Sp in spIds)
 
   # compute m plot specific parameter with BA effect
   val_sp[,
-    m := exp(mPop_log + mPlot_log + BA_adult^2 * 1/2 * -beta^2) *
-         relativeBA_adult_sp + m_immig
+    m := exp(
+      mPop_log + mPlot_log +
+      BA_adult * beta
+    )
   ]
 
   # predict number of recruit
@@ -592,9 +618,10 @@ for(Sp in spIds)
   # plot
   p1 <- val_sp[,.(m_obs=mean(nbRecruit), m_pred=mean(lambda)), by = obsID] |>
     ggplot(aes(m_obs, m_pred)) +
-          geom_point(alpha = .4, size = .5) +
+          geom_point(alpha = .3, size = .5) +
           geom_abline(slope = 1, intercept = 0) + 
           tune::coord_obs_pred() +
+          theme_minimal() +
           theme(
                 legend.position="none",
                 plot.margin = margin(t = 30)
@@ -655,7 +682,8 @@ map_dfr(
   ) |>
   ggplot(aes(x = MSE, y = species_id, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-    xlab('Mean Squared error (MSE)') + ylab('')
+    xlab('Mean Squared error (MSE)') + ylab('') +
+    theme_minimal()
 ```
 
 
@@ -663,7 +691,7 @@ map_dfr(
 
 The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
@@ -671,12 +699,13 @@ map_dfr(
   ) |>
   ggplot(aes(x = R2gelman, y = species_id, fill = sim)) +
       geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-      xlab('Rsquared (Gelman 2018)')
+      xlab('Rsquared (Gelman 2018)') +
+      theme_minimal()
 ```
 
 We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values.
 
-```{r plot Rsquared_regression,echo=FALSE,fig.height = 6, fig.width = 8, warning=FALSE, message=FALSE}
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
@@ -684,13 +713,14 @@ map_dfr(
   ) |>
   ggplot(aes(x = R2reg, y = species_id, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-    xlab('Rsquared (linear regression)')
+    xlab('Rsquared (linear regression)') +
+    theme_minimal()
 ```
 
 
 # Leave-one-out cross-validation to compare models
 
-```{r loo, echo = FALSE, warning=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
+```{r loo, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     spIds,
     ~ map2(
@@ -712,7 +742,9 @@ map_dfr(
   ggplot(aes(x = value, y = species_id, color = sim)) +
     geom_point() +
     facet_wrap(~ variable, scales = 'free_x') +
-    xlab('') + ylab('')
+    xlab('') + ylab('') +
+    theme_bw() +
+    theme(legend.position = 'bottom')
 ```
 # Sampling time
 
@@ -725,5 +757,6 @@ map2_dfr(
 ) |>
 ggplot(aes(x = total/3600, y = species_id)) +
   geom_boxplot() +
-  xlab('Fit time (hours)')
+  xlab('Fit time (hours)') +
+  theme_minimal()
 ```
