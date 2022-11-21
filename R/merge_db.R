@@ -216,7 +216,7 @@ mort <- rbind(
 
 colsToKeep_fec <- c(
     'plot_id', 'species_id', 'nbRecruit', 'nbSapling', 'nbSeedling', 'deltaYear_plot', 'plot_size', 'plotSize_seedling', 'plotSize_sapling',
-    'latitude', 'longitude', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 's_star', 'BA_plot', 'BA_adult', 'BA_adult_sp', 'relativeBA_adult_sp', 'year1', 'year0', 'nbSeedling', 'db_origin'
+    'latitude', 'longitude', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 's_star', 'BA_plot', 'BA_adult', 'BA_adult_sp', 'relativeBA_adult_sp', 'year1', 'year0', 'db_origin'
 )
 
 fec <- rbind(
