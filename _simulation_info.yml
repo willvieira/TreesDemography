@@ -17,7 +17,11 @@ sampleSize: NA
 # The simulation and folder name
 simName: "rec_m_p_BA"
 # simulations to compare with
-simCompare: ["intercept", "rec_m_randomPlot"]
+simCompare: [
+        "intercept",
+        "rec_m_randomPlot",
+        "rec_m_randomPlot_BA"
+]
 
 
 ##################################
