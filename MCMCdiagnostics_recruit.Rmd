@@ -199,7 +199,7 @@ for(Sp in spIds)
     filter(iter == 1) |>
     select(
       plot_id, plot_id_seq, m_mean, m_pop, latitude,
-      BA_plot, bio_01_mean, bio_12_mean
+      BA_plot, BA_adult, bio_01_mean, bio_12_mean
     )
   
   # filter to remove some plots so figure is liseable
@@ -223,7 +223,7 @@ for(Sp in spIds)
           ) +
           labs(subtitle = Sp),
       dt_toPlot |>
-        ggplot(aes(y = plot_id, x = m, color = BA_plot)) +
+        ggplot(aes(y = plot_id, x = m, color = BA_adult)) +
           stat_pointinterval(alpha = .7, size = .1) +
           geom_vline(
             xintercept = m_mean, color = 'red', alpha = .8
