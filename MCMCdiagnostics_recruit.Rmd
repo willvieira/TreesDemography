@@ -377,7 +377,7 @@ post |>
   group_by(species_id) |>
   expand_grid(BA_adult = seq(0, 120, 5)) |>
   mutate(
-    BAeffect = BA_adult * beta,
+    BAeffect = BA_adult * -beta,
     m = exp(mPop_log + BAeffect)
   ) |>
   select(iter, species_id, BA_adult, BAeffect, m) |>
@@ -445,7 +445,7 @@ for(sp_seq in seq(1, 17, 2))
     ]
 
     # compute BA effect on m
-    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * beta)]
+    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * -beta)]
     
     # predict recruit
     fec_sp[,
@@ -556,7 +556,7 @@ for(Sp in spIds)
   val_sp[,
     m := exp(
       mPop_log + mPlot_log +
-      BA_adult * beta
+      BA_adult * -beta
     )
   ]
 
@@ -746,6 +746,7 @@ map_dfr(
     theme_bw() +
     theme(legend.position = 'bottom')
 ```
+
 # Sampling time
 
 ```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
