@@ -15,7 +15,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: NA
 # The simulation and folder name
-simName: "rec_m_p_BA"
+simName: "rec_m_BA_imm"
 # simulations to compare with
 simCompare: [
         "intercept",
@@ -30,8 +30,9 @@ simCompare: [
 
 ## Recruitmenet test - v5.0
 
-## Instead of using the following model:
+## New model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
 
-## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
+# V4.0 adds non linear BA effect on the m parameter to account for light competition
+# to compensate the effect of seed source in the negative effect of BA_adult, V5.0 uses the relativeBA_adult_sp [0-1] to increase BA effect on `m` when conspecific adults are rare. It also adds a immigration parameter (m_imm) for situations in which relativeBA_adult_sp equals 0.

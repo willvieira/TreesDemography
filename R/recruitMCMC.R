@@ -147,8 +147,8 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           nbRecruit = recruit_dt[, nbRecruit],
           plot_size = recruit_dt[, plot_size],
           deltaTime = recruit_dt[, deltaYear_plot],
-          BA_adult_sp = recruit_dt[, BA_adult_sp],
           BA_adult = recruit_dt[, BA_adult],
+          relativeBA_adult_sp = recruit_dt[, relativeBA_adult_sp],
           Np = recruit_dt[, length(unique(plot_id_seq))],
           plot_id = recruit_dt[, plot_id_seq]
       ),
@@ -186,7 +186,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p_log', 'sigma_plot', 'beta_m', 'beta_p')),
+      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta', 'm_imm')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
@@ -231,28 +231,18 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   recruit_model <- function(dt, post, log)
   {
     # dt is vector of [1] nbRecruit, [2] plot_size, [3] deltaTime,
-    # [4] plot_id_seq, [5] BA_adult_sp, and [6] BA_adult
+    # and [4] plot_id_seq, and [5] BA_adult
     # post is a matrix of nrow draws and ncol paramaters
   
     # Add plot_id random effect 
     mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
     mPlot <- exp(
-      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta_m']
-    )
+      post[, 'mPop_log'] + mPlot_log + dt[5] * -post[, 'beta']
+    ) * dt[6] + post[, 'm_imm']
     
-    p <- exp(
-      -exp(
-        post[, 'p_log']
-      ) +
-      dt[6]^2 * 1/2 * -post[, 'beta_p']^2
-    )
-
     # mean
-    Mean <- mPlot * dt[2] * (1 - p^dt[3]) / (1 - p)
+    Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
 
-    if(any(Mean < 0))
-      cat(sum(Mean < 0), ' negative values!!\n')
-      
     # likelihood
     dpois(
       x = dt[1],
@@ -290,7 +280,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     llfun_recruit, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
     chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)], 
+    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult, relativeBA_adult_sp)], 
     draws = post_dist_lg,
     cores = sim_info$nC
   )
@@ -303,7 +293,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
-      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)]
+      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult, relativeBA_adult_sp)]
   )
 
   # save Loo
