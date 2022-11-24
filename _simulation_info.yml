@@ -18,7 +18,6 @@ sampleSize: NA
 simName: "rec_m_p_BA"
 # simulations to compare with
 simCompare: [
-        "intercept",
         "rec_m_randomPlot",
         "rec_m_randomPlot_BA"
 ]
@@ -28,7 +27,7 @@ simCompare: [
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v5.0
+## Recruitmenet test - v6.0
 
 ## Instead of using the following model:
 # recruit ~ poisson(lambda)
