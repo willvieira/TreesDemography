@@ -13,6 +13,7 @@ parameters {
   vector[Np] mPlot_log;
   real<lower=0> sigma_plot;
   real beta;
+  real<lower=0> phi;
 }
 model {
   vector[N] lambda;
@@ -23,6 +24,7 @@ model {
   sigma_plot ~ exponential(6);
   p ~ beta(2, 2);
   beta ~ normal(0, 1);
+  phi ~ exponential(2);
 
   // Basal area effect with plot random effects
   m = exp(
@@ -30,9 +32,10 @@ model {
     BA_adult * beta
   );
 
+  // mean
   lambda = m .*
           plot_size .*
           (1 - p^deltaTime)/(1 - p);
 
-  nbRecruit ~ poisson(lambda);
+  nbRecruit ~ neg_binomial_2(lambda, phi);
 }

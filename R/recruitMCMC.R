@@ -196,9 +196,10 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
 
     # likelihood
-    dpois(
+    dnbinom(
       x = dt[1],
-      lambda = Mean,
+      mu = Mean,
+      size = post[, 'phi'],
       log = log
     )
   }
@@ -257,7 +258,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta')),
+      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta', 'phi')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')

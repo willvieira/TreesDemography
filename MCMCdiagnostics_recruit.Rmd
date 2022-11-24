@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v4.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect and basal area efffects on ingrowth rate `m`"
+ subtitle: "Test v7.0 - Ingrowth model following a negative binomial distribution accounting for ingrowth and mortality of new individuals with plot random effect and basal area efffects on ingrowth rate `m`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -307,22 +307,29 @@ print(
 Compare plot random effect with last model to check how variance is changing.
 
 ```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
-sim_toLoad <- c(simInfo$simCompare[length(simInfo$simCompare)], simName)
-map_dfr(
-    sim_toLoad,
-    ~ readRDS(file.path('output', .x, 'meanPlotEffect_m.RDS')) |>
-      bind_cols(sim = .x)
-  ) |>
-  pivot_wider(
-    names_from = sim,
-    values_from = m_mean
-  ) |>
-  ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
-    geom_point(size = 0.8, alpha = .7) +
-    geom_abline(intercept = 0, slope = 1) +
-    #tune::coord_obs_pred() +
-    facet_wrap(~species_id, scales = 'free') +
-    theme_minimal()
+sim_toCompare <- setdiff(simInfo$simCompare, 'intercept')
+for(Sim in sim_toCompare)
+{
+  sim_toLoad <- c(Sim, simName)
+  
+  print(
+    map_dfr(
+        sim_toLoad,
+        ~ readRDS(file.path('output', .x, 'meanPlotEffect_m.RDS')) |>
+          bind_cols(sim = .x)
+      ) |>
+      pivot_wider(
+        names_from = sim,
+        values_from = m_mean
+      ) |>
+      ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
+        geom_point(size = 0.8, alpha = .7) +
+        geom_abline(intercept = 0, slope = 1) +
+        #tune::coord_obs_pred() +
+        facet_wrap(~species_id, scales = 'free') +
+        theme_minimal()
+  )
+}
 ```
 
 
@@ -429,9 +436,9 @@ for(sp_seq in seq(1, 17, 2))
 
     # add parameters
     fec_sp[,
-      c('beta', 'mPop_log', 'p') := post_mean[
+      c('beta', 'mPop_log', 'p', 'phi') := post_mean[
         species_id == Sp,
-        .(beta, mPop_log, p)
+        .(beta, mPop_log, p, phi)
       ]
     ]
 
@@ -455,7 +462,7 @@ for(sp_seq in seq(1, 17, 2))
     ]
 
     fec_sp[,
-      pred_nbRecruit_random := rpois(.N, pred_nbRecruit)
+      pred_nbRecruit_random := rnbinom(.N, mu = pred_nbRecruit, size = phi)
     ]
 
     # plot
@@ -531,7 +538,8 @@ for(Sp in spIds)
       mPop_log = i.mPop_log,
       p = i.p,
       sigma_plot = i.sigma_plot,
-      beta = i.beta
+      beta = i.beta,
+      phi = i.phi
     ),
     on = 'iter'
   ]
@@ -568,7 +576,7 @@ for(Sp in spIds)
   ]
 
   # simulate nbRecruit from model distribution (Poisson dist)
-  val_sp[, lambda_random := rpois(.N, lambda)]
+  val_sp[, lambda_random := rnbinom(.N, mu = lambda, size = phi)]
 
   # calculate MSE
   val_sp[, SE := (nbRecruit - lambda_random)^2]
@@ -593,8 +601,15 @@ for(Sp in spIds)
       iter = sampledIter,
       species_id = Sp
     ) |>
+    left_join(
+      post |>
+        filter(species_id == Sp & par == 'phi') |>
+        mutate(phi = value) |>
+        select(iter, phi, species_id)
+    ) |>
     mutate(
-      R2gelman = var_lambda/(var_lambda + mean_lambda)
+      varNegBinom = mean_lambda + (mean_lambda^2)/phi
+      R2gelman = var_lambda/(var_lambda + varNegBinom)
     ) |>
     select(iter, iter2, species_id, R2gelman) |>
     setDT()
