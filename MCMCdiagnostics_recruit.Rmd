@@ -384,7 +384,7 @@ post |>
   group_by(species_id) |>
   expand_grid(BA_adult = seq(0, 120, 5)) |>
   mutate(
-    BAeffect = BA_adult * -beta,
+    BAeffect = BA_adult * beta,
     m = exp(mPop_log + BAeffect)
   ) |>
   select(iter, species_id, BA_adult, BAeffect, m) |>
@@ -409,10 +409,10 @@ post |>
 
 ## Ingrowth in function of Basal area of adults
 
-```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
 # prepare parameters
 post_mean <- post |>
-  filter(par %in% c('mPop_log', 'p', 'beta')) |>
+  filter(par %in% c('mPop_log', 'p', 'beta', 'phi')) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
@@ -452,7 +452,7 @@ for(sp_seq in seq(1, 17, 2))
     ]
 
     # compute BA effect on m
-    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * -beta)]
+    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * beta)]
     
     # predict recruit
     fec_sp[,
@@ -469,9 +469,10 @@ for(sp_seq in seq(1, 17, 2))
     plot_ls[[i+1]] <- fec_sp |>
         filter(!is.na(pred_nbRecruit)) |>
         mutate(
-          obs_nbRecruit = nbRecruit
+          obs_nbRecruit = nbRecruit + 0.08,
+          pred_nbRecruit = pred_nbRecruit_random - 0.08
         ) |>
-        select(BA_adult, obs_nbRecruit, pred_nbRecruit_random) |>
+        select(BA_adult, obs_nbRecruit, pred_nbRecruit) |>
         pivot_longer(
           cols = contains('Recruit'),
           names_to = 'sim'
@@ -485,7 +486,7 @@ for(sp_seq in seq(1, 17, 2))
           theme_minimal()
   }
   print(
-    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
+    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'bottom', common.legend = TRUE)
   )
 }
 ```
@@ -564,7 +565,7 @@ for(Sp in spIds)
   val_sp[,
     m := exp(
       mPop_log + mPlot_log +
-      BA_adult * -beta
+      BA_adult * beta
     )
   ]
 
@@ -608,7 +609,7 @@ for(Sp in spIds)
         select(iter, phi, species_id)
     ) |>
     mutate(
-      varNegBinom = mean_lambda + (mean_lambda^2)/phi
+      varNegBinom = mean_lambda + (mean_lambda^2)/phi,
       R2gelman = var_lambda/(var_lambda + varNegBinom)
     ) |>
     select(iter, iter2, species_id, R2gelman) |>
@@ -635,6 +636,7 @@ for(Sp in spIds)
     ggplot(aes(m_obs, m_pred)) +
           geom_point(alpha = .3, size = .5) +
           geom_abline(slope = 1, intercept = 0) + 
+          geom_smooth(method = 'gam') +
           tune::coord_obs_pred() +
           theme_minimal() +
           theme(
