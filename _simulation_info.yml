@@ -1,5 +1,5 @@
 # Species id
-spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+spIds: ['28731ACESAC', '183302PICMAR', '18032ABIBAL',
         '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
         '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
         '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
@@ -15,19 +15,24 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: NA
 # The simulation and folder name
-simName: "rec_m_randomPlot_BA"
+simName: "rec_m_rp_BA_zeroInflated"
 # simulations to compare with
-simCompare: ["intercept", "rec_m_randomPlot"]
+simCompare: [
+        "rec_m_randomPlot",
+        "rec_m_randomEffect_BA"
+]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v4.0
+## Recruitmenet test - v8.0
 
 ## New model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
 
 # Add non linear BA effect on the m parameter to account for light competition
+# Add zero inflated theta parameter
+

@@ -377,7 +377,7 @@ post |>
   group_by(species_id) |>
   expand_grid(BA_adult = seq(0, 120, 5)) |>
   mutate(
-    BAeffect = BA_adult * -beta,
+    BAeffect = BA_adult * beta,
     m = exp(mPop_log + BAeffect)
   ) |>
   select(iter, species_id, BA_adult, BAeffect, m) |>
@@ -445,7 +445,7 @@ for(sp_seq in seq(1, 17, 2))
     ]
 
     # compute BA effect on m
-    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * -beta)]
+    fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult * beta)]
     
     # predict recruit
     fec_sp[,
@@ -526,12 +526,13 @@ for(Sp in spIds)
         filter(species_id == Sp) |>
         select(-species_id) |>
         pivot_wider(names_from = par, values_from = value) |>
-        as.data.table(),
+        setDT(),
     `:=`(
       mPop_log = i.mPop_log,
       p = i.p,
       sigma_plot = i.sigma_plot,
-      beta = i.beta
+      beta = i.beta,
+      theta = i.theta
     ),
     on = 'iter'
   ]
@@ -556,7 +557,7 @@ for(Sp in spIds)
   val_sp[,
     m := exp(
       mPop_log + mPlot_log +
-      BA_adult * -beta
+      BA_adult * beta
     )
   ]
 
@@ -568,10 +569,15 @@ for(Sp in spIds)
   ]
 
   # simulate nbRecruit from model distribution (Poisson dist)
-  val_sp[, lambda_random := rpois(.N, lambda)]
+  # random recruit evenement given theta prob
+  val_sp[, zero_recruit := rbernoulli(.N, p = theta)]
+
+  # recruit only if is non zero recruit
+  val_sp[, nbRecruit_random := ifelse(zero_recruit, 0, NA)]
+  val_sp[is.na(nbRecruit_random), nbRecruit_random := rpois(.N, lambda)]
 
   # calculate MSE
-  val_sp[, SE := (nbRecruit - lambda_random)^2]
+  val_sp[, SE := (nbRecruit - nbRecruit_random)^2]
   
   # mean SE over all observations for each iteration and save to list
   MSE_list[[Sp]] <- val_sp[, 
@@ -607,7 +613,7 @@ for(Sp in spIds)
     R2gel,
     val_sp[,
       .(
-        R2reg = get_r2(nbRecruit, lambda_random),
+        R2reg = get_r2(nbRecruit, nbRecruit_random),
         R2reg_mean = get_r2(nbRecruit, lambda)
       ), 
       by = iter2
@@ -630,8 +636,8 @@ for(Sp in spIds)
           ylab('Predicted nbRecruit')
 
 
-  pred_matrix <- val_sp[, .(lambda_random, iter2, obsID)] |>
-      pivot_wider(names_from = obsID, values_from = lambda_random) |>
+  pred_matrix <- val_sp[, .(nbRecruit_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = nbRecruit_random) |>
       select(-iter2) |>
       as.matrix()
 

@@ -196,11 +196,30 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     Mean <- mPlot * dt[2] * (1 - post[, 'p']^dt[3]) / (1 - post[, 'p'])
 
     # likelihood
-    dpois(
-      x = dt[1],
-      lambda = Mean,
-      log = log
-    )
+    loglik <- numeric()
+    if(log) {
+      if(dt[1] == 0) {
+        loglik <- log(
+          exp(Rlab::dbern(1, post[, 'theta'], log = TRUE)) +
+          exp(Rlab::dbern(0, post[, 'theta'], log = TRUE))
+        ) +
+        dpois(0, lambda = Mean, log = TRUE)
+      }else{
+        loglik <- Rlab::dbern(0, post[, 'theta'], log = TRUE) +
+          dpois(dt[1], lambda = Mean, log = TRUE)
+      }
+    }else{
+      if(dt[1] == 0) {
+        loglik <-
+          Rlab::dbern(1, post[, 'theta'], log = FALSE) +
+          Rlab::dbern(0, post[, 'theta'], log = FALSE) *
+          dpois(0, lambda = Mean, log = FALSE)
+      }else{
+        loglik <- Rlab::dbern(0, post[, 'theta'], log = FALSE) *
+          dpois(dt[1], lambda = Mean, log = FALSE)
+      }
+    }
+    return( loglik )
   }
 
   llfun_recruit <- function(data_i, draws, log = TRUE)
@@ -257,7 +276,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta')),
+      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta', 'theta')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
