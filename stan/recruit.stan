@@ -1,5 +1,5 @@
 functions {
-  int num_zeros(int[] y) {
+  int num_zeros(array[] int y) {
     int sum = 0;
     for (n in 1:size(y))
       sum += (y[n] == 0);
@@ -17,14 +17,13 @@ data {
   array[N] int<lower=0> plot_id;
 }
 transformed data {
-  vector[N] plot_size_log = log(plot_size);
   int<lower = 0> N_zero = num_zeros(nbRecruit);
-  int<lower = 1> nbRecruit_nonzero[N - N_zero];
+  array[N - N_zero] int<lower=1> nbRecruit_nonzero;
 
   int nzero = 0;
   int N_nonzero = 0;
-  int<lower=1> zero_pos[N_zero];
-  int<lower=1> nonzero_pos[N - N_zero];
+  array[N_zero] int<lower=1> zero_pos;
+  array[N - N_zero] int<lower=1> nonzero_pos;
 
   for (n in 1:N) {
     if (nbRecruit[n] == 0) {
@@ -38,39 +37,34 @@ transformed data {
   }
 }
 parameters {
-  real mPop_log;
-  real<lower=0> p_log;
-  vector[Np] mPlot_log;
+  real m_int;
+  real<lower=0, upper=1> p;
+  real beta;
+  real thetaPop;
+  vector[Np] thetaPlot;
   real<lower=0> sigma_plot;
-  real<lower=0> beta;
-  real<lower=0,upper=1> theta_int;
-  real<lower=0> beta_theta;
 }
 model {
   vector[N] lambda;
   vector[N] m;
   vector[N] theta;
 
-  mPop_log ~ normal(-5, 1.5);
-  mPlot_log ~ normal(0, sigma_plot);
-  sigma_plot ~ exponential(6);
-  p_log ~ normal(0, 2);
+  m_int ~ normal(-5, 1.5);
+  p ~ beta(3, 1.5);
   beta ~ normal(0, 1);
-  theta_int ~ beta(1, 1);
-  beta_theta ~ lognormal(0, 2);
+  thetaPop ~ normal(0, 1.5);
+  thetaPlot ~ normal(0, sigma_plot);
+  sigma_plot ~ exponential(3);
 
   // Plot basal area of adults on theta
-  theta = theta_int * exp(BA_adult^2 * 1/2 * -beta_theta^2);
+  theta = inv_logit(thetaPop + thetaPlot[plot_id]);
 
-  // Conspecific basal area effect with plot random effects
-  m = mPop_log + mPlot_log[plot_id] + BA_adult_sp * beta;
+  // Conspecific basal area effect on m
+  m = exp(m_int + BA_adult * beta);
 
-  lambda = exp(
-          m +
-          plot_size_log +
-          log1m_exp(deltaTime .* -p_log) -
-          log1m_exp(-p_log)
-  );
+  lambda = m .*
+          plot_size .*
+          (1 - p^deltaTime)/(1 - p);
 
   target += N_zero .*
             log_sum_exp(

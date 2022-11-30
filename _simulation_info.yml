@@ -36,5 +36,5 @@ simCompare: [
 # Add non linear BA effect on the m parameter to account for light competition
 # Add zero inflated theta parameter
 
-# Version 9.0 makes theta parameter in function of BA_adult
-# And now the `m` parameter is in function of BA_adult_sp
+# For the version 9.0, theta vary as a random effect in function of plot
+# And `m` parameter is only in function of BA_adult

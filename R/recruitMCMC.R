@@ -277,7 +277,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p', 'sigma_plot', 'beta', 'theta')),
+      filter(par %in% c('m_int', 'p', 'sigma_plot', 'beta', 'theta')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
