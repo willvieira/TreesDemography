@@ -147,6 +147,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           plot_size = recruit_dt[, plot_size],
           deltaTime = recruit_dt[, deltaYear_plot],
           BA_adult = recruit_dt[, BA_adult],
+          BA_adult_sp = recruit_dt[, BA_adult_sp],
           Np = recruit_dt[, length(unique(plot_id_seq))],
           plot_id = recruit_dt[, plot_id_seq]
       ),
