@@ -19,7 +19,7 @@ simName: "rec_m_rp_BA_zeroInflated"
 # simulations to compare with
 simCompare: [
         "rec_m_randomPlot",
-        "rec_m_randomEffect_BA"
+        "rec_m_randomPlot_BA"
 ]
 
 

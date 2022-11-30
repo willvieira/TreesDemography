@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v4.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect and basal area efffects on ingrowth rate `m`"
+ subtitle: "Test v8.0 - Zero inflated ingrowth model accounting for ingrowth and mortality of new individuals with plot random effect and basal area efffects on ingrowth rate `m`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
