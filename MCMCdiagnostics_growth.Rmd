@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v14.0 - Von Bertalanffy model - r in function of BA_comp"
+ subtitle: "Test v16.0 - Von Bertalanffy model - r in function of BA_comp. Using previous measure as S_t instead of using the first measurement of the individual"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -71,16 +71,22 @@ trainData <- map2_dfr(
 treeData <- readRDS('data/treeData.RDS')
 treeData <- treeData[species_id %in% spIds]
 
-# calculate time since first measurement
-treeData[,
-  time := year_measured - year_measured[which.min(year_measured)],
+## compute de deltaTime between measures of dbh
+growth_dt[,
+  deltaTime := year_measured - lag(year_measured, 1),
   by = tree_id
 ]
 
-# calculate start_size for each tree_id
-treeData[,
-  start_size := dbh[which(time == 0)], by = tree_id
+## define previous measure
+growth_dt[,
+  dbh0 := lag(dbh, 1),
+  by = tree_id
 ]
+
+## Fill the NA first measures with their non lag information
+growth_dt[is.na(deltaTime), deltaTime := 0]
+growth_dt[deltaTime == 0, dbh0 := dbh]
+
 
 # merge with train data
 treeData[
@@ -96,8 +102,8 @@ trainData[
     'plot_id' = i.plot_id,
     'species_id' = i.species_id,
     'dbh' = i.dbh,
-    'time' = i.time,
-    'start_size' = i.start_size,
+    'deltaTime' = i.deltaTime,
+    'dbh0' = i.dbh0,
     'BA_comp' = i.BA_comp
   ),
   on = c('tree_id', 'year_measured')
@@ -348,23 +354,30 @@ plotEffect |>
 Compare plot random effect with last model to check how variance is changing. 
 
 ```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
-sim_toLoad <- c(simInfo$simCompare[length(simInfo$simCompare)], simName)
+sim_to_compare <- simInfo$simCompare[3:4]
 
-map_dfr(
-    sim_toLoad,
-    ~ readRDS(file.path('output', .x, 'meanPlotEffect_rReal.RDS')) |>
-      bind_cols(sim = .x)
-  ) |>
-  pivot_wider(
-    names_from = sim,
-    values_from = m_rReal
-  ) |>
-  ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
-    geom_point(size = 0.8, alpha = .7) +
-    geom_abline(intercept = 0, slope = 1) +
-    #tune::coord_obs_pred() +
-    facet_wrap(~species_id, scales = 'free') +
-    theme_minimal()
+for(Sim in sim_to_compare)
+{
+  sim_toLoad <- c(Sim, simName)
+    
+  print(
+    map_dfr(
+      sim_toLoad,
+      ~ readRDS(file.path('output', .x, 'meanPlotEffect_rReal.RDS')) |>
+        bind_cols(sim = .x)
+    ) |>
+    pivot_wider(
+      names_from = sim,
+      values_from = m_rReal
+    ) |>
+    ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
+      geom_point(size = 0.8, alpha = .7) +
+      geom_abline(intercept = 0, slope = 1) +
+      #tune::coord_obs_pred() +
+      facet_wrap(~species_id, scales = 'free') +
+      theme_minimal()
+  )
+}
 ```
 
 
@@ -442,7 +455,7 @@ post |>
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
-    
+
 ```
 
 
@@ -453,12 +466,10 @@ post |>
 train <- trainData[sampled == 'training']
 
 # compute growth
-train[, time0 := shift(time, type = 'lag'), by = tree_id]
-train[, dbh0 := shift(dbh, type = 'lag'), by = tree_id]
-train[, growth := (dbh - dbh0)/(time - time0)]
+train[, growth := (dbh - dbh0)/deltaTime]
 
 # remove NA
-train <- train[time > 0]
+train <- train[deltaTime > 0]
 
 # prepare parameters
 post_mean <- post |>
@@ -504,14 +515,13 @@ for(sp_seq in seq(1, 17, 2))
     
     # predict size
     train_sp[,
-      pred_size := start_size *
-                  exp(-r_plotBA * time) +
+      pred_size := dbh0 *
+                  exp(-r_plotBA * deltaTime) +
                   Lmax * (1 -exp(-r_plotBA * time))
     ]
 
     # compute growth from predicted size
-    train_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = tree_id]
-    train_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
+    train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
     plot_ls[[i+1]] <- train_sp |>
         filter(!is.na(pred_growth)) |>
@@ -607,8 +617,9 @@ for(Sp in spIds)
 
   # predict size
   val_sp[,
-    pred_size := start_size *
-                  exp(-r_plot * time) + Lmax * (1 -exp(-r_plot * time))
+    pred_size := dbh0 *
+                  exp(-r_plot * deltaTime) +
+                  Lmax * (1 -exp(-r_plot * deltaTime))
   ]
 
   # simulate size from model distribution (normal dist)
@@ -621,9 +632,9 @@ for(Sp in spIds)
   val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = .(iter2, tree_id)]
   val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = .(iter2, tree_id)]
 
-  val_sp[, obs_growth := (dbh - obs_size0)/(time - time0)]
-  val_sp[, pred_growth := (pred_size - pred_size0)/(time - time0)]
-  val_sp[, pred_growth_random := (pred_size_random - pred_size_random0)/(time - time0)]
+  val_sp[, obs_growth := (dbh - dbh0)/deltaTime]
+  val_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
+  val_sp[, pred_growth_random := (pred_size_random - dbh0)/deltaTime]
 
   # calculate MSE
   val_sp[, SE_size := (dbh - pred_size_random)^2]

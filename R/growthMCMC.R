@@ -137,16 +137,22 @@ set.seed(0.0)
 
 
 
-## Compute the time distance from each measure to the first measurement of the individual
+## compute de deltaTime between measures of dbh
 growth_dt[,
-  time := year_measured - year_measured[which.min(year_measured)],
+  deltaTime := year_measured - lag(year_measured, 1),
   by = tree_id
 ]
 
-## define start_size for each individual tree
+## define previous measure
 growth_dt[,
-  start_size := dbh[which(time == 0)], by = tree_id
+  dbh0 := lag(dbh, 1),
+  by = tree_id
 ]
+
+## Fill the NA first measures with their non lag information
+growth_dt[is.na(deltaTime), deltaTime := 0]
+growth_dt[deltaTime == 0, dbh0 := dbh]
+
 
 ## define plot_id in sequence to be used in stan
 plot_id_uq <- growth_dt[sampled == 'training', unique(plot_id)]
@@ -170,9 +176,9 @@ growth_dt[
   md_out <- stanModel$sample(
       data = list(
           N = growth_dt[sampled == 'training', .N],
-          obs_size = growth_dt[sampled == 'training', dbh],
-          time = growth_dt[sampled == 'training', time],
-          start_size = growth_dt[sampled == 'training', start_size],
+          obs_size_t1 = growth_dt[sampled == 'training', dbh],
+          time = growth_dt[sampled == 'training', deltaTime],
+          obs_size_t0 = growth_dt[sampled == 'training', dbh0],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           BA_comp = growth_dt[sampled == 'training', BA_comp]
@@ -208,7 +214,7 @@ growth_dt[
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, [3] start_size, [4] plot_id_seq, and [5] BA_comp
+    # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq, and [5] BA_comp
 
     # Add plot_id random effect 
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
@@ -262,7 +268,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, time, start_size, plot_id_seq, BA_comp)
+          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
         ], 
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -285,7 +291,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, time, start_size, plot_id_seq, BA_comp)
+        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
       ]
   )
 

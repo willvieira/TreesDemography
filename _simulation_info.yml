@@ -15,18 +15,21 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA"
+simName: "bertalanffy_BA_st"
 # simulations to compare with
 simCompare: [
         "bertalanffyInt_startSize",
         "bertalanffyInt_startSize_par",
-        "bertalanffyInt_randomPlot"
+        "bertalanffyInt_randomPlot",
+        "bertalanffy_BA"
 ]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v14.0 - multilevel r parameter at the plot level with plot basal area effect
+## Growth test - v16.0 - multilevel r parameter at the plot level with plot basal area effect
 
 # Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
+
+# Instead of using start_size of tree_id to have larger deltaTimes (better fit reason), use the last measured size t against t+1. DeltaTime will me more restricted to small values. In the other hand competition covariates will be closer in a temporal scale to the event to growth. So presumably this model should work better.

@@ -1,15 +1,15 @@
 data {
   int<lower=0> N;
-  vector[N] obs_size;
+  vector[N] obs_size_t1;
   vector[N] time;
-  vector[N] start_size;
+  vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=0> plot_id;
   vector[N] BA_comp;
 }
 transformed data {
   // to add minimum range to Lmax parameter
-  real<lower=0> maxSize = max(obs_size);
+  real<lower=0> maxSize = max(obs_size_t1);
 }
 parameters {
   real r;
@@ -35,10 +35,10 @@ model {
   vector[N] rPlotTime = exp(-rPlot .* time);
 
   // mean
-  vector[N] mu_obs = start_size .*
+  vector[N] mu_obs = obs_size_t0 .*
     rPlotTime +
     Lmax * (1 - rPlotTime);
 
   // likelihood
-  obs_size ~ normal(mu_obs, sigma_obs);
+  obs_size_t1 ~ normal(mu_obs, sigma_obs);
 }
