@@ -72,20 +72,20 @@ treeData <- readRDS('data/treeData.RDS')
 treeData <- treeData[species_id %in% spIds]
 
 ## compute de deltaTime between measures of dbh
-growth_dt[,
+treeData[,
   deltaTime := year_measured - lag(year_measured, 1),
   by = tree_id
 ]
 
 ## define previous measure
-growth_dt[,
+treeData[,
   dbh0 := lag(dbh, 1),
   by = tree_id
 ]
 
 ## Fill the NA first measures with their non lag information
-growth_dt[is.na(deltaTime), deltaTime := 0]
-growth_dt[deltaTime == 0, dbh0 := dbh]
+treeData[is.na(deltaTime), deltaTime := 0]
+treeData[deltaTime == 0, dbh0 := dbh]
 
 
 # merge with train data
@@ -388,10 +388,10 @@ for(Sim in sim_to_compare)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
 
-treeData[, .(species_id, dbh, time, sampled2)] |>
+treeData[, .(species_id, dbh, deltaTime, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
-    cols = c(dbh, time),
+    cols = c(dbh, deltaTime),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
@@ -517,12 +517,15 @@ for(sp_seq in seq(1, 17, 2))
     train_sp[,
       pred_size := dbh0 *
                   exp(-r_plotBA * deltaTime) +
-                  Lmax * (1 -exp(-r_plotBA * time))
+                  Lmax * (1 -exp(-r_plotBA * deltaTime))
     ]
 
     # compute growth from predicted size
     train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
+    # define ylim to remove outliers
+    yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
+    
     plot_ls[[i+1]] <- train_sp |>
         filter(!is.na(pred_growth)) |>
         mutate(obs_growth = growth) |>
@@ -537,7 +540,8 @@ for(sp_seq in seq(1, 17, 2))
           xlab('Basal area competition') +
           ylab(ifelse(i == 0, 'Growth', '')) +
           labs(subtitle = Sp) +
-          theme_minimal() 
+          theme_minimal() +
+          ylim(yLim)
   }
   print(
     ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
@@ -626,12 +630,6 @@ for(Sp in spIds)
   val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
 
   # calculate observed and predicted growth 
-  val_sp[, time0 := shift(time, type = 'lag'), by = .(iter2, tree_id)]
-  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = .(iter2, tree_id)]
-
-  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = .(iter2, tree_id)]
-  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = .(iter2, tree_id)]
-
   val_sp[, obs_growth := (dbh - dbh0)/deltaTime]
   val_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
   val_sp[, pred_growth_random := (pred_size_random - dbh0)/deltaTime]
@@ -683,8 +681,12 @@ for(Sp in spIds)
     by = 'iter2'
   )
 
-  # plot
-  p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
+  ## plot
+
+  # define species specific axis limits for growth
+  yLim <- val_sp[, quantile(obs_growth, probs = c(0.005, .995))]
+  
+  p1 <- val_sp[deltaTime > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) + 
@@ -697,11 +699,11 @@ for(Sp in spIds)
           xlab('Observerd size') +
           ylab('Predicted size')
 
-  p2 <- val_sp[time > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
+  p2 <- val_sp[deltaTime > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
-          xlim(-4, 20) + ylim(-4, 20) +
+          xlim(yLim) + ylim(yLim) +
           theme_minimal() +
           theme(
                 legend.position="none",
@@ -710,28 +712,28 @@ for(Sp in spIds)
           xlab('Observerd growth') +
           ylab('Predicted growth')
 
-  pred_size_matrix <- val_sp[time > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
+  pred_size_matrix <- val_sp[deltaTime > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_size_random) |>
       select(-iter2) |>
       as.matrix()
 
   p3 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & time > 0, dbh],
+      val_sp[iter2 == 1 & deltaTime > 0, dbh],
       pred_size_matrix
   ) +
   xlab('Obs vs predicted size') + ylab('')
 
-  pred_growth_matrix <- val_sp[time > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
+  pred_growth_matrix <- val_sp[deltaTime > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
       select(-iter2) |>
       as.matrix()
 
   p4 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & time > 0 & !is.na(obs_growth), obs_growth],
+      val_sp[iter2 == 1 & deltaTime > 0 & !is.na(obs_growth), obs_growth],
       pred_growth_matrix
   ) +
   xlab('Obs vs predicted growth') +
-  xlim(-15, 20)
+  xlim(yLim)
 
   print(
     ggpubr::ggarrange(
@@ -835,6 +837,8 @@ map_dfr(
 
 
 # Intraclass Correlation Coefficient (ICC)
+
+*I should not be using this for my kind of model but I will let it here anyway...*
 
 ```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
 post |>
