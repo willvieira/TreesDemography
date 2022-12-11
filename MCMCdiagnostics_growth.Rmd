@@ -354,7 +354,7 @@ plotEffect |>
 Compare plot random effect with last model to check how variance is changing. 
 
 ```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
-sim_to_compare <- simInfo$simCompare[3:4]
+sim_to_compare <- simInfo$simCompare
 
 for(Sim in sim_to_compare)
 {
@@ -684,7 +684,7 @@ for(Sp in spIds)
   ## plot
 
   # define species specific axis limits for growth
-  yLim <- val_sp[, quantile(obs_growth, probs = c(0.005, .995))]
+  yLim <- val_sp[, quantile(obs_growth, probs = c(0.005, .995), na.rm = T)]
   
   p1 <- val_sp[deltaTime > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
@@ -858,7 +858,7 @@ post |>
 
 # compare between all simulations with random effects
 map_dfr(
-    sim_toLoad[c(3, 4)],
+    sim_toLoad,
     ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
       bind_cols(sim = .x)
   ) |>
