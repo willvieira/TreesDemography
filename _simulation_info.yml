@@ -15,21 +15,20 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st"
+simName: "bertalanffy_BA_st_randomInd"
 # simulations to compare with
 simCompare: [
-        "bertalanffyInt_startSize",
-        "bertalanffyInt_startSize_par",
         "bertalanffyInt_randomPlot",
-        "bertalanffy_BA"
+        "bertalanffy_BA",
+        "bertalanffy_BA_st"
 ]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v16.0 - multilevel r parameter at the plot level with plot basal area effect
+## Growth test - v17.0 - multilevel r parameter at the plot level with plot basal area effect
 
-# Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
+# Using previous measurement as S_t from V16.0 and plot random effect on the r parameter, r also vary as a function of plot basal area
 
-# Instead of using start_size of tree_id to have larger deltaTimes (better fit reason), use the last measured size t against t+1. DeltaTime will me more restricted to small values. In the other hand competition covariates will be closer in a temporal scale to the event to growth. So presumably this model should work better.
+# Version 17.0 adds individuals tree_id random effects on the parameter r. So now r has a nested random effect of plot_id, and within each plot_id, individuals have their own deviation. This way I have a specific parameter (sigma_ind) to quantify the importance of individual variation in the predictions.

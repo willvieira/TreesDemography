@@ -156,16 +156,31 @@ growth_dt[deltaTime == 0, dbh0 := dbh]
 
 ## define plot_id in sequence to be used in stan
 plot_id_uq <- growth_dt[sampled == 'training', unique(plot_id)]
-toSub <- data.table(
+toSub_plot <- data.table(
   plot_id = plot_id_uq,
   plot_id_seq = 1:length(plot_id_uq)
 )
 
+## Do the same for tree_id
+tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
+toSub_tree <- data.table(
+  tree_id = tree_id_uq,
+  tree_id_seq = 1:length(tree_id_uq)
+)
+
+# merge
 growth_dt[
-  toSub,
+  toSub_plot,
   plot_id_seq := i.plot_id_seq,
   on = 'plot_id'
 ]
+
+growth_dt[
+  toSub_tree,
+  tree_id_seq := i.tree_id_seq,
+  on = 'tree_id'
+]
+
 
 
 ## run the model
@@ -179,9 +194,11 @@ growth_dt[
           obs_size_t1 = growth_dt[sampled == 'training', dbh],
           time = growth_dt[sampled == 'training', deltaTime],
           obs_size_t0 = growth_dt[sampled == 'training', dbh0],
+          BA_comp = growth_dt[sampled == 'training', BA_comp],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
-          BA_comp = growth_dt[sampled == 'training', BA_comp]
+          Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
+          tree_id = growth_dt[sampled == 'training', tree_id_seq]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -214,10 +231,11 @@ growth_dt[
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq, and [5] BA_comp
+    # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq, [5] BA_comp, and [6] tree_id_seq
 
     # Add plot_id random effect 
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
+    rTree_log <- post[, paste0('rTree_log[', dt[6], ']')]
     rPlot_beta <- exp(post[, 'r'] + rPlot_log + dt[5] * post[, 'beta'])
     
     # time component of the model
@@ -268,8 +286,8 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
-        ], 
+          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, tree_id_seq)
+        ],
         draws = post_dist_lg,
         cores = sim_info$nC
     )
@@ -291,7 +309,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
+        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, tree_id_seq)
       ]
   )
 
@@ -321,6 +339,16 @@ growth_dt[
     )
   )
 
+  # posterior of tree_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'rTree_log', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorrTree_', sp, '.RDS')
+    )
+  )
+
   # save sampling diagnostics
   saveRDS(
     diag_out,
@@ -332,7 +360,7 @@ growth_dt[
 
   # save train and validate data
   saveRDS(
-    growth_dt[, .(tree_id, plot_id_seq, year_measured, sampled)],
+    growth_dt[, .(tree_id, tree_id_seq, plot_id_seq, year_measured, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')

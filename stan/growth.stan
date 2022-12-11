@@ -3,9 +3,11 @@ data {
   vector[N] obs_size_t1;
   vector[N] time;
   vector[N] obs_size_t0;
-  int<lower=1> Np; // number of unique plot_id
-  array[N] int<lower=0> plot_id;
   vector[N] BA_comp;
+  int<lower=1> Np; // number of unique plot_id
+  array[N] int<lower=1,upper=Np> plot_id;
+  int<lower=1> Nt; // number of unique plot_id
+  array[N] int<lower=1,upper=Nt> tree_id;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -15,6 +17,8 @@ parameters {
   real r;
   vector[Np] rPlot_log;
   real<lower=0> sigma_plot;
+  vector[Nt] rTree_log;
+  real<lower=0> sigma_tree;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
   real beta;
@@ -24,12 +28,16 @@ model {
   r ~ normal(-3.5, 1);
   rPlot_log ~ normal(0, sigma_plot);
   sigma_plot ~ exponential(3);
+  rTree_log ~ normal(0, sigma_tree);
+  sigma_tree ~ exponential(3);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
   beta ~ normal(0, 1);
 
   // add plot random effect and BA effect
-  vector[N] rPlot = exp(r + rPlot_log[plot_id] + BA_comp * beta);
+  vector[N] rPlot = exp(
+    r + rPlot_log[plot_id] + rTree_log[tree_id] + BA_comp * beta
+  );
 
   // pre calculate component of the model mean
   vector[N] rPlotTime = exp(-rPlot .* time);
