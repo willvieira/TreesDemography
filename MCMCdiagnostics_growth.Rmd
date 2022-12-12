@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v16.0 - Von Bertalanffy model - r in function of BA_comp. Using previous measure as S_t instead of using the first measurement of the individual"
+ subtitle: "Test v16.1 - Von Bertalanffy model - r in function of BA_comp. Using previous measure as S_t instead of using the first measurement of the individual - RESEF run"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -31,7 +31,7 @@ spIds <- simInfo$spIds
 simName <- simInfo$simName
 simulations <- simInfo$simulations
 
-# List output files and set vector names to species_id
+# List output files and set vector names to spCode
 posteriorPop_files <- grep(
   'posteriorPop',
   dir(file.path('output', simName), full.names = TRUE),
@@ -52,63 +52,11 @@ diag_files <- grep(
   value = TRUE
 )
 names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
-
-trainData_files <- grep(
-  'trainData',
-  dir(file.path('output', simName), full.names = TRUE),
-  value = TRUE
-)
-names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
 ```
 
 ```{r load dataset,echo =FALSE}
-trainData <- map2_dfr(
-  trainData_files,
-  names(trainData_files),
-  ~ readRDS(.x)
-)
-
-treeData <- readRDS('data/treeData.RDS')
-treeData <- treeData[species_id %in% spIds]
-
-## compute de deltaTime between measures of dbh
-treeData[,
-  deltaTime := year_measured - lag(year_measured, 1),
-  by = tree_id
-]
-
-## define previous measure
-treeData[,
-  dbh0 := lag(dbh, 1),
-  by = tree_id
-]
-
-## Fill the NA first measures with their non lag information
-treeData[is.na(deltaTime), deltaTime := 0]
-treeData[deltaTime == 0, dbh0 := dbh]
-
-
-# merge with train data
-treeData[
-  trainData,
-  sampled := i.sampled,
-  on = c('tree_id', 'year_measured')
-]
-
-# add species_id to trainData
-trainData[
-  treeData,
-  `:=`(
-    'plot_id' = i.plot_id,
-    'species_id' = i.species_id,
-    'dbh' = i.dbh,
-    'deltaTime' = i.deltaTime,
-    'dbh0' = i.dbh0,
-    'BA_comp' = i.BA_comp
-  ),
-  on = c('tree_id', 'year_measured')
-]
-
+treeData <- readRDS('data/RESEF/growth_dt.RDS')
+treeData <- treeData[spCode %in% spIds]
 ```
 
 # Rhat
@@ -118,9 +66,9 @@ map2_dfr(
   diag_files,
   names(diag_files),
   ~ readRDS(.x)[['rhat']] |>
-      bind_cols(species_id = .y)
+      bind_cols(spCode = .y)
 ) |>
-ggplot(aes(x = rhat, y = species_id)) +
+ggplot(aes(x = rhat, y = spCode)) +
   geom_boxplot() +
   theme_minimal()
 ```
@@ -134,7 +82,7 @@ map2_dfr(
   diag_files,
   names(diag_files),
   ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
-      bind_cols(species_id = .y) |>
+      bind_cols(spCode = .y) |>
       mutate(chain = row_number())
 ) |>
 pivot_wider(
@@ -154,7 +102,7 @@ post <- map2_dfr(
   posteriorPop_files,
   names(posteriorPop_files),
   ~ readRDS(.x) |>
-    bind_cols(species_id = .y)
+    bind_cols(spCode = .y)
 )
 
 for(Par in unique(post$par))
@@ -162,7 +110,7 @@ for(Par in unique(post$par))
   print(
     post |>
       filter(par == Par) |>
-      ggplot(aes(x = value, y = species_id)) +
+      ggplot(aes(x = value, y = spCode)) +
         stat_eye() +
         ggtitle(Par) +
         xlab('') +
@@ -186,11 +134,11 @@ for(i in 1:ncol(parComb))
     post |>
       filter(par %in% parComb[, i]) |>
       filter(iter %in% sample(iter, 1000)) |>
-      select(par, value, iter, species_id) |>
+      select(par, value, iter, spCode) |>
       pivot_wider(names_from = par, values_from = value) |>
       ggplot(aes_string(x = parComb[1, i], y = parComb[2, i])) + 
           geom_point() +
-          facet_wrap(~ species_id) +
+          facet_wrap(~ spCode) +
           xlab(parComb[1, i]) +
           ylab(parComb[2, i]) +
           theme_minimal()
@@ -206,7 +154,7 @@ plotEffect_ls <- list()
 for(Sp in spIds)
 {
     r_pop <- post |>
-        filter(species_id == Sp & par == 'r') |>
+        filter(spCode == Sp & par == 'r') |>
         mutate(r_pop = value) |>
         select(r_pop, iter)
 
@@ -222,7 +170,7 @@ for(Sp in spIds)
             mutate(r_real = exp(value + r_pop)) |>
             left_join(
               trainData[
-                species_id == Sp & !is.na(plot_id_seq),
+                spCode == Sp & !is.na(plot_id_seq),
                 .(plot_id = unique(plot_id)),
                 by = plot_id_seq
               ]
@@ -253,7 +201,7 @@ for(Sp in spIds)
             plot_id, plot_id_seq, r_pop, m_rReal, latitude,
             BA_plot, bio_01_mean, bio_12_mean
           )
-      
+
       # filter to remove some plots so figure is liseable
       dt_toPlot <- dt_toPlot |>
           filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
@@ -297,17 +245,17 @@ for(Sp in spIds)
 ```{r plot_randomEffect2, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 12}
 # merge list of sepecies
 plotEffect <- plotEffect_ls |>
-  bind_rows(.id = 'species_id')
+  bind_rows(.id = 'spCode')
 
 r_pop <- plotEffect |>
-  group_by(species_id) |>
+  group_by(spCode) |>
   summarise(r = unique(r_pop))
 
 print(
   plotEffect |>
     ggplot(aes(x = bio_01_mean, m_rReal, color = BA_plot)) +
         geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
+        facet_wrap(~spCode, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Annual mean temperature') +
         ylab('Plot random effect') +
@@ -318,7 +266,7 @@ print(
   plotEffect |>
     ggplot(aes(x = BA_plot, m_rReal, color = bio_01_mean)) +
         geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
+        facet_wrap(~spCode, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Plot basal area') +
         ylab('Plot random effect') +
@@ -329,7 +277,7 @@ print(
   plotEffect |>
     ggplot(aes(x = bio_12_mean, m_rReal, color = BA_plot)) +
         geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
+        facet_wrap(~spCode, scales = 'free') +
         geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
         xlab('Total annual precipitation') +
         ylab('Plot random effect') +
@@ -338,7 +286,7 @@ print(
 
 # save plot effect ot be used against future models
 plotEffect |>
-  select(species_id, plot_id, m_rReal) |>
+  select(spCode, plot_id, m_rReal) |>
   saveRDS(
     file.path(
         'output', 
@@ -374,7 +322,7 @@ for(Sim in sim_to_compare)
       geom_point(size = 0.8, alpha = .7) +
       geom_abline(intercept = 0, slope = 1) +
       #tune::coord_obs_pred() +
-      facet_wrap(~species_id, scales = 'free') +
+      facet_wrap(~spCode, scales = 'free') +
       theme_minimal()
   )
 }
@@ -388,13 +336,13 @@ for(Sim in sim_to_compare)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
 
-treeData[, .(species_id, dbh, deltaTime, sampled2)] |>
+treeData[, .(spCode, dbh, deltaTime, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
     cols = c(dbh, deltaTime),
     names_to = 'var'
   ) |>
-  ggplot(aes(x = value, y = species_id, fill = sample)) +
+  ggplot(aes(x = value, y = spCode, fill = sample)) +
     geom_density_ridges(alpha = 0.7, color = NA) +
     facet_wrap(~var, scales = 'free_x') +
     xlab('') +
@@ -414,10 +362,10 @@ post |>
     names_from = par,
     values_from = value
   ) |>
-  group_by(species_id) |>
+  group_by(spCode) |>
   expand_grid(time = seq(0, 2000, 100)) |>
   mutate(Lt = Lmax * (1 - exp(-exp(r) * time))) |>
-  ggplot(aes(x = time, y = Lt, color = species_id)) +
+  ggplot(aes(x = time, y = Lt, color = spCode)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
         scale_fill_brewer() +
         ylab('DBH size (mmm)') + xlab('Time (years)') +
@@ -433,13 +381,13 @@ post |>
     names_from = par,
     values_from = value
   ) |>
-  group_by(species_id) |>
+  group_by(spCode) |>
   expand_grid(BA_comp = seq(0, 120, 5)) |>
   mutate(
     BAeffect = BA_comp * beta,
     r_BA = exp(r + BAeffect)
   ) |>
-  select(iter, species_id, BA_comp, BAeffect, r_BA) |>
+  select(iter, spCode, BA_comp, BAeffect, r_BA) |>
   pivot_longer(
     cols = c('BAeffect', 'r_BA'),
     names_to = 'sim'
@@ -447,7 +395,7 @@ post |>
   mutate(
     sim = factor(sim, levels = c('BAeffect', 'r_BA'), labels = c('BA_comp effect on r parameter', 'r parameter'))
   ) |>
-  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
+  ggplot(aes(x = BA_comp, y = value, color = spCode)) +
     stat_lineribbon(.width = 0.95, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
@@ -474,7 +422,7 @@ train <- train[deltaTime > 0]
 # prepare parameters
 post_mean <- post |>
   filter(par %in% c('Lmax', 'beta')) |>
-  group_by(species_id, par) |>
+  group_by(spCode, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
     names_from = par,
@@ -482,7 +430,7 @@ post_mean <- post |>
   ) |>
   setDT()
 
-# plot per species_id
+# plot per spCode
 for(sp_seq in seq(1, 17, 2)) 
 {
   plot_ls <- list()
@@ -493,18 +441,18 @@ for(sp_seq in seq(1, 17, 2))
 
     Sp <- spIds[sp_seq + i]
 
-    train_sp <- train[species_id == Sp]
+    train_sp <- train[spCode == Sp]
 
     # sample few tree_ids that have at least 2 measures
     tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
     train_sp <- train_sp[tree_id %in% tree_ids]
 
     # add parameters
-    train_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
+    train_sp[, c('beta', 'Lmax') := post_mean[spCode == Sp, .(beta, Lmax)]]
     train_sp[
       plotEffect |>
-        filter(species_id == Sp) |>
-        select(-species_id) |>
+        filter(spCode == Sp) |>
+        select(-spCode) |>
         setDT(),
       r_plot := i.m_rReal,
       on = 'plot_id'
@@ -563,7 +511,7 @@ MSE_list <- R2_list <- list()
 
 for(Sp in spIds)
 {
-  val_sp <- trainData[species_id == Sp & sampled == 'validation']
+  val_sp <- trainData[spCode == Sp & sampled == 'validation']
 
   # replicate each observation by N_iteration to accommodate the parameters draw
   # Using only 300 iterations of the 8000 to speed calculation as the final
@@ -576,8 +524,8 @@ for(Sp in spIds)
   # merge global parameters
   val_sp[
     post |>
-        filter(species_id == Sp) |>
-        select(-species_id) |>
+        filter(spCode == Sp) |>
+        select(-spCode) |>
         pivot_wider(names_from = par, values_from = value) |>
         as.data.table(),
     `:=`(
@@ -643,7 +591,7 @@ for(Sp in spIds)
     .(
       MSE_size = mean(SE_size, na.rm = TRUE),
       MSE_growth = mean(SE_growth, na.rm = TRUE),
-      species_id = Sp
+      spCode = Sp
     ),
     by = iter2
   ]
@@ -655,12 +603,12 @@ for(Sp in spIds)
     bind_cols(iter = sampledIter) |>
     left_join(
       post |>
-        filter(species_id == Sp & par == 'sigma_obs') |>
+        filter(spCode == Sp & par == 'sigma_obs') |>
         mutate(sigma_obs = value) |>
-        select(iter, sigma_obs, species_id)
+        select(iter, sigma_obs, spCode)
     ) |>
     mutate(R2gelman_size = var_size/(var_size + sigma_obs^2)) |>
-    select(iter, iter2, species_id, R2gelman_size) |>
+    select(iter, iter2, spCode, R2gelman_size) |>
     setDT()
 
   # calculate R2 from regression linear model using the 1:1 obs vs pred
@@ -781,7 +729,7 @@ sim_toLoad <- c(simInfo$simCompare, simName)
     cols = contains('Predicted')
   ) |>
   mutate(name2 = factor(name,  levels = c('Predicted size', 'Predicted growth'))) |>
-  ggplot(aes(x = value, y = species_id, fill = sim)) +
+  ggplot(aes(x = value, y = spCode, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~name2, scales = 'free_x') +
     xlab('Mean Squared error (MSE)') + ylab('') +
@@ -800,7 +748,7 @@ map_dfr(
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
-  ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
+  ggplot(aes(x = R2gelman_size, y = spCode, fill = sim)) +
       geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
       xlab('Rsquared (Gelman 2018)') +
       theme_minimal()
@@ -818,7 +766,7 @@ map_dfr(
     `R2 predicted size` = R2reg_size_mean,
     `R2 predicted growth` = R2reg_growth_mean
   ) |>
-  select(species_id, iter2, sim, contains('R2 predicted')) |>
+  select(spCode, iter2, sim, contains('R2 predicted')) |>
   pivot_longer(
     cols = contains('R2 predicted'),
     names_to = 'par',
@@ -827,7 +775,7 @@ map_dfr(
   mutate(
     par2 = factor(par,  levels = c('R2 predicted size', 'R2 predicted growth'))
   ) |>
-  ggplot(aes(x = value, y = species_id, fill = sim)) +
+  ggplot(aes(x = value, y = spCode, fill = sim)) +
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~par2, scales = 'free_x') +
     xlab('Rsquared (linear regression)') +
@@ -847,7 +795,7 @@ post |>
     names_from = par,
     values_from = value
   ) |>
-  group_by(species_id, iter) |>
+  group_by(spCode, iter) |>
   summarise(
     icc = sigma_plot/(sigma_plot + sigma_obs)
   ) |>
@@ -862,7 +810,7 @@ map_dfr(
     ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
       bind_cols(sim = .x)
   ) |>
-  ggplot(aes(x = icc, y = species_id, fill = sim)) +
+  ggplot(aes(x = icc, y = spCode, fill = sim)) +
       geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
       xlab('ICC') +
       theme_minimal()
@@ -873,11 +821,11 @@ map_dfr(
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
       left_join(
         readRDS(file.path('output', .x, 'ICC.RDS')),
-        by = c('iter', 'species_id')
+        by = c('iter', 'spCode')
       )
   ) |>
-  select(iter2, species_id, icc, R2reg_growth_mean) |>
-  group_by(species_id) |>
+  select(iter2, spCode, icc, R2reg_growth_mean) |>
+  group_by(spCode) |>
   summarise(
     icc_mean = mean(icc),
     icc_min = quantile(icc, probs = .05),
@@ -886,7 +834,7 @@ map_dfr(
     r2_min = quantile(R2reg_growth_mean, probs = .05),
     r2_max = quantile(R2reg_growth_mean, probs = .95)
   ) |>
-  ggplot(aes(icc_mean, r2_mean, color = species_id)) +
+  ggplot(aes(icc_mean, r2_mean, color = spCode)) +
     geom_point() +
     geom_errorbar(aes(ymin = r2_min, ymax = r2_max), alpha = .5) + 
     geom_errorbarh(aes(xmin = icc_min,xmax = icc_max), alpha = .5) +
@@ -906,16 +854,16 @@ map_dfr(
       ) |>
       loo::loo_compare() |>
       as.data.frame() |>
-      bind_cols(species_id = .x) |>
+      bind_cols(spCode = .x) |>
       rownames_to_column(var = 'sim')
   ) |>
-  select(species_id, sim, elpd_diff, se_diff) |>
+  select(spCode, sim, elpd_diff, se_diff) |>
   pivot_longer(
     cols = c(elpd_diff, se_diff),
     names_to = 'variable',
     values_to = 'value'
   ) |>
-  ggplot(aes(x = value, y = species_id, color = sim)) +
+  ggplot(aes(x = value, y = spCode, color = sim)) +
     geom_point() +
     facet_wrap(~ variable, scales = 'free_x') +
     xlab('') + ylab('') +
@@ -931,9 +879,9 @@ map2_dfr(
   diag_files,
   names(diag_files),
   ~ readRDS(.x)[['time']][['chains']] |>
-    bind_cols(species_id = .y)
+    bind_cols(spCode = .y)
 ) |>
-ggplot(aes(x = total/3600, y = species_id)) +
+ggplot(aes(x = total/3600, y = spCode)) +
   geom_boxplot() +
   xlab('Fit time (hours)') +
   theme_minimal()

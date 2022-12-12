@@ -46,116 +46,95 @@ set.seed(0.0)
 ## stratified sampling to define traning and validation data
 
   # select the species
-  growth_dt <- dataSource[species_id == sp]
+  growth_dt <- dataSource[spCode == sp]
 
   # remove dead trees
-  growth_dt <- growth_dt[status == 1]
+  growth_dt <- growth_dt[state0 == 'alive']
   
   # get number of measurements by tree_id
   growth_dt[, nbMeasure := .N, by = tree_id]
-
-  # filter for tree_id with at least two measures
-  growth_dt <- growth_dt[nbMeasure > 1]
  
-  if(growth_dt[, .N] > sampleSize)
-  { 
-    # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
-    deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaBA = 4
+#   if(growth_dt[, .N] > sampleSize)
+#   { 
+#     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
+#     deltaS = 10; nbLonClasses = nbLatClasses = 50; deltaBA = 4
 
-    # Size classes
-    growth_dt[!is.na(dbh), sizeInt := cut(dbh, breaks = seq(floor(min(dbh)), ceiling(max(dbh)), by = deltaS), labels = FALSE, include.lowest = TRUE)]
+#     # Size classes
+#     growth_dt[!is.na(dbh), sizeInt := cut(dbh, breaks = seq(floor(min(dbh)), ceiling(max(dbh)), by = deltaS), labels = FALSE, include.lowest = TRUE)]
   	
-    # Longitude classes
-    growth_dt[!is.na(longitude), lonInt := cut(longitude, breaks = seq(floor(min(longitude)), ceiling(max(longitude)), length.out = nbLonClasses), labels = FALSE, include.lowest = TRUE)]
+#     # Longitude classes
+#     growth_dt[!is.na(longitude), lonInt := cut(longitude, breaks = seq(floor(min(longitude)), ceiling(max(longitude)), length.out = nbLonClasses), labels = FALSE, include.lowest = TRUE)]
 
-  	# Latitude classes
-    growth_dt[!is.na(latitude), latInt := cut(latitude, breaks = seq(floor(min(latitude)), ceiling(max(latitude)), length.out = nbLatClasses), labels = FALSE, include.lowest = TRUE)]
+#   	# Latitude classes
+#     growth_dt[!is.na(latitude), latInt := cut(latitude, breaks = seq(floor(min(latitude)), ceiling(max(latitude)), length.out = nbLatClasses), labels = FALSE, include.lowest = TRUE)]
 
-    # Basal area
-    growth_dt[!is.na(BA_plot), BAInt := cut(BA_plot, breaks = seq(floor(min(BA_plot)), ceiling(max(BA_plot)), by = deltaBA), labels = FALSE, include.lowest = TRUE)]
+#     # Basal area
+#     growth_dt[!is.na(BA_plot), BAInt := cut(BA_plot, breaks = seq(floor(min(BA_plot)), ceiling(max(BA_plot)), by = deltaBA), labels = FALSE, include.lowest = TRUE)]
 
-  	# Derive frequencies
-    N <- growth_dt[, .N]
-   	freqDBH = growth_dt[, table(sizeInt)]/N
-  	freqLon = growth_dt[, table(lonInt)]/N
-  	freqLat = growth_dt[, table(latInt)]/N
-    freqCD = growth_dt[, table(BAInt)]/N
+#   	# Derive frequencies
+#     N <- growth_dt[, .N]
+#    	freqDBH = growth_dt[, table(sizeInt)]/N
+#   	freqLon = growth_dt[, table(lonInt)]/N
+#   	freqLat = growth_dt[, table(latInt)]/N
+#     freqCD = growth_dt[, table(BAInt)]/N
 
-  	ls_sizeInt = growth_dt[, unique(sizeInt)]
-  	ls_lonInt = growth_dt[, unique(lonInt)]
-  	ls_latInt = growth_dt[, unique(latInt)]
-    ls_CPInt = growth_dt[, unique(BAInt)]
+#   	ls_sizeInt = growth_dt[, unique(sizeInt)]
+#   	ls_lonInt = growth_dt[, unique(lonInt)]
+#   	ls_latInt = growth_dt[, unique(latInt)]
+#     ls_CPInt = growth_dt[, unique(BAInt)]
 
-  	for (s in ls_sizeInt)
-  		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
+#   	for (s in ls_sizeInt)
+#   		growth_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
 
-  	for (lg in ls_lonInt)
-  		growth_dt[lonInt == lg, proba_L := freqLon[as.character(lg)]]
+#   	for (lg in ls_lonInt)
+#   		growth_dt[lonInt == lg, proba_L := freqLon[as.character(lg)]]
 
-  	for (lt in ls_latInt)
-  		growth_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
+#   	for (lt in ls_latInt)
+#   		growth_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
 
-   for (cd in ls_CPInt)
-  		growth_dt[BAInt == cd, proba_cd := freqCD[as.character(cd)]]
+#    for (cd in ls_CPInt)
+#   		growth_dt[BAInt == cd, proba_cd := freqCD[as.character(cd)]]
 
-  	growth_dt[, proba := proba_s*proba_L*proba_l*proba_cd]
+#   	growth_dt[, proba := proba_s*proba_L*proba_l*proba_cd]
 
-    # mean inclusison probability over individual trees
-    tree_prob <- growth_dt[,
-      .(mean_prob = mean(proba, na.rm = TRUE), N = unique(nbMeasure)),
-      by = tree_id
-    ]
+#     # mean inclusison probability over individual trees
+#     tree_prob <- growth_dt[,
+#       .(mean_prob = mean(proba, na.rm = TRUE), N = unique(nbMeasure)),
+#       by = tree_id
+#     ]
 
-    # sample training data
-    selected_trees <- tree_prob[
-      !is.na(mean_prob),
-      sample(tree_id, floor(sampleSize/mean(N)), prob = mean_prob)
-    ]
+#     # sample training data
+#     selected_trees <- tree_prob[
+#       !is.na(mean_prob),
+#       sample(tree_id, floor(sampleSize/mean(N)), prob = mean_prob)
+#     ]
 
-    growth_dt[, sampled := ifelse(tree_id %in% selected_trees, 'training', NA)]
+#     growth_dt[, sampled := ifelse(tree_id %in% selected_trees, 'training', NA)]
 
-    # sample validade data
-    if(growth_dt[, sum(is.na(sampled))] > sampleSize) {
-      selected_trees <- tree_prob[
-          !tree_id %in% selected_trees & !is.na(mean_prob),
-          sample(tree_id, floor(sampleSize/mean(N)), prob = mean_prob)
-        ]
+#     # sample validade data
+#     if(growth_dt[, sum(is.na(sampled))] > sampleSize) {
+#       selected_trees <- tree_prob[
+#           !tree_id %in% selected_trees & !is.na(mean_prob),
+#           sample(tree_id, floor(sampleSize/mean(N)), prob = mean_prob)
+#         ]
 
-      growth_dt[
-        is.na(sampled),
-        sampled := ifelse(tree_id %in% unique(selected_trees), 'validation', NA)
-      ]
-    }else{
-      growth_dt[is.na(sampled), sampled := 'validation']
-    }
+#       growth_dt[
+#         is.na(sampled),
+#         sampled := ifelse(tree_id %in% unique(selected_trees), 'validation', NA)
+#       ]
+#     }else{
+#       growth_dt[is.na(sampled), sampled := 'validation']
+#     }
 
-    growth_dt <- growth_dt[!is.na(sampled)]
+#     growth_dt <- growth_dt[!is.na(sampled)]
 
-  }
+#   }
 
-##
-
-
-
-## compute de deltaTime between measures of dbh
-growth_dt[,
-  deltaTime := year_measured - lag(year_measured, 1),
-  by = tree_id
-]
-
-## define previous measure
-growth_dt[,
-  dbh0 := lag(dbh, 1),
-  by = tree_id
-]
-
-## Fill the NA first measures with their non lag information
-growth_dt[is.na(deltaTime), deltaTime := 0]
-growth_dt[deltaTime == 0, dbh0 := dbh]
+# ##
 
 
 ## define plot_id in sequence to be used in stan
-plot_id_uq <- growth_dt[sampled == 'training', unique(plot_id)]
+plot_id_uq <- growth_dt[, unique(plot_id)]
 toSub <- data.table(
   plot_id = plot_id_uq,
   plot_id_seq = 1:length(plot_id_uq)
@@ -175,13 +154,13 @@ growth_dt[
   # Run
   md_out <- stanModel$sample(
       data = list(
-          N = growth_dt[sampled == 'training', .N],
-          obs_size_t1 = growth_dt[sampled == 'training', dbh],
-          time = growth_dt[sampled == 'training', deltaTime],
-          obs_size_t0 = growth_dt[sampled == 'training', dbh0],
-          Np = growth_dt[sampled == 'training', length(unique(plot_id))],
-          plot_id = growth_dt[sampled == 'training', plot_id_seq],
-          BA_comp = growth_dt[sampled == 'training', BA_comp]
+          N = growth_dt[, .N],
+          obs_size_t1 = growth_dt[, dbh1],
+          time = growth_dt[, deltaYear],
+          obs_size_t0 = growth_dt[, dbh0],
+          Np = growth_dt[, length(unique(plot_id))],
+          plot_id = growth_dt[, plot_id_seq],
+          BA_comp = growth_dt[, BA]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -267,8 +246,8 @@ growth_dt[
         log = FALSE, # relative_eff wants likelihood not log-likelihood values
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
-          sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
+          ,
+          .(dbh1, deltaYear, dbh0, plot_id_seq, BA)
         ], 
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -285,13 +264,13 @@ growth_dt[
   loo_obj <-
     loo::loo_subsample(
       llfun_bertalanffy,
-      observations = sampleSize/10, # take a subsample of size x
+      observations = nrow(growth_dt), # take a subsample of size x
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
       data = growth_dt[
-        sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp)
+        ,
+        .(dbh1, deltaYear, dbh0, plot_id_seq, BA)
       ]
   )
 
@@ -327,15 +306,6 @@ growth_dt[
     file = file.path(
       'output',
       paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
-  # save train and validate data
-  saveRDS(
-    growth_dt[, .(tree_id, plot_id_seq, year_measured, sampled)],
-      file = file.path(
-      'output',
-      paste0('trainData_', sp, '.RDS')
     )
   )
 

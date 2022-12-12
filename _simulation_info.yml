@@ -1,13 +1,13 @@
 # Species id: define spId code or NULL to run for all species
-spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
-        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
-        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
-        '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
-        '183319PINBAN']
+spIds: ['ACERUB', 'ACESAC', 'PICMAR', 'ABIBAL',
+        'BETPAP', 'POPTRE', 'ACEPEN', 'ACESPI',
+        'BETALL', 'QUERUB', 'TSUCAN', 'FAGGRA',
+        'PINSTR', 'PICRUB', 'PICGLA',
+        'PINBAN']
 # Which vital rates to run (growth, mort, fec)
 vitalRates: ["growth"]
 # Source of data (vector must much the same as `vitalRates`)
-dataSources: ["data/treeData.RDS"]
+dataSources: ["data/RESEF/growth_dt.RDS"]
 # number of iteration MCMC (inclusing warmup)
 maxIter: 4000
 # Number of cores and chains
@@ -15,19 +15,19 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st"
+simName: "bertalanffy_BA_st_resef"
 # simulations to compare with
-simCompare: [
-        "bertalanffyInt_randomPlot",
-        "bertalanffy_BA"
-]
+simCompare: []
+
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v16.0 - multilevel r parameter at the plot level with plot basal area effect
+## Growth test - v16.1 - multilevel r parameter at the plot level with plot basal area effect
 
 # Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
 
 # Instead of using start_size of tree_id to have larger deltaTimes (better fit reason), use the last measured size t against t+1. DeltaTime will me more restricted to small values. In the other hand competition covariates will be closer in a temporal scale to the event to growth. So presumably this model should work better.
+
+# This version runs the same model but for the RESEF database where individuals are measured from 1 cm dbh (instead of the 12.7 cm).
