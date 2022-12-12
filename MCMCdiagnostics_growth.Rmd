@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v16.0 - Von Bertalanffy model - r in function of BA_comp. Using previous measure as S_t instead of using the first measurement of the individual"
+ subtitle: "Test v17.0 - Von Bertalanffy model - r in function of BA_comp. Individual random effects on `r`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -46,6 +46,13 @@ posteriorrPlot_files <- grep(
 )
 names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
 
+posteriorrTree_files <- grep(
+  'posteriorrTree',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorrTree_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrTree_files))))
+
 diag_files <- grep(
   'diagnostics',
   dir(file.path('output', simName), full.names = TRUE),
@@ -72,20 +79,20 @@ treeData <- readRDS('data/treeData.RDS')
 treeData <- treeData[species_id %in% spIds]
 
 ## compute de deltaTime between measures of dbh
-growth_dt[,
+treeData[,
   deltaTime := year_measured - lag(year_measured, 1),
   by = tree_id
 ]
 
 ## define previous measure
-growth_dt[,
+treeData[,
   dbh0 := lag(dbh, 1),
   by = tree_id
 ]
 
 ## Fill the NA first measures with their non lag information
-growth_dt[is.na(deltaTime), deltaTime := 0]
-growth_dt[deltaTime == 0, dbh0 := dbh]
+treeData[is.na(deltaTime), deltaTime := 0]
+treeData[deltaTime == 0, dbh0 := dbh]
 
 
 # merge with train data
@@ -109,6 +116,26 @@ trainData[
   on = c('tree_id', 'year_measured')
 ]
 
+# summary by plot_id and tree_id
+plot_id_summary <- treeData[, 
+    .(
+      latitude = unique(latitude),
+      BA_plot = mean(BA_plot),
+      bio_01_mean = mean(bio_01_mean),
+      bio_12_mean = mean(bio_12_mean)
+    ), 
+    by = plot_id
+  ]
+
+tree_id_summary <- treeData[, 
+    .(
+      plot_id = unique(plot_id),
+      dbh = mean(dbh, na.rm = TRUE),
+      BA_comp = mean(BA_comp, na.rm = TRUE),
+      bio_01_mean = mean(bio_01_mean, na.rm = TRUE)
+    ), 
+    by = tree_id
+  ]
 ```
 
 # Rhat
@@ -203,6 +230,7 @@ for(i in 1:ncol(parComb))
 
 ```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
 plotEffect_ls <- list()
+treeEffect_ls <- list()
 for(Sp in spIds)
 {
     r_pop <- post |>
@@ -219,7 +247,11 @@ for(Sp in spIds)
             left_join(
               r_pop
             ) |>
-            mutate(r_real = exp(value + r_pop)) |>
+            mutate(
+              rPlot_log = value,
+              r_real = exp(rPlot_log + r_pop)
+            ) |>
+            select(!value) |>
             left_join(
               trainData[
                 species_id == Sp & !is.na(plot_id_seq),
@@ -228,15 +260,24 @@ for(Sp in spIds)
               ]
             ) |>
             left_join(
-              treeData[, 
-                .(
-                  latitude = unique(latitude),
-                  BA_plot = mean(BA_plot),
-                  bio_01_mean = mean(bio_01_mean),
-                  bio_12_mean = mean(bio_12_mean)
-                ), 
-                by = plot_id 
+              plot_id_summary
+            )
+    
+    dt_toTree <- readRDS(posteriorrTree_files[Sp]) |>
+            mutate(tree_id_seq = parse_number(par)) |>
+            left_join(
+              r_pop
+            ) |>
+            mutate(r_real = exp(value + r_pop)) |>
+            left_join(
+              trainData[
+                species_id == Sp & !is.na(tree_id_seq),
+                .(tree_id = unique(tree_id)),
+                by = tree_id_seq
               ]
+            ) |>
+            left_join(
+              tree_id_summary
             )
 
       # save plot effect mean to plot against other variables
@@ -253,15 +294,45 @@ for(Sp in spIds)
             plot_id, plot_id_seq, r_pop, m_rReal, latitude,
             BA_plot, bio_01_mean, bio_12_mean
           )
+
+      treeEffect_ls[[Sp]] <- dt_toTree |>
+          group_by(par) |>
+          mutate(
+            m_rReal = mean(r_real),
+            r_pop = exp(r_pop)
+          ) |>
+          ungroup() |>
+          filter(iter == 1) |>
+          select(
+            tree_id, tree_id_seq, r_pop, m_rReal, dbh, BA_comp, bio_01_mean
+          )
+
+      # filter tree_ids within plots with higher number of individuals
+      plots_toKeep <- dt_toTree |>
+          filter(iter == 1) |>
+          group_by(plot_id) |>
+          summarise(nInd = n()) |>
+          arrange(desc(nInd)) |>
+          mutate(cumInd = cumsum(nInd)) |>
+          filter(cumInd < 500) |>
+          pull(plot_id)
       
-      # filter to remove some plots so figure is liseable
-      dt_toPlot <- dt_toPlot |>
-          filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
-          mutate(plot_id = fct_reorder(plot_id, latitude))
-  
+      dt_toTree <- dt_toTree |>
+          filter(plot_id %in% plots_toKeep) |>
+          left_join(
+            dt_toPlot |>
+              select(plot_id, iter, plot_id_seq, rPlot_log)
+          ) |>
+          arrange(plot_id_seq) |>
+          mutate(
+            r_realPlotTree = exp(value + r_pop + rPlot_log)
+          )
+
     print(
       ggarrange(
           dt_toPlot |>
+              filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
+              mutate(plot_id = fct_reorder(plot_id, latitude)) |>
               ggplot(aes(y = plot_id, x = r_real, color = bio_01_mean)) +
                 stat_pointinterval(alpha = .7, size = .1) +
                 geom_vline(
@@ -273,15 +344,15 @@ for(Sp in spIds)
                   axis.text.y = element_blank()
                 ) +
                 labs(subtitle = Sp),
-          dt_toPlot |>
-              ggplot(aes(y = plot_id, x = r_real, color = BA_plot)) +
+          dt_toTree |>
+              ggplot(aes(y = tree_id, x = r_realPlotTree, color = plot_id)) +
                 stat_pointinterval(alpha = .7, size = .1) +
                 geom_vline(
                   xintercept = r_mean, color = 'red', alpha = .8
                 ) +
-                xlab('r') + ylab('') +
+                xlab('r') + ylab('tree_id (color grouped by plot_id)') +
                 theme(
-                  legend.position = 'top',
+                  legend.position = 'none',
                   axis.text.y = element_blank()
                 ) +
                 labs(subtitle = ''),
@@ -346,6 +417,58 @@ plotEffect |>
         'meanPlotEffect_rReal.RDS'
     )
   )
+
+
+treeEffect <- treeEffect_ls |>
+  bind_rows(.id = 'species_id')
+
+r_pop <- treeEffect |>
+  group_by(species_id) |>
+  summarise(r = unique(r_pop))
+
+print(
+  treeEffect |>
+    ggplot(aes(x = dbh, m_rReal, color = BA_comp)) +
+        geom_point(size = 0.6) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
+        xlab('dbh (mm)') +
+        ylab('Individual random effect') +
+        theme_minimal()
+)
+
+print(
+  treeEffect |>
+    ggplot(aes(x = BA_comp, m_rReal, color = dbh)) +
+        geom_point(size = 0.6) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
+        xlab('Plot BA of larger individuals') +
+        ylab('Individual random effect') +
+        theme_minimal()
+)
+
+print(
+  treeEffect |>
+    ggplot(aes(x = bio_01_mean, m_rReal, color = dbh)) +
+        geom_point(size = 0.6) +
+        facet_wrap(~species_id, scales = 'free') +
+        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
+        xlab('Annual mean temperature') +
+        ylab('Individual random effect') +
+        theme_minimal()
+)
+
+# save plot effect ot be used against future models
+treeEffect |>
+  select(species_id, tree_id, m_rReal) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanTreeEffect_rReal.RDS'
+    )
+  )
 ```
 
 
@@ -354,7 +477,7 @@ plotEffect |>
 Compare plot random effect with last model to check how variance is changing. 
 
 ```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
-sim_to_compare <- simInfo$simCompare[3:4]
+sim_to_compare <- simInfo$simCompare
 
 for(Sim in sim_to_compare)
 {
@@ -388,10 +511,10 @@ for(Sim in sim_to_compare)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
 
-treeData[, .(species_id, dbh, time, sampled2)] |>
+treeData[, .(species_id, dbh, deltaTime, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
-    cols = c(dbh, time),
+    cols = c(dbh, deltaTime),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
@@ -399,6 +522,8 @@ treeData[, .(species_id, dbh, time, sampled2)] |>
     facet_wrap(~var, scales = 'free_x') +
     xlab('') +
     theme_minimal()
+
+rm(treeData)
 ```
 
 
@@ -509,20 +634,34 @@ for(sp_seq in seq(1, 17, 2))
       r_plot := i.m_rReal,
       on = 'plot_id'
     ]
+    train_sp[
+      treeEffect |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        setDT(),
+      `:=`(
+        r_tree = i.m_rReal,
+        r_pop = i.r_pop
+      ),
+      on = 'tree_id'
+    ]
 
     # compute BA effect on r
-    train_sp[, r_plotBA := exp(log(r_plot) + BA_comp * beta)]
+    train_sp[, r_plotTreeBA := exp((log(r_plot) + log(r_tree) - log(r_pop)) + BA_comp * beta)]
     
     # predict size
     train_sp[,
       pred_size := dbh0 *
-                  exp(-r_plotBA * deltaTime) +
-                  Lmax * (1 -exp(-r_plotBA * time))
+                  exp(-r_plotTreeBA * deltaTime) +
+                  Lmax * (1 -exp(-r_plotTreeBA * deltaTime))
     ]
 
     # compute growth from predicted size
     train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
+    # define ylim to remove outliers
+    yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
+    
     plot_ls[[i+1]] <- train_sp |>
         filter(!is.na(pred_growth)) |>
         mutate(obs_growth = growth) |>
@@ -537,7 +676,8 @@ for(sp_seq in seq(1, 17, 2))
           xlab('Basal area competition') +
           ylab(ifelse(i == 0, 'Growth', '')) +
           labs(subtitle = Sp) +
-          theme_minimal() 
+          theme_minimal() +
+          ylim(yLim)
   }
   print(
     ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
@@ -579,6 +719,7 @@ for(Sp in spIds)
     `:=`(
       r = i.r,
       sigma_plot = i.sigma_plot,
+      sigma_tree = i.sigma_tree,
       sigma_obs = i.sigma_obs,
       Lmax = i.Lmax,
       beta = i.beta
@@ -606,13 +747,19 @@ for(Sp in spIds)
     rPlot_log := rnorm(.N, 0, sigma_plot)
   ]
 
+  # as validation and training were selected at the level of tree_id
+  # there is no same individual shared between training and validation
+  val_sp[,
+    rTree_log := rnorm(.N, 0, sigma_tree)
+  ]
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
 
   # compute r plot specific parameter
   val_sp[,
-    r_plot := exp(r + rPlot_log + BA_comp * beta)
+    r_plot := exp(r + rPlot_log + rTree_log + BA_comp * beta)
   ]
 
   # predict size
@@ -626,12 +773,6 @@ for(Sp in spIds)
   val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
 
   # calculate observed and predicted growth 
-  val_sp[, time0 := shift(time, type = 'lag'), by = .(iter2, tree_id)]
-  val_sp[, obs_size0 := shift(dbh, type = 'lag'), by = .(iter2, tree_id)]
-
-  val_sp[, pred_size0 := shift(pred_size, type = 'lag'), by = .(iter2, tree_id)]
-  val_sp[, pred_size_random0 := shift(pred_size_random, type = 'lag'), by = .(iter2, tree_id)]
-
   val_sp[, obs_growth := (dbh - dbh0)/deltaTime]
   val_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
   val_sp[, pred_growth_random := (pred_size_random - dbh0)/deltaTime]
@@ -683,8 +824,12 @@ for(Sp in spIds)
     by = 'iter2'
   )
 
-  # plot
-  p1 <- val_sp[time > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
+  ## plot
+
+  # define species specific axis limits for growth
+  yLim <- val_sp[, quantile(obs_growth, probs = c(0.005, .995), na.rm = T)]
+  
+  p1 <- val_sp[deltaTime > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) + 
@@ -697,11 +842,11 @@ for(Sp in spIds)
           xlab('Observerd size') +
           ylab('Predicted size')
 
-  p2 <- val_sp[time > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
+  p2 <- val_sp[deltaTime > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
-          xlim(-4, 20) + ylim(-4, 20) +
+          xlim(yLim) + ylim(yLim) +
           theme_minimal() +
           theme(
                 legend.position="none",
@@ -710,28 +855,28 @@ for(Sp in spIds)
           xlab('Observerd growth') +
           ylab('Predicted growth')
 
-  pred_size_matrix <- val_sp[time > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
+  pred_size_matrix <- val_sp[deltaTime > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_size_random) |>
       select(-iter2) |>
       as.matrix()
 
   p3 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & time > 0, dbh],
+      val_sp[iter2 == 1 & deltaTime > 0, dbh],
       pred_size_matrix
   ) +
   xlab('Obs vs predicted size') + ylab('')
 
-  pred_growth_matrix <- val_sp[time > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
+  pred_growth_matrix <- val_sp[deltaTime > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
       select(-iter2) |>
       as.matrix()
 
   p4 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & time > 0 & !is.na(obs_growth), obs_growth],
+      val_sp[iter2 == 1 & deltaTime > 0 & !is.na(obs_growth), obs_growth],
       pred_growth_matrix
   ) +
   xlab('Obs vs predicted growth') +
-  xlim(-15, 20)
+  xlim(yLim)
 
   print(
     ggpubr::ggarrange(
@@ -836,6 +981,8 @@ map_dfr(
 
 # Intraclass Correlation Coefficient (ICC)
 
+*I should not be using this for my kind of model but I will let it here anyway...*
+
 ```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
 post |>
   filter(grepl('sigma', par)) |>
@@ -854,7 +1001,7 @@ post |>
 
 # compare between all simulations with random effects
 map_dfr(
-    sim_toLoad[c(3, 4)],
+    sim_toLoad,
     ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
       bind_cols(sim = .x)
   ) |>
