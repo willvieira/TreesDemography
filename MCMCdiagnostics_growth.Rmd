@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v16.0 - Von Bertalanffy model - r in function of BA_comp. Using previous measure as S_t instead of using the first measurement of the individual"
+ subtitle: "Test v18.0 - Von Bertalanffy model - r in function of `BA_comp` and `bio_01_mean`. Using previous measure as S_t instead of using the first measurement of the individual."
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -104,11 +104,11 @@ trainData[
     'dbh' = i.dbh,
     'deltaTime' = i.deltaTime,
     'dbh0' = i.dbh0,
-    'BA_comp' = i.BA_comp
+    'BA_comp' = i.BA_comp,
+    'bio_01_mean' = i.bio_01_mean
   ),
   on = c('tree_id', 'year_measured')
 ]
-
 ```
 
 # Rhat
@@ -426,9 +426,9 @@ post |>
 
 ## Basal area effect
 
-```{r sizePred2,echo=FALSE,fig.height = 8, fig.width = 10}
+```{r size_BA_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('r', 'beta')) |>
+  filter(par %in% c('r', 'Beta')) |>
   pivot_wider(
     names_from = par,
     values_from = value
@@ -436,7 +436,7 @@ post |>
   group_by(species_id) |>
   expand_grid(BA_comp = seq(0, 120, 5)) |>
   mutate(
-    BAeffect = BA_comp * beta,
+    BAeffect = BA_comp * Beta,
     r_BA = exp(r + BAeffect)
   ) |>
   select(iter, species_id, BA_comp, BAeffect, r_BA) |>
@@ -458,8 +458,40 @@ post |>
 
 ```
 
+```{r size_temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('r', 'optimal_temp', 'sigma_temp')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
+  mutate(
+    tempEffect = (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2,
+    r_T = exp(r + tempEffect)
+  ) |>
+  select(iter, species_id, bio_01_mean, tempEffect, r_T) |>
+  pivot_longer(
+    cols = c('tempEffect', 'r_T'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('tempEffect', 'r_T'), labels = c('MAT effect on r parameter', 'r parameter'))
+  ) |>
+  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Mean annual temperature (MAT)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
 
-## Growth in function of Basal area competition
+```
+
+
+## Growth in function of Basal area and mean annual temperature
 
 ```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
 # get only training data
@@ -473,7 +505,7 @@ train <- train[deltaTime > 0]
 
 # prepare parameters
 post_mean <- post |>
-  filter(par %in% c('Lmax', 'beta')) |>
+  filter(par %in% c('Lmax', 'Beta', 'optimal_temp', 'sigma_temp')) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
@@ -483,68 +515,101 @@ post_mean <- post |>
   setDT()
 
 # plot per species_id
-for(sp_seq in seq(1, 17, 2)) 
+for(Sp in spIds) 
 {
-  plot_ls <- list()
-  for(i in 0:1)
-  {
-    if(sp_seq == 17 & i == 1)
-      next
 
-    Sp <- spIds[sp_seq + i]
+  train_sp <- train[species_id == Sp]
 
-    train_sp <- train[species_id == Sp]
+  # sample few tree_ids that have at least 2 measures
+  tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
+  train_sp <- train_sp[tree_id %in% tree_ids]
 
-    # sample few tree_ids that have at least 2 measures
-    tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
-    train_sp <- train_sp[tree_id %in% tree_ids]
+  # add parameters
+  train_sp[, c('Beta', 'Lmax', 'optimal_temp', 'sigma_temp') :=
+    post_mean[species_id == Sp, .(Beta, Lmax, optimal_temp, sigma_temp)]]
+  train_sp[
+    plotEffect |>
+      filter(species_id == Sp) |>
+      select(-species_id) |>
+      setDT(),
+    r_plot := i.m_rReal,
+    on = 'plot_id'
+  ]
 
-    # add parameters
-    train_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
-    train_sp[
-      plotEffect |>
-        filter(species_id == Sp) |>
-        select(-species_id) |>
-        setDT(),
-      r_plot := i.m_rReal,
-      on = 'plot_id'
-    ]
+  # compute BA and temp effect on r
+  train_sp[,
+    r_plotBaTemp := exp(
+      log(r_plot) +
+      BA_comp * Beta +
+      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2
+    )
+  ]
+  
+  # predict size
+  train_sp[,
+    pred_size := dbh0 *
+                exp(-r_plotBaTemp * deltaTime) +
+                Lmax * (1 -exp(-r_plotBaTemp * deltaTime))
+  ]
 
-    # compute BA effect on r
-    train_sp[, r_plotBA := exp(log(r_plot) + BA_comp * beta)]
-    
-    # predict size
-    train_sp[,
-      pred_size := dbh0 *
-                  exp(-r_plotBA * deltaTime) +
-                  Lmax * (1 -exp(-r_plotBA * deltaTime))
-    ]
+  # compute growth from predicted size
+  train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
-    # compute growth from predicted size
-    train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
+  # define ylim to remove outliers
+  yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
+  
+  p1 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(BA_comp, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = BA_comp, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'lm') +
+        xlab('Basal area competition') +
+        ylab(ifelse(i == 0, 'Growth', '')) +
+        labs(subtitle = Sp) +
+        theme_minimal() +
+        ylim(yLim) + 
+        geom_function(
+          fun = function(x)
+            yLim[2] * exp(x * post_mean |> filter(species_id == Sp) |> pull(Beta)),
+          color = 1,
+          linetype = 'dashed'
+        )
 
-    # define ylim to remove outliers
-    yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
-    
-    plot_ls[[i+1]] <- train_sp |>
-        filter(!is.na(pred_growth)) |>
-        mutate(obs_growth = growth) |>
-        select(BA_comp, obs_growth, pred_growth) |>
-        pivot_longer(
-          cols = contains('growth'),
-          names_to = 'sim'
-        ) |>
-        ggplot(aes(x = BA_comp, y = value, color = sim)) +
-          geom_point(alpha = .5, size = .5) +
-          geom_smooth(method = 'lm') +
-          xlab('Basal area competition') +
-          ylab(ifelse(i == 0, 'Growth', '')) +
-          labs(subtitle = Sp) +
-          theme_minimal() +
-          ylim(yLim)
-  }
+  p2 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(bio_01_mean, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = bio_01_mean, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Mean annual temperature') +
+        ylab(ifelse(i == 0, 'Growth', '')) +
+        labs(subtitle = '') +
+        theme_minimal() +
+        ylim(yLim) +
+        geom_function(
+          fun = function(x) yLim[2] * exp(
+            (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_temp))^2) *
+            (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
+          ),
+          col = 1,
+          linetype = 'dashed'
+        )
+
   print(
-    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
+    ggpubr::ggarrange(
+      p1, p2,
+      ncol = 2, legend = 'right', common.legend = TRUE)
   )
 }
 ```
@@ -585,7 +650,9 @@ for(Sp in spIds)
       sigma_plot = i.sigma_plot,
       sigma_obs = i.sigma_obs,
       Lmax = i.Lmax,
-      beta = i.beta
+      Beta = i.Beta,
+      optimal_temp = i.optimal_temp,
+      sigma_temp = i.sigma_temp
     ),
     on = 'iter'
   ]
@@ -616,7 +683,12 @@ for(Sp in spIds)
 
   # compute r plot specific parameter
   val_sp[,
-    r_plot := exp(r + rPlot_log + BA_comp * beta)
+    r_plot := exp(
+      r +
+      rPlot_log +
+      BA_comp * Beta +
+      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2
+    )
   ]
 
   # predict size
