@@ -17,7 +17,7 @@ sampleSize: 20000
 # The simulation and folder name
 simName: "bertalanffy_BA_st_resef"
 # simulations to compare with
-simCompare: []
+simCompare: NULL
 
 
 ##################################
