@@ -199,11 +199,7 @@ for(Sp in spIds)
               treeData[ 
                 spCode == Sp, 
                 .( 
-                    latitude = unique(latitude), 
-                  latitude = unique(latitude),
-                    latitude = unique(latitude), 
-                  latitude = unique(latitude),
-                    latitude = unique(latitude), 
+                    latitude = unique(latitude),
                     ecoregion = unique(ecoregion), 
                     slope = unique(slope), 
                     drai = unique(drai), 
@@ -223,7 +219,7 @@ for(Sp in spIds)
 
       # filter to remove some plots so figure is liseable
       dt_toPlot <- dt_toPlot |>
-          mutate(plot_id_seq = fct_reorder(plot_id_seq, latitude))
+          mutate(plot_id_seq = fct_reorder(as.factor(plot_id_seq), latitude))
   
     print(
       ggarrange(
@@ -337,7 +333,7 @@ print(
 
 # save plot effect ot be used against future models
 plotEffect |>
-  select(spCode, plot_id, m_rReal) |>
+  select(spCode, plot_id_seq, r_real) |>
   saveRDS(
     file.path(
         'output', 
