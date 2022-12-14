@@ -182,7 +182,9 @@ growth_dt[
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           BA_comp = growth_dt[sampled == 'training', BA_comp],
-          bio_01_mean = growth_dt[sampled == 'training', bio_01_mean]
+          bio_01_mean = growth_dt[sampled == 'training', bio_01_mean],
+          maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
+          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
