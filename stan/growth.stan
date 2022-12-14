@@ -4,9 +4,13 @@ data {
   vector[N] time;
   vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
-  array[N] int<lower=0> plot_id;
+  array[N] int<lower=1,upper=Np> plot_id;
   vector[N] BA_comp;
   vector[N] bio_01_mean;
+  // range limit to optimal_temp parameter is species specific
+  // And must be within the observed distribution of the species
+  real maxTemp;
+  real minTemp;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -19,8 +23,8 @@ parameters {
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
   real Beta;
-  real optimal_temp;
-  real<lower=0,upper=250> sigma_temp;
+  real<lower=minTemp,upper=maxTemp> optimal_temp;
+  real<lower=1,upper=100> sigma_temp;
 }
 model {
   // priors
@@ -29,12 +33,12 @@ model {
   sigma_plot ~ exponential(3);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
-  Beta ~ normal(0, 1);
-  optimal_temp ~ normal(10, 10);
-  sigma_temp ~ normal(10, 10);
+  Beta ~ normal(-1, 1);
+  optimal_temp ~ normal(5, 10);
+  sigma_temp ~ normal(8, 8);
 
   // What matters here:
-  vector[N] rPlot = exp( // growth paramter
+  vector[N] rPlot = exp( // growth parameter
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
     BA_comp * Beta + // BA of larger individuals effect
