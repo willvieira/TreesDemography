@@ -183,8 +183,11 @@ growth_dt[
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           BA_comp = growth_dt[sampled == 'training', BA_comp],
           bio_01_mean = growth_dt[sampled == 'training', bio_01_mean],
+          bio_12_mean = growth_dt[sampled == 'training', bio_12_mean],
           maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
-          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)]
+          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)],
+          maxPrec = dataSource[species_id == sp, max(bio_12_mean, na.rm = T)],
+          minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -218,7 +221,7 @@ growth_dt[
   growth_bertalanffy <- function(dt, post, log)
   {
     # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq,
-    # [5] BA_comp, and [6] bio_01_mean
+    # [5] BA_comp, [6] bio_01_mean, and [7] bio_12_mean
 
     # Add plot_id random effect 
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
@@ -226,7 +229,8 @@ growth_dt[
       post[, 'r'] + 
       rPlot_log +
       dt[5] * post[, 'Beta'] +
-      (-1/post[, 'sigma_temp']^2) * (dt[6] - post[, 'optimal_temp'])^2
+      (-1/post[, 'sigma_temp']^2) * (dt[6] - post[, 'optimal_temp'])^2 +
+      (-1/post[, 'sigma_prec']^2) * (dt[7] - post[, 'optimal_prec'])^2
     )
     
     # time component of the model
@@ -277,7 +281,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, bio_01_mean)
+          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, bio_01_mean, bio_12_mean)
         ], 
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -300,7 +304,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, bio_01_mean)
+        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, bio_01_mean, bio_12_mean)
       ]
   )
 

@@ -15,12 +15,13 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st_clim"
+simName: "bertalanffy_BA_st_tempPrec"
 # simulations to compare with
 simCompare: [
         "bertalanffyInt_randomPlot",
         "bertalanffy_BA",
-        "bertalanffy_BA_st"
+        "bertalanffy_BA_st",
+        "bertalanffy_BA_st_temp"
 ]
 
 ##################################
@@ -34,3 +35,5 @@ simCompare: [
 # Instead of using start_size of tree_id to have larger deltaTimes (better fit reason), use the last measured size t against t+1. DeltaTime will me more restricted to small values. In the other hand competition covariates will be closer in a temporal scale to the event to growth. So presumably this model should work better.
 
 # version 18.0 makes r vary in function of annual mean temperature (bio_01_mean). The climate effect will follow a bell-shape function with an optimal climate and deviation parameters.
+
+# version 19.0 adds the effect of total annual precipitation using the same function as used for mean annual temperature.

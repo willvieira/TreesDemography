@@ -7,10 +7,13 @@ data {
   array[N] int<lower=1,upper=Np> plot_id;
   vector[N] BA_comp;
   vector[N] bio_01_mean;
+  vector[N] bio_12_mean;
   // range limit to optimal_temp parameter is species specific
   // And must be within the observed distribution of the species
   real maxTemp;
   real minTemp;
+  real maxPrec;
+  real minPrec;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -25,6 +28,8 @@ parameters {
   real Beta;
   real<lower=minTemp,upper=maxTemp> optimal_temp;
   real<lower=1,upper=100> sigma_temp;
+  real<lower=minPrec,upper=maxPrec> optimal_prec;
+  real<lower=200,upper=30000> sigma_prec;
 }
 model {
   // priors
@@ -36,13 +41,16 @@ model {
   Beta ~ normal(-1, 1);
   optimal_temp ~ normal(5, 10);
   sigma_temp ~ normal(8, 8);
+  optimal_prec ~ normal(1700, 800);
+  sigma_prec ~ normal(15000, 5000);
 
   // What matters here:
   vector[N] rPlot = exp( // growth parameter
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
     BA_comp * Beta + // BA of larger individuals effect
-    (-1/pow(sigma_temp, 2)) .* pow(bio_01_mean - optimal_temp, 2) //temp effect
+    (-1/pow(sigma_temp, 2)) .* pow(bio_01_mean - optimal_temp, 2) +//temp effect
+    (-1/pow(sigma_prec, 2)) .* pow(bio_12_mean - optimal_prec, 2) //prec effect
   );
 
   // pre calculate component of the model mean
