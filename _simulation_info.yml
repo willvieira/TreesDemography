@@ -15,7 +15,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st_clim"
+simName: "bertalanffy_BA_st_temp"
 # simulations to compare with
 simCompare: [
         "bertalanffyInt_randomPlot",
