@@ -15,25 +15,17 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st_tempPrec"
+simName: "Vanderwel_BA_tempPrec"
 # simulations to compare with
 simCompare: [
-        "bertalanffyInt_randomPlot",
-        "bertalanffy_BA",
         "bertalanffy_BA_st",
-        "bertalanffy_BA_st_temp"
+        "bertalanffy_BA_st_temp",
+        "bertalanffy_BA_st_tempPrec"
 ]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v18.0 - multilevel r parameter at the plot level with plot basal area effect
-
-# Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
-
-# Instead of using start_size of tree_id to have larger deltaTimes (better fit reason), use the last measured size t against t+1. DeltaTime will me more restricted to small values. In the other hand competition covariates will be closer in a temporal scale to the event to growth. So presumably this model should work better.
-
-# version 18.0 makes r vary in function of annual mean temperature (bio_01_mean). The climate effect will follow a bell-shape function with an optimal climate and deviation parameters.
-
-# version 19.0 adds the effect of total annual precipitation using the same function as used for mean annual temperature.
+## This version is actually the previous v9.0 (adapted from Vanderwel 2014) using BA as the competitive variable.
+# This run is an updated version of the same model using the new dataset, and cmdstan instead of rstan.

@@ -1,6 +1,6 @@
 data {
   int<lower=0> N;
-  vector[N] obs_size_t1;
+  vector[N] obs_growth;
   vector[N] time;
   vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
@@ -15,52 +15,64 @@ data {
   real maxPrec;
   real minPrec;
 }
-transformed data {
-  // to add minimum range to Lmax parameter
-  real<lower=0> maxSize = max(obs_size_t1) * 1.2;
-}
 parameters {
-  real r;
-  vector[Np] rPlot_log;
-  real<lower=0> sigma_plot;
-  real<lower=0> sigma_obs;
-  real<lower=maxSize> Lmax;
-  real Beta;
-  real<lower=minTemp,upper=maxTemp> optimal_temp;
-  real<lower=1,upper=100> sigma_temp;
-  real<lower=minPrec,upper=maxPrec> optimal_prec;
-  real<lower=200,upper=30000> sigma_prec;
+  real<lower = 2, upper = 100> pdg; // Population potential Diameter Growth
+	vector<lower = -2, upper = 10>[Np] pdg_pmean; // mean of random effect from plot_id
+	real<lower = 0, upper = 10> pdg_psd; // sd of random effect from plot_id
+
+	real<lower = -8, upper = 25> T_opt; // Optimum temperature of each species
+	real<lower = 0.2, upper = 20> sigmaT_opt; // Variance among individuals of optimal T within a species
+
+	real<lower = 500, upper = 1700 > P_opt; // Optimum precipitation of each species
+	real<lower = 80, upper = 2000> sigmaP_opt; // Variance among individuals of optimal P within a species
+
+	real<lower = 0, upper = 1> sigma_C; // competition effect: Mid of Generalised logistic function
+
+	real<lower = 0, upper = 850> Phi_opt;
+	real<lower = 0, upper = 15> sigmaPhi_opt;
+
+	// real<lower = 0> sigma; // Variance of individuals around there species specific mean
+	real<lower = 0, upper = 15> sigma_base;
 }
 model {
-  // priors
-  r ~ normal(-3.5, 1);
-  rPlot_log ~ normal(0, sigma_plot);
-  sigma_plot ~ exponential(3);
-  sigma_obs ~ normal(0, 1.5);
-  Lmax ~ normal(1000, 80);
-  Beta ~ normal(-1, 1);
-  optimal_temp ~ normal(5, 10);
-  sigma_temp ~ normal(8, 8);
-  optimal_prec ~ normal(1700, 800);
-  sigma_prec ~ normal(15000, 5000);
+	vector[Np] pdg_plot;
+  vector[N] mu_d;
 
-  // What matters here:
-  vector[N] rPlot = exp( // growth parameter
-    r + // intercept
-    rPlot_log[plot_id] + // plot random effect
-    BA_comp * Beta + // BA of larger individuals effect
-    (-1/pow(sigma_temp, 2)) .* pow(bio_01_mean - optimal_temp, 2) +//temp effect
-    (-1/pow(sigma_prec, 2)) .* pow(bio_12_mean - optimal_prec, 2) //prec effect
-  );
+	// prios
+	pdg ~ gamma(15^2/100.0, 15/100.0);
+	pdg_pmean ~ normal(0, pdg_psd);
+	pdg_psd ~ cauchy(0, 2);
 
-  // pre calculate component of the model mean
-  vector[N] rPlotTime = exp(-rPlot .* time);
+	T_opt ~ normal(6, 8);
+	sigmaT_opt ~ pareto_type_2(0.001, 10.0, 3.0);
+	P_opt ~ normal(1000, 350);
+	sigmaP_opt ~ normal(500, 300);
 
-  // mean
-  vector[N] mu_obs = obs_size_t0 .*
-    rPlotTime +
-    Lmax * (1 - rPlotTime);
+	sigma_C ~ uniform(0, 1);
 
-  // likelihood
-  obs_size_t1 ~ normal(mu_obs, sigma_obs);
+	Phi_opt ~ gamma(200^2/10000.0, 200/10000.0);
+	sigmaPhi_opt ~ gamma(4^2/15.0, 4/15.0);
+
+	sigma_base ~ gamma(5^2/20.0, 5/20.0);
+
+	// Likelihood
+    for(j in 1:Np) {
+        pdg_plot[j] = pdg + pdg_pmean[j];
+    }
+
+	for(i in 1:N) {
+		mu_d[i] =
+			pdg_plot[plot_id[i]]
+			*
+			(exp(-(C_data[i] .* C_data[i])/2 * (sigma_C * sigma_C)))
+			.*
+			(0.0001 + exp(-0.5 * (T_data[i] - T_opt) .* (T_data[i] - T_opt)/sigmaT_opt^2)
+			.*
+			exp(-0.5 * (P_data[i] - P_opt) .* (P_data[i] - P_opt)/sigmaP_opt^2))
+			.*
+			exp(-log(D_data[i]/Phi_opt) .* log(D_data[i]/Phi_opt)/sigmaPhi_opt^2);
+	}
+
+	// Growth model
+	Y ~ gamma(mu_d .* mu_d ./ sigma_base, mu_d ./ sigma_base);
 }

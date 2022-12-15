@@ -149,9 +149,10 @@ growth_dt[,
   by = tree_id
 ]
 
-## Fill the NA first measures with their non lag information
-growth_dt[is.na(deltaTime), deltaTime := 0]
-growth_dt[deltaTime == 0, dbh0 := dbh]
+## compute growth
+growth_dt[,
+  growth := (dbh - dbh0)/deltaTime
+]
 
 
 ## define plot_id in sequence to be used in stan
