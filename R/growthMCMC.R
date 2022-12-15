@@ -30,7 +30,7 @@ set.seed(0.0)
   sp <- sim_info$spIds[array_id]
   
   # sample size
-  sampleSize <- sim_info$sampleSize
+  sampleSize <- sim_info$sampleSize # Because I'm removing NAs in growth
 
   # load database
   dataSource <- readRDS(
@@ -154,6 +154,9 @@ growth_dt[,
   growth := (dbh - dbh0)/deltaTime
 ]
 
+# remove NAs growth (the why I can't compare with loo)
+growth_dt <- growth_dt[!is.na(growth)]
+
 
 ## define plot_id in sequence to be used in stan
 plot_id_uq <- growth_dt[sampled == 'training', unique(plot_id)]
@@ -177,7 +180,7 @@ growth_dt[
   md_out <- stanModel$sample(
       data = list(
           N = growth_dt[sampled == 'training', .N],
-          obs_size_t1 = growth_dt[sampled == 'training', dbh],
+          obs_growth = growth_dt[sampled == 'training', growth],
           time = growth_dt[sampled == 'training', deltaTime],
           obs_size_t0 = growth_dt[sampled == 'training', dbh0],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
