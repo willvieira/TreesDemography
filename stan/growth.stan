@@ -17,8 +17,8 @@ data {
 }
 parameters {
   	real<lower = -10, upper = 10> pdg; // Population potential Diameter Growth
-	vector[Np] pdg_pmean; // mean of random effect from plot_id
-	real<lower = 0, upper = 30> pdg_psd; // sd of random effect from plot_id
+	vector<lower = -2, upper = 10>[Np] pdg_pmean; // mean of random effect from plot_id
+	real<lower = 0, upper = 40> pdg_psd; // sd of random effect from plot_id
 
 	real<lower = minTemp, upper = maxTemp> T_opt; // Optimum temperature of each species
 	real<lower = 0.5, upper = 100> sigmaT_opt; // Variance among individuals of optimal T within a species
@@ -35,7 +35,7 @@ parameters {
 }
 model {
 	// prios
-	pdg ~ normal(2, .8);
+	pdg ~ normal(1, .8);
 	pdg_pmean ~ normal(0, pdg_psd);
 	pdg_psd ~ exponential(3);
 
@@ -53,16 +53,16 @@ model {
 
 	// Likelihood
 	vector[N] mu_d =
-		(pdg + pdg_pmean[plot_id])
-		+
-		-pow(BA_comp, 2)/2 * pow(sigma_C, 2)
-		+
-		(-1/sigmaT_opt^2) * pow(bio_01_mean - T_opt, 2)
-		+
-		(-1/sigmaP_opt^2) * pow(bio_12_mean - P_opt, 2)
-		+
-		-sigmaPhi_opt^2 * pow(log(obs_size_t0 - Phi_opt), 2);
+		exp(pdg + pdg_pmean[plot_id])
+		.*
+		(exp(-pow(BA_comp, 2)/2 * pow(sigma_C, 2)))
+		.*
+		(0.0001 + exp(-0.5 * pow(bio_01_mean - T_opt, 2)/sigmaT_opt^2)
+		.*
+		exp(-0.5 * pow(bio_12_mean - P_opt, 2)/sigmaP_opt^2))
+		.*
+		exp(-pow(log(obs_size_t0/Phi_opt), 2)/sigmaPhi_opt^2);
 
 	// Growth model
-	obs_growth ~ gamma(pow(exp(mu_d), 2)./ sigma_base, mu_d ./ sigma_base);
+	obs_growth ~ normal(mu_d, sigma_base);
 }
