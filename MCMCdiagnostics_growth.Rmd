@@ -530,7 +530,7 @@ post |>
 
 ## Growth in function of Basal area and climate variables
 
-```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 10}
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 10, fig.width = 10}
 # get only training data
 train <- trainData[sampled == 'training']
 
@@ -543,7 +543,7 @@ train <- train[deltaTime > 0]
 # prepare parameters
 post_mean <- post |>
   filter(
-    par %in% c('Lmax', 'Beta', 'optimal_temp', 'sigma_temp', 'optimal_prec', 'sigma_prec')
+    par %in% c('r', 'Lmax', 'Beta', 'optimal_temp', 'sigma_temp', 'optimal_prec', 'sigma_prec')
   ) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
@@ -601,8 +601,42 @@ for(Sp in spIds)
 
   # define ylim to remove outliers
   yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
-  
+
+  # species parameters
+  post_sp <- post_mean |> 
+        filter(species_id == Sp)
+
+  # define intercept of effect functions
+  # Formula: Lmax  * (1 - r)
+  Int <- post_sp$Lmax * (1 - exp(-exp(post_sp$r)))
+
+  # update ylim if Intercept if larger than max limit
+  yLim[2] = max(c(Int, yLim[2]))
+
   p1 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(dbh0, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = dbh0, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Size (t0)') +
+        ylab('Growth') +
+        labs(subtitle = Sp) +
+        theme_minimal() +
+        ylim(yLim) + 
+        geom_function(
+          fun = function(x)
+            (Int + exp(-exp(post_sp$r)) * x) - x,
+          color = 1,
+          linetype = 'dashed'
+        )
+
+  p2 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
       select(BA_comp, obs_growth, pred_growth) |>
@@ -612,20 +646,20 @@ for(Sp in spIds)
       ) |>
       ggplot(aes(x = BA_comp, y = value, color = sim)) +
         geom_point(alpha = .5, size = .5) +
-        geom_smooth(method = 'lm') +
+        geom_smooth(method = 'gam') +
         xlab('Basal area competition') +
         ylab('Growth') +
-        labs(subtitle = Sp) +
+        labs(subtitle = '') +
         theme_minimal() +
         ylim(yLim) + 
         geom_function(
           fun = function(x)
-            yLim[2] * exp(x * post_mean |> filter(species_id == Sp) |> pull(Beta)),
+            Int * exp(x * post_mean |> filter(species_id == Sp) |> pull(Beta)),
           color = 1,
           linetype = 'dashed'
         )
 
-  p2 <- train_sp |>
+  p3 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
       select(bio_01_mean, obs_growth, pred_growth) |>
@@ -642,7 +676,7 @@ for(Sp in spIds)
         theme_minimal() +
         ylim(yLim) +
         geom_function(
-          fun = function(x) yLim[2] * exp(
+          fun = function(x) Int * exp(
             (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_temp))^2) *
             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
           ),
@@ -650,7 +684,7 @@ for(Sp in spIds)
           linetype = 'dashed'
         )
 
-  p3 <- train_sp |>
+  p4 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
       select(bio_12_mean, obs_growth, pred_growth) |>
@@ -667,7 +701,7 @@ for(Sp in spIds)
         theme_minimal() +
         ylim(yLim) +
         geom_function(
-          fun = function(x) yLim[2] * exp(
+          fun = function(x) Int * exp(
             (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_prec))^2) *
             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_prec))^2
           ),
@@ -677,8 +711,8 @@ for(Sp in spIds)
 
   print(
     ggpubr::ggarrange(
-      p1, p2, p3,
-      ncol = 3, legend = 'top', common.legend = TRUE)
+      p1, p2, p3, p4,
+      ncol = 2, nrow = 2, legend = 'top', common.legend = TRUE)
   )
 }
 ```
