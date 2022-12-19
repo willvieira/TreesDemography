@@ -49,8 +49,8 @@ model {
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
     BA_comp * Beta + // BA of larger individuals effect
-    (-1/pow(sigma_temp, 2)) .* pow(bio_01_mean - optimal_temp, 2) +//temp effect
-    (-1/pow(sigma_prec, 2)) .* pow(bio_12_mean - optimal_prec, 2) //prec effect
+    (-1/square(sigma_temp)) .* square(bio_01_mean - optimal_temp) +//temp effect
+    (-1/square(sigma_prec)) .* square(bio_12_mean - optimal_prec) //prec effect
   );
 
   // pre calculate component of the model mean
