@@ -233,7 +233,7 @@ growth_dt[
   # posterior of plot_id parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'rPlot_log', par)),
+      filter(grepl(pattern = 'pdg_pmean', par)),
     file = file.path(
       'output',
       paste0('posteriorrPlot_', sp, '.RDS')
