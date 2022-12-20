@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v18.0 - Von Bertalanffy model - r in function of `BA_comp` and `bio_01_mean`. Using previous measure as S_t instead of using the first measurement of the individual."
+ subtitle: "Test v20.0 - Vanderwel with basal area, temperature, and precipitation effects"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -105,7 +105,8 @@ trainData[
     'deltaTime' = i.deltaTime,
     'dbh0' = i.dbh0,
     'BA_comp' = i.BA_comp,
-    'bio_01_mean' = i.bio_01_mean
+    'bio_01_mean' = i.bio_01_mean,
+    'bio_12_mean' = i.bio_12_mean
   ),
   on = c('tree_id', 'year_measured')
 ]
@@ -206,7 +207,7 @@ plotEffect_ls <- list()
 for(Sp in spIds)
 {
     r_pop <- post |>
-        filter(species_id == Sp & par == 'r') |>
+        filter(species_id == Sp & par == 'pdg') |>
         mutate(r_pop = value) |>
         select(r_pop, iter)
 
@@ -267,7 +268,7 @@ for(Sp in spIds)
                 geom_vline(
                   xintercept = r_mean, color = 'red', alpha = .8
                 ) +
-                xlab('r') + ylab('plot_id (ordered by latitude)') +
+                xlab('pdg') + ylab('plot_id (ordered by latitude)') +
                 theme(
                   legend.position = 'top',
                   axis.text.y = element_blank()
@@ -279,7 +280,7 @@ for(Sp in spIds)
                 geom_vline(
                   xintercept = r_mean, color = 'red', alpha = .8
                 ) +
-                xlab('r') + ylab('') +
+                xlab('pdg') + ylab('') +
                 theme(
                   legend.position = 'top',
                   axis.text.y = element_blank()
@@ -353,7 +354,7 @@ plotEffect |>
 
 Compare plot random effect with last model to check how variance is changing. 
 
-```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
+```{r compare_rReal, eval=FALSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
 sim_to_compare <- simInfo$simCompare
 
 for(Sim in sim_to_compare)
@@ -383,15 +384,15 @@ for(Sim in sim_to_compare)
 
 # Data distribution
 
-```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 10, fig.width = 12}
 # split between train and everything else (merge validate with rest of data)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
 
-treeData[, .(species_id, dbh, deltaTime, sampled2)] |>
+treeData[, .(species_id, dbh, BA_comp, bio_01_mean, bio_12_mean, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
-    cols = c(dbh, deltaTime),
+    cols = c(dbh, BA_comp, bio_01_mean, bio_12_mean),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
@@ -405,30 +406,32 @@ treeData[, .(species_id, dbh, deltaTime, sampled2)] |>
 
 # Predictions
 
-## Size in function of time
+## Size effect
 
 ```{r sizePred,echo=FALSE,fig.height = 6.5, fig.width = 8}
 post |>
-  filter(par %in% c('r', 'Lmax')) |>
+  filter(par %in% c('Phi_opt', 'sigmaPhi_opt')) |>
   pivot_wider(
     names_from = par,
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(time = seq(0, 2000, 100)) |>
-  mutate(Lt = Lmax * (1 - exp(-exp(r) * time))) |>
-  ggplot(aes(x = time, y = Lt, color = species_id)) +
+  expand_grid(dbh = seq(100, 1000, 20)) |>
+  mutate(
+    size_effect = exp(-log(dbh/Phi_opt)^2/sigmaPhi_opt^2)
+  ) |>
+  ggplot(aes(x = dbh, y = size_effect, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
         scale_fill_brewer() +
-        ylab('DBH size (mmm)') + xlab('Time (years)') +
+        xlab('DBH size (mmm)') + ylab('Size effect') +
         theme_minimal()
 ```
 
 ## Basal area effect
 
-```{r size_BA_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+```{r size_BA_pred,echo=FALSE,fig.height = 6.5, fig.width = 8}
 post |>
-  filter(par %in% c('r', 'Beta')) |>
+  filter(par %in% 'sigma_C') |>
   pivot_wider(
     names_from = par,
     values_from = value
@@ -436,31 +439,21 @@ post |>
   group_by(species_id) |>
   expand_grid(BA_comp = seq(0, 120, 5)) |>
   mutate(
-    BAeffect = BA_comp * Beta,
-    r_BA = exp(r + BAeffect)
+    BAeffect = exp(-BA_comp^2/2 * sigma_C^2)
   ) |>
-  select(iter, species_id, BA_comp, BAeffect, r_BA) |>
-  pivot_longer(
-    cols = c('BAeffect', 'r_BA'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('BAeffect', 'r_BA'), labels = c('BA_comp effect on r parameter', 'r parameter'))
-  ) |>
-  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
+  ggplot(aes(x = BA_comp, y = BAeffect, color = species_id)) +
     stat_lineribbon(.width = 0.95, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
     xlab('Basal area competition') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
-
+    ylab('BA effect') +
+    theme_minimal()
 ```
+
+## Mean annual temperature effect
 
 ```{r size_temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('r', 'optimal_temp', 'sigma_temp')) |>
+  filter(par %in% c('T_opt', 'sigmaT_opt')) |>
   pivot_wider(
     names_from = par,
     values_from = value
@@ -468,26 +461,36 @@ post |>
   group_by(species_id) |>
   expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
   mutate(
-    tempEffect = (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2,
-    r_T = exp(r + tempEffect)
+    tempEffect = exp(-0.5 * (bio_01_mean - T_opt)^2/sigmaT_opt^2)
   ) |>
-  select(iter, species_id, bio_01_mean, tempEffect, r_T) |>
-  pivot_longer(
-    cols = c('tempEffect', 'r_T'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('tempEffect', 'r_T'), labels = c('MAT effect on r parameter', 'r parameter'))
-  ) |>
-  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
+  ggplot(aes(x = bio_01_mean, y = tempEffect, color = species_id)) +
     stat_lineribbon(.width = 0.9, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
     xlab('Mean annual temperature (MAT)') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
+    ylab('MAT effect') +
+    theme_minimal()
+```
 
+## Mean annual precipitation effect
+
+```{r size_prec_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('P_opt', 'sigmaP_opt')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(bio_12_mean = seq(400, 2700, 50)) |>
+  mutate(
+    precEffect = exp(-0.5 * (bio_12_mean - P_opt)^2/sigmaP_opt^2)
+  ) |>
+  ggplot(aes(x = bio_12_mean, y = precEffect, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    scale_fill_brewer() +
+    xlab('Mean annual temperature (MAT)') +
+    ylab('MAT effect') +
+    theme_minimal()
 ```
 
 
@@ -505,7 +508,7 @@ train <- train[deltaTime > 0]
 
 # prepare parameters
 post_mean <- post |>
-  filter(par %in% c('Lmax', 'Beta', 'optimal_temp', 'sigma_temp')) |>
+  filter(par %in% c('pdg', 'T_opt', 'sigmaT_opt', 'P_opt', 'sigmaP_opt', 'sigma_C', 'Phi_opt', 'sigmaPhi_opt')) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
@@ -517,7 +520,6 @@ post_mean <- post |>
 # plot per species_id
 for(Sp in spIds) 
 {
-
   train_sp <- train[species_id == Sp]
 
   # sample few tree_ids that have at least 2 measures
@@ -525,40 +527,68 @@ for(Sp in spIds)
   train_sp <- train_sp[tree_id %in% tree_ids]
 
   # add parameters
-  train_sp[, c('Beta', 'Lmax', 'optimal_temp', 'sigma_temp') :=
-    post_mean[species_id == Sp, .(Beta, Lmax, optimal_temp, sigma_temp)]]
+  train_sp[, c('pdg', 'T_opt', 'sigmaT_opt', 'P_opt', 'sigmaP_opt', 'sigma_C', 'Phi_opt', 'sigmaPhi_opt') :=
+    post_mean[species_id == Sp, .(pdg, T_opt, sigmaT_opt, P_opt, sigmaP_opt, sigma_C, Phi_opt, sigmaPhi_opt)]]
   train_sp[
     plotEffect |>
       filter(species_id == Sp) |>
       select(-species_id) |>
       setDT(),
-    r_plot := i.m_rReal,
+    pdg_plot := i.m_rReal,
     on = 'plot_id'
   ]
 
-  # compute BA and temp effect on r
+  # compute growth
   train_sp[,
-    r_plotBaTemp := exp(
-      log(r_plot) +
-      BA_comp * Beta +
-      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2
-    )
+    pred_growth :=
+		  pdg_plot
+		  *
+		  exp(-BA_comp^2/2 * sigma_C^2)
+		  *
+		  (0.0001 + exp(-0.5 * (bio_01_mean - T_opt)^2/sigmaT_opt^2)
+		  *
+		  exp(-0.5 * (bio_12_mean - P_opt)^2/sigmaP_opt^2))
+		  *
+		  exp(-log(dbh/Phi_opt)^2/sigmaPhi_opt^2)
   ]
-  
-  # predict size
-  train_sp[,
-    pred_size := dbh0 *
-                exp(-r_plotBaTemp * deltaTime) +
-                Lmax * (1 -exp(-r_plotBaTemp * deltaTime))
-  ]
-
-  # compute growth from predicted size
-  train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
   # define ylim to remove outliers
   yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
   
+  post_sp <- post_mean |>
+    filter(species_id == Sp)
+  
+  # intercept
+  Int <- post_sp |>
+    mutate(
+      pdg_real = exp(pdg)
+    ) |>
+    pull(pdg_real)
+
   p1 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(dbh, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = dbh, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('DBH Size') +
+        ylab('Growth') +
+        labs(subtitle = Sp) +
+        theme_minimal() +
+        ylim(yLim) + 
+        geom_function(
+          fun = function(x)
+            Int * exp(-log(x/post_sp$Phi_opt)^2/post_sp$sigmaP_opt^2),
+          color = 1,
+          linetype = 'dashed'
+        )
+
+  p2 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
       select(BA_comp, obs_growth, pred_growth) |>
@@ -568,20 +598,20 @@ for(Sp in spIds)
       ) |>
       ggplot(aes(x = BA_comp, y = value, color = sim)) +
         geom_point(alpha = .5, size = .5) +
-        geom_smooth(method = 'lm') +
+        geom_smooth(method = 'gam') +
         xlab('Basal area competition') +
-        ylab(ifelse(i == 0, 'Growth', '')) +
+        xlab('Growth') +
         labs(subtitle = Sp) +
         theme_minimal() +
-        ylim(yLim) + 
+        ylim(yLim) +
         geom_function(
           fun = function(x)
-            yLim[2] * exp(x * post_mean |> filter(species_id == Sp) |> pull(Beta)),
+            Int * exp(-x^2/2 * post_sp$sigma_C^2),
           color = 1,
           linetype = 'dashed'
         )
 
-  p2 <- train_sp |>
+  p3 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
       select(bio_01_mean, obs_growth, pred_growth) |>
@@ -593,23 +623,44 @@ for(Sp in spIds)
         geom_point(alpha = .5, size = .5) +
         geom_smooth(method = 'gam') +
         xlab('Mean annual temperature') +
-        ylab(ifelse(i == 0, 'Growth', '')) +
+        ylab('Growth') +
         labs(subtitle = '') +
         theme_minimal() +
         ylim(yLim) +
         geom_function(
-          fun = function(x) yLim[2] * exp(
-            (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_temp))^2) *
-            (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
-          ),
+          fun = function(x)
+            Int * exp(-0.5 * (x - post_sp$T_opt)^2/post_sp$sigmaT_opt^2),
+          col = 1,
+          linetype = 'dashed'
+        )
+
+  p4 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(bio_12_mean, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = bio_12_mean, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Mean annual precipitation') +
+        ylab('Growth') +
+        labs(subtitle = '') +
+        theme_minimal() +
+        ylim(yLim) +
+        geom_function(
+          fun = function(x)
+            Int * exp(-0.5 * (x - post_sp$P_opt)^2/post_sp$sigmaP_opt^2),
           col = 1,
           linetype = 'dashed'
         )
 
   print(
     ggpubr::ggarrange(
-      p1, p2,
-      ncol = 2, legend = 'right', common.legend = TRUE)
+      p1, p2, p3, p4,
+      ncol = 2, nrow = 2, legend = 'top', common.legend = TRUE)
   )
 }
 ```
@@ -646,13 +697,16 @@ for(Sp in spIds)
         pivot_wider(names_from = par, values_from = value) |>
         as.data.table(),
     `:=`(
-      r = i.r,
-      sigma_plot = i.sigma_plot,
-      sigma_obs = i.sigma_obs,
-      Lmax = i.Lmax,
-      Beta = i.Beta,
-      optimal_temp = i.optimal_temp,
-      sigma_temp = i.sigma_temp
+      pdg = i.pdg,
+      pdg_psd = i.pdg_psd,
+      sigma_base = i.sigma_base,
+      T_opt = i.T_opt,
+      sigmaT_opt = i.sigmaT_opt,
+      P_opt = i.P_opt,
+      sigmaP_opt = i.sigmaP_opt,
+      sigma_C = i.sigma_C,
+      Phi_opt = i.Phi_opt,
+      sigmaPhi_opt = i.sigmaPhi_opt
     ),
     on = 'iter'
   ]
@@ -666,7 +720,7 @@ for(Sp in spIds)
       ) |>
       select(iter, plot_id_seq, rPlot_log) |>
       setDT(),
-    rPlot_log := i.rPlot_log,
+    pdgPlot_log := i.rPlot_log,
     on = c('iter', 'plot_id_seq')
   ]
 
@@ -674,37 +728,37 @@ for(Sp in spIds)
   # value from the population distribution
   val_sp[
     is.na(plot_id_seq),
-    rPlot_log := rnorm(.N, 0, sigma_plot)
+    pdgPlot_log := rnorm(.N, 0, pdg_psd)
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
 
-  # compute r plot specific parameter
+  # compute pdg plot specific parameter
   val_sp[,
-    r_plot := exp(
-      r +
-      rPlot_log +
-      BA_comp * Beta +
-      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2
-    )
+    pdg_plot := exp(pdg + pdgPlot_log)
   ]
 
-  # predict size
+  # predict growth
   val_sp[,
-    pred_size := dbh0 *
-                  exp(-r_plot * deltaTime) +
-                  Lmax * (1 -exp(-r_plot * deltaTime))
+    pred_growth := 
+        pdg_plot *
+        exp(-BA_comp^2/2 * sigma_C^2) *
+        (0.0001 + exp(-0.5 * (bio_01_mean - T_opt)^2/sigmaT_opt^2) *
+        exp(-0.5 * (bio_12_mean - P_opt)^2/sigmaP_opt^2)) *
+        exp(-log(dbh/Phi_opt)^2/sigmaPhi_opt^2)
   ]
 
-  # simulate size from model distribution (normal dist)
-  val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
-
-  # calculate observed and predicted growth 
+  # compute observed growth
   val_sp[, obs_growth := (dbh - dbh0)/deltaTime]
-  val_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
-  val_sp[, pred_growth_random := (pred_size_random - dbh0)/deltaTime]
+
+  # simulate growth from model distribution (normal dist)
+  val_sp[, pred_growth_random := rnorm(.N, pred_growth, sigma_base)]
+
+  # calculate predicted future size
+  val_sp[, pred_size := dbh0 + pred_growth * deltaTime]
+  val_sp[, pred_size_random := dbh0 + pred_growth_random * deltaTime]
 
   # calculate MSE
   val_sp[, SE_size := (dbh - pred_size_random)^2]
@@ -723,16 +777,16 @@ for(Sp in spIds)
   # Calculate R2 (Gelman et al 2018)
   R2gel <- val_sp |>
     group_by(iter2) |>
-    summarise(var_size = var(pred_size, na.rm = TRUE)) |>
+    summarise(var_growth = var(pred_growth, na.rm = TRUE)) |>
     bind_cols(iter = sampledIter) |>
     left_join(
       post |>
-        filter(species_id == Sp & par == 'sigma_obs') |>
-        mutate(sigma_obs = value) |>
-        select(iter, sigma_obs, species_id)
+        filter(species_id == Sp & par == 'sigma_base') |>
+        mutate(sigma_base = value) |>
+        select(iter, sigma_base, species_id)
     ) |>
-    mutate(R2gelman_size = var_size/(var_size + sigma_obs^2)) |>
-    select(iter, iter2, species_id, R2gelman_size) |>
+    mutate(R2gelman_growth = var_growth/(var_growth + sigma_base)) |>
+    select(iter, iter2, species_id, R2gelman_growth) |>
     setDT()
 
   # calculate R2 from regression linear model using the 1:1 obs vs pred
@@ -758,7 +812,7 @@ for(Sp in spIds)
   # define species specific axis limits for growth
   yLim <- val_sp[, quantile(obs_growth, probs = c(0.005, .995), na.rm = T)]
   
-  p1 <- val_sp[deltaTime > 0, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
+  p1 <- val_sp[, .(m_obs = mean(dbh), m_pred = mean(pred_size)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) + 
@@ -771,7 +825,7 @@ for(Sp in spIds)
           xlab('Observerd size') +
           ylab('Predicted size')
 
-  p2 <- val_sp[deltaTime > 0, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
+  p2 <- val_sp[, .(m_obs = mean(obs_growth), m_pred = mean(pred_growth)), by = obsID] |>
       ggplot(aes(m_obs, m_pred)) +
           geom_hex(bins = 100) +
           geom_abline(slope = 1, intercept = 0) +
@@ -784,24 +838,24 @@ for(Sp in spIds)
           xlab('Observerd growth') +
           ylab('Predicted growth')
 
-  pred_size_matrix <- val_sp[deltaTime > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
+  pred_size_matrix <- val_sp[!is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_size_random) |>
       select(-iter2) |>
       as.matrix()
 
   p3 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & deltaTime > 0, dbh],
+      val_sp[iter2 == 1, dbh],
       pred_size_matrix
   ) +
   xlab('Obs vs predicted size') + ylab('')
 
-  pred_growth_matrix <- val_sp[deltaTime > 0 & !is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
+  pred_growth_matrix <- val_sp[!is.na(obs_growth) & !is.na(pred_growth), .(pred_growth_random, iter2, obsID)] |>
       pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
       select(-iter2) |>
       as.matrix()
 
   p4 <- ppc_dens_overlay(
-      val_sp[iter2 == 1 & deltaTime > 0 & !is.na(obs_growth), obs_growth],
+      val_sp[iter2 == 1 & !is.na(obs_growth), obs_growth],
       pred_growth_matrix
   ) +
   xlab('Obs vs predicted growth') +
@@ -868,11 +922,11 @@ The distribution of R squared values is calculated using the Gelman et al. [2018
 
 ```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
-    sim_toLoad,
+    simName,
     ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
-  ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
+  ggplot(aes(x = R2gelman_growth, y = species_id, fill = sim)) +
       geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
       xlab('Rsquared (Gelman 2018)') +
       theme_minimal()
@@ -903,94 +957,6 @@ map_dfr(
     geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
     facet_wrap(~par2, scales = 'free_x') +
     xlab('Rsquared (linear regression)') +
-    theme_bw() +
-    theme(legend.position = 'bottom')
-```
-
-
-# Intraclass Correlation Coefficient (ICC)
-
-*I should not be using this for my kind of model but I will let it here anyway...*
-
-```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
-post |>
-  filter(grepl('sigma', par)) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id, iter) |>
-  summarise(
-    icc = sigma_plot/(sigma_plot + sigma_obs)
-  ) |>
-  saveRDS(
-    file = paste0('output/', simName, '/ICC.RDS')
-  )
-
-
-# compare between all simulations with random effects
-map_dfr(
-    sim_toLoad,
-    ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
-      bind_cols(sim = .x)
-  ) |>
-  ggplot(aes(x = icc, y = species_id, fill = sim)) +
-      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-      xlab('ICC') +
-      theme_minimal()
-
-# ICC vs R2
-map_dfr( 
-    simName, 
-    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
-      left_join(
-        readRDS(file.path('output', .x, 'ICC.RDS')),
-        by = c('iter', 'species_id')
-      )
-  ) |>
-  select(iter2, species_id, icc, R2reg_growth_mean) |>
-  group_by(species_id) |>
-  summarise(
-    icc_mean = mean(icc),
-    icc_min = quantile(icc, probs = .05),
-    icc_max = quantile(icc, probs = .95),
-    r2_mean = mean(R2reg_growth_mean),
-    r2_min = quantile(R2reg_growth_mean, probs = .05),
-    r2_max = quantile(R2reg_growth_mean, probs = .95)
-  ) |>
-  ggplot(aes(icc_mean, r2_mean, color = species_id)) +
-    geom_point() +
-    geom_errorbar(aes(ymin = r2_min, ymax = r2_max), alpha = .5) + 
-    geom_errorbarh(aes(xmin = icc_min,xmax = icc_max), alpha = .5) +
-    theme_minimal() +
-    xlab('ICC') + ylab('Rsquared (linear regression)')
-```
-
-# Leave-one-out cross-validation to compare models
-
-```{r loo, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
-map_dfr(
-    spIds,
-    ~ map2(
-        setNames(sim_toLoad, sim_toLoad),
-        .x,
-        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
-      ) |>
-      loo::loo_compare() |>
-      as.data.frame() |>
-      bind_cols(species_id = .x) |>
-      rownames_to_column(var = 'sim')
-  ) |>
-  select(species_id, sim, elpd_diff, se_diff) |>
-  pivot_longer(
-    cols = c(elpd_diff, se_diff),
-    names_to = 'variable',
-    values_to = 'value'
-  ) |>
-  ggplot(aes(x = value, y = species_id, color = sim)) +
-    geom_point() +
-    facet_wrap(~ variable, scales = 'free_x') +
-    xlab('') + ylab('') +
     theme_bw() +
     theme(legend.position = 'bottom')
 ```

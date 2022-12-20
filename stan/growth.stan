@@ -1,7 +1,6 @@
 data {
   int<lower=0> N;
   vector[N] obs_growth;
-  vector[N] time;
   vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=1,upper=Np> plot_id;
@@ -16,7 +15,7 @@ data {
   real minPrec;
 }
 parameters {
-  	real<lower = -10, upper = 10> pdg; // Population potential Diameter Growth
+  	real<lower = -10, upper = 4> pdg; // Population potential Diameter Growth
 	vector<lower = -2, upper = 10>[Np] pdg_pmean; // mean of random effect from plot_id
 	real<lower = 0, upper = 40> pdg_psd; // sd of random effect from plot_id
 
@@ -55,13 +54,13 @@ model {
 	vector[N] mu_d =
 		exp(pdg + pdg_pmean[plot_id])
 		.*
-		(exp(-pow(BA_comp, 2)/2 * pow(sigma_C, 2)))
+		(exp(-square(BA_comp)/2 * square(sigma_C)))
 		.*
-		(0.0001 + exp(-0.5 * pow(bio_01_mean - T_opt, 2)/sigmaT_opt^2)
+		(0.0001 + exp(-0.5 * square(bio_01_mean - T_opt)/square(sigmaT_opt))
 		.*
-		exp(-0.5 * pow(bio_12_mean - P_opt, 2)/sigmaP_opt^2))
+		exp(-0.5 * square(bio_12_mean - P_opt)/square(sigmaP_opt)))
 		.*
-		exp(-pow(log(obs_size_t0/Phi_opt), 2)/sigmaPhi_opt^2);
+		exp(-square(log(obs_size_t0/Phi_opt))/square(sigmaPhi_opt));
 
 	// Growth model
 	obs_growth ~ normal(mu_d, sigma_base);
