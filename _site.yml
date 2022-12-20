@@ -53,11 +53,47 @@ navbar:
           href: growth/BAvsCanopy.html
         - text: "Von Bertalanffy intercept"
           href: growth/bertalanffy_intercept.html
+        - text: "Von Bertalanffy int start size"
+          href: mort/bertalanffyInt_startSize.html
+        - text: "Von Bertalanffy int parametric start size"
+          href: mort/bertalanffyInt_startSize_par.html
+        - text: "Von Bertalanffy int random plot"
+          href: mort/bertalanffyInt_randomPlot.html
+        - text: "Von Bertalanffy Basal area"
+          href: mort/bertalanffy_BA.html
+        - text: "Von Bertalanffy Basal area sigmoid function"
+          href: mort/bertalanffy_BA_sigmoid.html
+        - text: "Von Bertalanffy Basal area measure t-1"
+          href: mort/bertalanffy_BA_st.html
+        - text: "Von Bertalanffy Basal area using RESEF data"
+          href: mort/bertalanffy_BA_st_resef.html
+        - text: "Von Bertalanffy Basal area individual random effect"
+          href: mort/bertalanffy_BA_st_randomInd.html
+        - text: "Von Bertalanffy Basal area + temperature"
+          href: mort/bertalanffy_BA_st_temp.html
+        - text: "Von Bertalanffy Basal area + temperature + precipitation"
+          href: mort/bertalanffy_BA_st_tempPrec.html
     - text: "Recruitment"
       icon: fa-tree
       menu:
         - text: "fastTransition"
           href: recruit/fastTransition.html
+        - text: "Ingrowth intercept"
+          href: recruit/intercept.html
+        - text: "Ingrowth plot random effect"
+          href: recruit/rec_m_randomPlot.html
+        - text: "Ingrowth with basal area effect on `m`"
+          href: recruit/rec_m_randomPlot_BA.html
+        - text: "Ingrowth with basal area RESEF data"
+          href: recruit/rec_m_randomPlot_BA_resef.html
+        - text: "Ingrowth with basal area + immigration parameter"
+          href: recruit/rec_m_BA_imm.html
+        - text: "Ingrowth with basalArea_sp + basalArea_plot"
+          href: recruit/rec_m_p_BA.html
+        - text: "Ingrowth with negative binomial likelihood"
+          href: recruit/rec_m_p_BA.html
+        - text: "Ingrowth zero inflated"
+          href: recruit/rec_m_rp_BA_zeroInflated.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography

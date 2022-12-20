@@ -51,7 +51,42 @@
 
 - Von Bertalanffy intercept model with parametric starting size ([link v10.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_intercept.html))
 
+- Von Bertalanffy intercept model with data starting size ([link v11.0](https://willvieira.github.io/TreesDemography/growth/bertalanffyInt_startSize.html))
+
+- Von Bertalanffy intercept model with measurement error in starting size ([link v12.0](https://willvieira.github.io/TreesDemography/growth/bertalanffyInt_startSize_par.html))
+
+- Von Bertalanffy intercept model with data starting size and plot random effects on `r` ([link v13.0](https://willvieira.github.io/TreesDemography/growth/bertalanffyInt_randomPlot.html))
+
+- Von Bertalanffy model with basal area fixed effect and  plot random effects on `r` ([link v14.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA.html))
+
+- Von Bertalanffy model with basal area fixed effect (sigmoid function instead of exponential) and  plot random effects on `r` ([link v15.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_sigmoid.html))
+
+- Von Bertalanffy model v14.0 but using previous measurement as starting size ([link v16.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st.html))
+
+- Von Bertalanffy model v16.0 but using the RESEF dataset ([link v16.1](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_resef.html))
+
+- Von Bertalanffy model v16.0 with plot + individual random effects ([link v17.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_randomInd.html))
+
+- Von Bertalanffy model v16.0 with `r` varying in function of basal area and mean annual temperature  ([link v18.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_temp.html))
+
+- Von Bertalanffy model v18.0 with basal area, mean annual temperature, and mean annual precipitation effect ([link v19.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_tempPrec.html))
 
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))
+
+- Ingrowth intercept - ([link v2.0](https://willvieira.github.io/TreesDemography/recruit/intercept.html))
+
+- Ingrowth intercept with plot random effects on `m` (ingrowth rate) - ([link v3.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_randomPlot.html))
+
+- Ingrowth with basal area fixed effects and plot random effects on `m` (ingrowth rate) - ([link v4.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_randomPlot_BA.html))
+
+- Ingrowth v4.0 but using the RESEF dataset - ([link v4.1](https://willvieira.github.io/TreesDemography/recruit/rec_m_randomPlot_BA_resef.html))
+
+- Version 4.0 with an additional parameter to account for immigration - ([link v5.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_BA_imm.html))
+
+- Ingrowth where ingrowth rate `m` is affected by basal are of conspecific species (seed source) and mortality rate `p` affected by the total basal area - ([link v6.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_p_BA.html))
+
+- Version 4.0 but using the negative binomial instead of the possion distribution in the likelihood - ([link v7.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_rp_BA_nbinom.html))
+
+- Version 4.0 with zero inflated theta paramter - ([link v8.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_rp_BA_zeroInflated.html))
