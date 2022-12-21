@@ -54,25 +54,27 @@ navbar:
         - text: "Von Bertalanffy intercept"
           href: growth/bertalanffy_intercept.html
         - text: "Von Bertalanffy int start size"
-          href: mort/bertalanffyInt_startSize.html
+          href: growth/bertalanffyInt_startSize.html
         - text: "Von Bertalanffy int parametric start size"
-          href: mort/bertalanffyInt_startSize_par.html
+          href: growth/bertalanffyInt_startSize_par.html
         - text: "Von Bertalanffy int random plot"
-          href: mort/bertalanffyInt_randomPlot.html
+          href: growth/bertalanffyInt_randomPlot.html
         - text: "Von Bertalanffy Basal area"
-          href: mort/bertalanffy_BA.html
+          href: growth/bertalanffy_BA.html
         - text: "Von Bertalanffy Basal area sigmoid function"
-          href: mort/bertalanffy_BA_sigmoid.html
+          href: growth/bertalanffy_BA_sigmoid.html
         - text: "Von Bertalanffy Basal area measure t-1"
-          href: mort/bertalanffy_BA_st.html
+          href: growth/bertalanffy_BA_st.html
         - text: "Von Bertalanffy Basal area using RESEF data"
-          href: mort/bertalanffy_BA_st_resef.html
+          href: growth/bertalanffy_BA_st_resef.html
         - text: "Von Bertalanffy Basal area individual random effect"
-          href: mort/bertalanffy_BA_st_randomInd.html
+          href: growth/bertalanffy_BA_st_randomInd.html
         - text: "Von Bertalanffy Basal area + temperature"
-          href: mort/bertalanffy_BA_st_temp.html
+          href: growth/bertalanffy_BA_st_temp.html
         - text: "Von Bertalanffy Basal area + temperature + precipitation"
-          href: mort/bertalanffy_BA_st_tempPrec.html
+          href: growth/bertalanffy_BA_st_tempPrec.html
+        - text: "Vanderwel (version 9.0)"
+          href: growth/Vanderwel_BA_tempPrec.html
     - text: "Recruitment"
       icon: fa-tree
       menu:

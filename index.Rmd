@@ -71,6 +71,8 @@
 
 - Von Bertalanffy model v18.0 with basal area, mean annual temperature, and mean annual precipitation effect ([link v19.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_tempPrec.html))
 
+- Vanderwel version 9.0 with new dataset ([link v20.0](https://willvieira.github.io/TreesDemography/growth/Vanderwel_BA_tempPrec.html))
+
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))
