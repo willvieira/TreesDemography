@@ -6,7 +6,7 @@
 ---
 
 
-## Diagnostics for the Von Bertalanffy model
+## Diagnostics for the model adapted from Vandewel 2014
 
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
@@ -418,7 +418,7 @@ post |>
   group_by(species_id) |>
   expand_grid(dbh = seq(100, 1000, 20)) |>
   mutate(
-    size_effect = exp(-log(dbh/Phi_opt)^2/sigmaPhi_opt^2)
+    size_effect = exp(-(log(dbh/Phi_opt)^2)/sigmaPhi_opt^2)
   ) |>
   ggplot(aes(x = dbh, y = size_effect, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
@@ -496,7 +496,7 @@ post |>
 
 ## Growth in function of Basal area and mean annual temperature
 
-```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 9, fig.width = 9}
 # get only training data
 train <- trainData[sampled == 'training']
 
@@ -583,7 +583,7 @@ for(Sp in spIds)
         ylim(yLim) + 
         geom_function(
           fun = function(x)
-            Int * exp(-log(x/post_sp$Phi_opt)^2/post_sp$sigmaP_opt^2),
+            Int * exp(-log(x/post_sp$Phi_opt)^2/post_sp$sigmaPhi_opt^2),
           color = 1,
           linetype = 'dashed'
         )
@@ -601,7 +601,7 @@ for(Sp in spIds)
         geom_smooth(method = 'gam') +
         xlab('Basal area competition') +
         xlab('Growth') +
-        labs(subtitle = Sp) +
+        labs(subtitle = '') +
         theme_minimal() +
         ylim(yLim) +
         geom_function(
@@ -785,7 +785,7 @@ for(Sp in spIds)
         mutate(sigma_base = value) |>
         select(iter, sigma_base, species_id)
     ) |>
-    mutate(R2gelman_growth = var_growth/(var_growth + sigma_base)) |>
+    mutate(R2gelman_growth = var_growth/(var_growth + sigma_base^2)) |>
     select(iter, iter2, species_id, R2gelman_growth) |>
     setDT()
 
