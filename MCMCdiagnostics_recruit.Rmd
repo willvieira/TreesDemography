@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v6.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with species basal area efffects on ingrowth rate `m`, and total basal area effects on `p`."
+ subtitle: "Test v10.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with species basal area efffects on ingrowth rate `m`, and total basal area effects on `p`."
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -362,7 +362,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(deltaYear = seq(0, 50, .5)) |>
+  expand_grid(deltaYear = seq(0, 100, 5)) |>
   mutate(
     lambda = exp(mPop_log) * 399 *
              (1 - exp(-exp(p_log))^deltaYear)/(1 - exp(-exp(p_log)))
@@ -375,20 +375,19 @@ post |>
         ylab('Number of ingrowth recruits') + xlab('Delta time (years)')
 ```
 
-## Basal area effect
+## Conspecific basal area effect on ingrowth rate `m`
 
-```{r sizePred2,echo=FALSE,fig.height = 7.5, fig.width = 10}
-# BA_adult_sp effect on `m`
+```{r sizePred_BA_sp,echo=FALSE,fig.height = 7.5, fig.width = 10}
 post |>
-  filter(par %in% c('mPop_log', 'beta_m')) |>
+  filter(par %in% c('mPop_log', 'sigma_BA', 'optimal_BA')) |>
   pivot_wider(
     names_from = par,
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(BA_adult_sp = seq(0, 100, 5)) |>
+  expand_grid(BA_adult_sp = seq(0, 60, 2.5)) |>
   mutate(
-    BAeffect = BA_adult_sp * beta_m,
+    BAeffect = (-1/sigma_BA^2) * (BA_adult_sp - optimal_BA)^2,
     m = exp(mPop_log + BAeffect)
   ) |>
   select(iter, species_id, BA_adult_sp, BAeffect, m) |>
@@ -407,7 +406,11 @@ post |>
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
+```
 
+## Plot total basal area effect on survival `p`
+
+```{r sizePred_BA,echo=FALSE,fig.height = 7.5, fig.width = 10}
 post |>
   filter(par %in% c('p_log', 'beta_p')) |>
   pivot_wider(
@@ -415,9 +418,9 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(BA_adult = seq(0, 100, 5)) |>
+  expand_grid(BA_adult = seq(0, 100, 3)) |>
   mutate(
-    BAeffect = BA_adult^2 * 1/2 * -beta_p^2,
+    BAeffect = BA_adult * -beta_p,
     p = exp(-exp(p_log) + BAeffect)
   ) |>
   select(iter, species_id, BA_adult, BAeffect, p) |>
@@ -441,10 +444,10 @@ post |>
 
 ## Ingrowth in function of Basal area of adults
 
-```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 9}
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 7, fig.width = 10}
 # prepare parameters
 post_mean <- post |>
-  filter(par %in% c('mPop_log', 'p_log', 'beta_m', 'beta_p')) |>
+  filter(par %in% c('mPop_log', 'p_log', 'optimal_BA', 'sigma_BA', 'beta_p')) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
@@ -456,14 +459,13 @@ post_mean <- post |>
 # plot per species_id
 for(Sp in spIds) 
 {
-
   fec_sp <- fec_dt[species_id == Sp]
 
   # add parameters
   fec_sp[,
-    c('mPop_log', 'p_log', 'beta_m', 'beta_p') := post_mean[
+    c('mPop_log', 'p_log', 'optimal_BA', 'sigma_BA', 'beta_p') := post_mean[
       species_id == Sp,
-      .(mPop_log, p_log, beta_m, beta_p)
+      .(mPop_log, p_log, optimal_BA, sigma_BA, beta_p)
     ]
   ]
 
@@ -477,10 +479,10 @@ for(Sp in spIds)
   ]
 
   # compute BA_adult_sp effect on m
-  fec_sp[, m_plotBA := exp(log(m_mean) + BA_adult_sp * beta_m)]
+  fec_sp[, m_plotBA := exp(log(m_mean) + (-1/sigma_BA^2) * (BA_adult_sp - optimal_BA)^2)]
 
   # compute BA_adult effect on p
-  fec_sp[, p := exp(-exp(p_log)) + BA_adult^2 * 1/2 * -beta_p^2]
+  fec_sp[, p := exp(-exp(p_log)) + BA_adult * -beta_p]
   
   # predict recruit
   fec_sp[,
@@ -493,34 +495,83 @@ for(Sp in spIds)
     pred_nbRecruit_random := rpois(.N, pred_nbRecruit)
   ]
 
+  # define ylim to remove outliers
+  yMax <- fec_sp[, quantile(nbRecruit, probs = .99)]
+  
+  # species parameters
+  post_sp <- post_mean |> 
+        filter(species_id == Sp)
+
   # plot
-  print(
-    fec_sp |>
+  p1 <- fec_sp |>
       filter(!is.na(pred_nbRecruit)) |>
       mutate(
         obs_nbRecruit = nbRecruit + 0.08,
         pred_nbRecruit = pred_nbRecruit_random - 0.08
       ) |>
-      select(BA_adult, BA_adult_sp, obs_nbRecruit, pred_nbRecruit) |>
+      select(BA_adult_sp, obs_nbRecruit, pred_nbRecruit) |>
       pivot_longer(
         cols = contains('Recruit'),
         names_to = 'sim'
       ) |>
-      pivot_longer(
-        cols = contains('BA'),
-        names_to = 'var',
-        values_to = 'BA'
-      ) |>
-      ggplot(aes(x = BA, y = value, color = sim)) +
+      ggplot(aes(x = BA_adult_sp, y = value, color = sim)) +
         geom_point(alpha = .2, size = .5) +
         geom_smooth(method = 'gam') +
-        facet_grid(~var, scales = 'free_x') +
-        xlab('Basal area') +
+        xlab('Conspecific basal area') +
         ylab('nbRecruit') +
         labs(subtitle = Sp) +
         theme_minimal() +
-        theme(legend.position = 'bottom')
+        coord_cartesian(ylim = c(0, yMax)) +
+        geom_function(
+          fun = function(x)
+            exp(
+              post_sp$mPop_log +
+              (-1/post_sp$sigma_BA^2) * (x - post_sp$optimal_BA)^2
+            ) *
+            399 *
+            (1 - exp(-exp(post_sp$p_log))^5) /
+            (1 - exp(-exp(post_sp$p_log))),
+          color = 1,
+          linetype = 'dashed'
+        )
+
+  p2 <- fec_sp |>
+      filter(!is.na(pred_nbRecruit)) |>
+      mutate(
+        obs_nbRecruit = nbRecruit + 0.08,
+        pred_nbRecruit = pred_nbRecruit_random - 0.08
+      ) |>
+      select(BA_adult, obs_nbRecruit, pred_nbRecruit) |>
+      pivot_longer(
+        cols = contains('Recruit'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = BA_adult, y = value, color = sim)) +
+        geom_point(alpha = .2, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Plot basal area') +
+        ylab('nbRecruit') +
+        labs(subtitle = '') +
+        theme_minimal() +
+        coord_cartesian(ylim = c(0, yMax)) +
+        geom_function(
+          fun = function(x)
+            exp(
+              post_sp$mPop_log
+            ) *
+            399 *
+            (1 - exp(-exp(post_sp$p_log) + x * -post_sp$beta_p)^5) /
+            (1 - exp(-exp(post_sp$p_log) + x * -post_sp$beta_p)),
+          color = 1,
+          linetype = 'dashed'
+        )
+
+  print(
+    ggpubr::ggarrange(
+      p1, p2,
+      ncol = 2, legend = 'top', common.legend = TRUE)
   )
+
 }
 ```
 
@@ -572,7 +623,8 @@ for(Sp in spIds)
       mPop_log = i.mPop_log,
       p_log = i.p_log,
       sigma_plot = i.sigma_plot,
-      beta_m = i.beta_m,
+      optimal_BA = i.optimal_BA,
+      sigma_BA = i.sigma_BA,
       beta_p = i.beta_p
     ),
     on = 'iter'
@@ -598,7 +650,7 @@ for(Sp in spIds)
   val_sp[,
     m := exp(
       mPop_log + mPlot_log +
-      BA_adult_sp * beta_m
+      (-1/sigma_BA^2) * (BA_adult_sp - optimal_BA)^2
     )
   ]
 
@@ -608,7 +660,7 @@ for(Sp in spIds)
       -exp(
         p_log
       ) +
-      BA_adult^2 * 1/2 * - beta_p^2
+      BA_adult * -beta_p
     )
   ]
 
@@ -672,6 +724,7 @@ for(Sp in spIds)
     ggplot(aes(m_obs, m_pred)) +
           geom_point(alpha = .3, size = .5) +
           geom_abline(slope = 1, intercept = 0) + 
+          geom_smooth(method = 'gam') +
           tune::coord_obs_pred() +
           theme_minimal() +
           theme(

@@ -186,7 +186,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p_log', 'sigma_plot', 'beta_m', 'beta_p')),
+      filter(par %in% c('mPop_log', 'p_log', 'sigma_plot', 'optimal_BA', 'sigma_BA', 'beta_p')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
@@ -237,14 +237,15 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     # Add plot_id random effect 
     mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
     mPlot <- exp(
-      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta_m']
+      post[, 'mPop_log'] + mPlot_log + 
+      (-1/post[, 'sigma_BA']^2) * (dt[5] - post[, 'optimal_BA'])^2
     )
     
     p <- exp(
       -exp(
         post[, 'p_log']
       ) +
-      dt[6]^2 * 1/2 * -post[, 'beta_p']^2
+      dt[6] * -post[, 'beta_p']
     )
 
     # mean
