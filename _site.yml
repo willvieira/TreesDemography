@@ -96,6 +96,8 @@ navbar:
           href: recruit/rec_m_p_BA.html
         - text: "Ingrowth zero inflated"
           href: recruit/rec_m_rp_BA_zeroInflated.html
+        - text: "Ingrowth with basalArea_sp + basalArea_plot V2"
+          href: recruit/rec_m_p_BA_v2.html
   right:
     - icon: fa-github fa-lg
       href: https://github.com/willvieira/TreesDemography

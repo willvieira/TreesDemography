@@ -92,3 +92,5 @@
 - Version 4.0 but using the negative binomial instead of the possion distribution in the likelihood - ([link v7.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_rp_BA_nbinom.html))
 
 - Version 4.0 with zero inflated theta paramter - ([link v8.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_rp_BA_zeroInflated.html))
+
+- Version 5.0 with unimodal function to model the effect of BA_sp on `m` and negative exponential function to model the effect of BA_plot on `p` ([link v10.0](https://willvieira.github.io/TreesDemography/recruit/rec_m_p_BA_v2.html))
