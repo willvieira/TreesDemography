@@ -186,7 +186,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of population level parameters
   saveRDS(
     post_dist |>
-      filter(par %in% c('mPop_log', 'p_log', 'sigma_plot', 'optimal_BA', 'sigma_BA', 'beta_p')),
+      filter(par %in% c('mPop_log', 'pPop_log', 'optimal_BA', 'sigma_BA', 'beta_p')),
     file = file.path(
       'output',
       paste0('posteriorPop_', sp, '.RDS')
@@ -196,10 +196,26 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   # posterior of plot_id parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'mPlot_log', par)),
+      filter(grepl(pattern = 'z_plot', par)),
     file = file.path(
       'output',
-      paste0('posteriormPlot_', sp, '.RDS')
+      paste0('posteriorz_plot_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'sigma_plot', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorsigma_plot_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'L_Rho_plot', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorL_Rho_plot_', sp, '.RDS')
     )
   )
 
@@ -235,7 +251,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     # post is a matrix of nrow draws and ncol paramaters
   
     # Add plot_id random effect 
-    mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
+    mPlot_log <- post[, paste0('plot_effects[1,', dt[4], ']')]
     mPlot <- exp(
       post[, 'mPop_log'] + mPlot_log + 
       (-1/post[, 'sigma_BA']^2) * (dt[5] - post[, 'optimal_BA'])^2
@@ -243,7 +259,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     
     p <- exp(
       -exp(
-        post[, 'p_log']
+        post[, 'pPop_log'] + post[, paste0('plot_effects[2,', dt[4], ']')]
       ) +
       dt[6] * -post[, 'beta_p']
     )
@@ -317,3 +333,5 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
   )
 
 ##
+
+TODO: look at all my notes this morning, 10, 12, 2, 8, 9, 4

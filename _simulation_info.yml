@@ -15,11 +15,12 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: NA
 # The simulation and folder name
-simName: "rec_m_p_BA_v2"
+simName: "rec_m_p_BA_corrPlot"
 # simulations to compare with
 simCompare: [
         "rec_m_randomPlot_BA",
-        "rec_m_p_BA"
+        "rec_m_p_BA",
+        "rec_m_p_BA_v2"
 ]
 
 
@@ -27,12 +28,11 @@ simCompare: [
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v10.0
+## Recruitmenet test - v11.0
 
 ## Instead of using the following model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
 
-## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
-
-# Version 10.0 makes m vary in function of BA of conspecific species as seed source. BA_sp affects m using a unimodal function with optimal BA_sp for the ingrowth rate. Small BA_sp slow seed source, larger BA_sp strong competitive effect. p vary as a function of total basal area to account for competition effect.
+# Version 10.0 had plot random effects only on `m`. This version will make 
+# `m` and `p` in function of plot with correlated hyperparameters
