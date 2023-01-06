@@ -334,4 +334,6 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
 
 ##
 
-TODO: look at all my notes this morning, 10, 12, 2, 8, 9, 4
+TODO: look at all my notes this morning, 
+
+10, 12, 2, 3, 6, 8, 7, 9, 16, 1, 4

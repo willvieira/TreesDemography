@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - recruitment"
- subtitle: "Test v10.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with species basal area efffects on ingrowth rate `m`, and total basal area effects on `p`."
+ subtitle: "Test v11.0 - Ingrowth model accounting for ingrowth and mortality of new individuals with species basal area efffects on ingrowth rate `m`, and total basal area effects on `p`."
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
