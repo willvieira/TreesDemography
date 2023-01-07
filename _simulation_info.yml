@@ -15,19 +15,20 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_BA_st_randomInd"
+simName: "bertalanffy_st_randomInd"
 # simulations to compare with
 simCompare: [
         "bertalanffyInt_randomPlot",
         "bertalanffy_BA",
-        "bertalanffy_BA_st"
+        "bertalanffy_BA_st",
+        "bertalanffy_BA_st_randomInd"
 ]
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v17.0 - multilevel r parameter at the plot level with plot basal area effect
+## Growth test - v17.1 - multilevel r parameter at the plot level with plot basal area effect
 
 # Using previous measurement as S_t from V16.0 and plot random effect on the r parameter, r also vary as a function of plot basal area
 

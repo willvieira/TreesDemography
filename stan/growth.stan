@@ -3,7 +3,6 @@ data {
   vector[N] obs_size_t1;
   vector[N] time;
   vector[N] obs_size_t0;
-  vector[N] BA_comp;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=1,upper=Np> plot_id;
   int<lower=1> Nt; // number of unique plot_id
@@ -21,7 +20,6 @@ parameters {
   real<lower=0> sigma_tree;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
-  real beta;
 }
 model {
   // priors
@@ -32,11 +30,10 @@ model {
   sigma_tree ~ exponential(3);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
-  beta ~ normal(0, 1);
 
   // add plot random effect and BA effect
   vector[N] rPlot = exp(
-    r + rPlot_log[plot_id] + rTree_log[tree_id] + BA_comp * beta
+    r + rPlot_log[plot_id] + rTree_log[tree_id]
   );
 
   // pre calculate component of the model mean

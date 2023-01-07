@@ -194,7 +194,6 @@ growth_dt[
           obs_size_t1 = growth_dt[sampled == 'training', dbh],
           time = growth_dt[sampled == 'training', deltaTime],
           obs_size_t0 = growth_dt[sampled == 'training', dbh0],
-          BA_comp = growth_dt[sampled == 'training', BA_comp],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
@@ -231,12 +230,12 @@ growth_dt[
   # Function to compute log-likelihood
   growth_bertalanffy <- function(dt, post, log)
   {
-    # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq, [5] BA_comp, and [6] tree_id_seq
+    # dt is vector of [1] dbh, [2] time, [3] dbh0, [4] plot_id_seq, [5] BA_comp, and [5] tree_id_seq
 
     # Add plot_id random effect 
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
-    rTree_log <- post[, paste0('rTree_log[', dt[6], ']')]
-    rPlot_beta <- exp(post[, 'r'] + rPlot_log + dt[5] * post[, 'beta'])
+    rTree_log <- post[, paste0('rTree_log[', dt[5], ']')]
+    rPlot_beta <- exp(post[, 'r'] + rPlot_log + rTree_log)
     
     # time component of the model
     rPlotTime <- exp(-rPlot_beta * dt[2])
@@ -286,7 +285,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, tree_id_seq)
+          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq)
         ],
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -309,7 +308,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, BA_comp, tree_id_seq)
+        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq)
       ]
   )
 
