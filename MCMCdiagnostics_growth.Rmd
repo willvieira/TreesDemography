@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v17.0 - Von Bertalanffy model - r in function of BA_comp. Individual random effects on `r`"
+ subtitle: "Test v17.1 - Von Bertalanffy model - r with plot and individual random effects on `r`"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -111,7 +111,9 @@ trainData[
     'dbh' = i.dbh,
     'deltaTime' = i.deltaTime,
     'dbh0' = i.dbh0,
-    'BA_comp' = i.BA_comp
+    'BA_comp' = i.BA_comp,
+    'bio_01_mean' = i.bio_01_mean,
+    'bio_12_mean' = i.bio_12_mean
   ),
   on = c('tree_id', 'year_measured')
 ]
@@ -549,44 +551,9 @@ post |>
         theme_minimal()
 ```
 
-## Basal area effect
+## Growth in function of Basal area competition (But basal area is not in the model!)
 
-```{r sizePred2,echo=FALSE,fig.height = 8, fig.width = 10}
-post |>
-  filter(par %in% c('r', 'beta')) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id) |>
-  expand_grid(BA_comp = seq(0, 120, 5)) |>
-  mutate(
-    BAeffect = BA_comp * beta,
-    r_BA = exp(r + BAeffect)
-  ) |>
-  select(iter, species_id, BA_comp, BAeffect, r_BA) |>
-  pivot_longer(
-    cols = c('BAeffect', 'r_BA'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('BAeffect', 'r_BA'), labels = c('BA_comp effect on r parameter', 'r parameter'))
-  ) |>
-  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.95, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
-    scale_fill_brewer() +
-    xlab('Basal area competition') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
-
-```
-
-
-## Growth in function of Basal area competition
-
-```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 4.5, fig.width = 9}
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 9, fig.width = 9}
 # get only training data
 train <- trainData[sampled == 'training']
 
@@ -598,7 +565,7 @@ train <- train[deltaTime > 0]
 
 # prepare parameters
 post_mean <- post |>
-  filter(par %in% c('Lmax', 'beta')) |>
+  filter(par %in% c('Lmax', 'r')) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
   pivot_wider(
@@ -608,83 +575,148 @@ post_mean <- post |>
   setDT()
 
 # plot per species_id
-for(sp_seq in seq(1, 17, 2)) 
+for(Sp in spIds) 
 {
-  plot_ls <- list()
-  for(i in 0:1)
-  {
-    if(sp_seq == 17 & i == 1)
-      next
+  train_sp <- train[species_id == Sp]
 
-    Sp <- spIds[sp_seq + i]
+  # sample few tree_ids that have at least 2 measures
+  tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
+  train_sp <- train_sp[tree_id %in% tree_ids]
 
-    train_sp <- train[species_id == Sp]
+  # add parameters
+  train_sp[, c('Lmax') := post_mean[species_id == Sp, .(Lmax)]]
+  train_sp[
+    plotEffect |>
+      filter(species_id == Sp) |>
+      select(-species_id) |>
+      setDT(),
+    r_plot := i.m_rReal,
+    on = 'plot_id'
+  ]
+  train_sp[
+    treeEffect |>
+      filter(species_id == Sp) |>
+      select(-species_id) |>
+      setDT(),
+    `:=`(
+      r_tree = i.m_rReal,
+      r_pop = i.r_pop
+    ),
+    on = 'tree_id'
+  ]
 
-    # sample few tree_ids that have at least 2 measures
-    tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
-    train_sp <- train_sp[tree_id %in% tree_ids]
+  # compute random effects on r
+  train_sp[, r_plotTree := exp(log(r_plot) + log(r_tree) - log(r_pop))]
+  
+  # predict size
+  train_sp[,
+    pred_size := dbh0 *
+                exp(-r_plotTree * deltaTime) +
+                Lmax * (1 -exp(-r_plotTree * deltaTime))
+  ]
 
-    # add parameters
-    train_sp[, c('beta', 'Lmax') := post_mean[species_id == Sp, .(beta, Lmax)]]
-    train_sp[
-      plotEffect |>
-        filter(species_id == Sp) |>
-        select(-species_id) |>
-        setDT(),
-      r_plot := i.m_rReal,
-      on = 'plot_id'
-    ]
-    train_sp[
-      treeEffect |>
-        filter(species_id == Sp) |>
-        select(-species_id) |>
-        setDT(),
-      `:=`(
-        r_tree = i.m_rReal,
-        r_pop = i.r_pop
-      ),
-      on = 'tree_id'
-    ]
+  # compute growth from predicted size
+  train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
 
-    # compute BA effect on r
-    train_sp[, r_plotTreeBA := exp((log(r_plot) + log(r_tree) - log(r_pop)) + BA_comp * beta)]
-    
-    # predict size
-    train_sp[,
-      pred_size := dbh0 *
-                  exp(-r_plotTreeBA * deltaTime) +
-                  Lmax * (1 -exp(-r_plotTreeBA * deltaTime))
-    ]
+  # compute observed and predicted relative growth
+  train_sp[, obs_relativeGrowth := growth/dbh0]
+  train_sp[, pred_relativeGrowth := pred_growth/dbh0]
+  
+  # define ylim to remove outliers
+  yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
+  yLim_rel <- train_sp[, quantile(obs_relativeGrowth, probs = c(0.001, 0.999))]
+  
+  # species parameters
+  post_sp <- post_mean |> 
+        filter(species_id == Sp)
 
-    # compute growth from predicted size
-    train_sp[, pred_growth := (pred_size - dbh0)/deltaTime]
+  # define intercept of effect functions
+  # Formula: Lmax  * (1 - r)
+  Int <- post_sp$Lmax * (1 - exp(-exp(post_sp$r)))
+  
+  # update ylim if Intercept if larger than max limit
+  yLim[2] = max(c(Int, yLim[2]))
+  yLim_rel[2] = max(c(Int/train_sp[, min(dbh0, na.rm = T)], yLim_rel[2]))
+  
+  p1 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      select(dbh0, obs_relativeGrowth, pred_relativeGrowth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = dbh0, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Size (t0)') +
+        ylab('Relative growth') +
+        labs(subtitle = Sp) +
+        theme_minimal() + 
+        ylim(yLim_rel) + 
+        geom_function(
+          fun = function(x)
+            (Int + exp(-exp(post_sp$r)) * x - x)/x,
+          color = 1,
+          linetype = 'dashed'
+        )
+  p2 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(BA_comp, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = BA_comp, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Basal area competition') +
+        ylab('Growth') +
+        labs(subtitle = '') +
+        theme_minimal() +
+        ylim(yLim)
 
-    # define ylim to remove outliers
-    yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
-    
-    plot_ls[[i+1]] <- train_sp |>
-        filter(!is.na(pred_growth)) |>
-        mutate(obs_growth = growth) |>
-        select(BA_comp, obs_growth, pred_growth) |>
-        pivot_longer(
-          cols = contains('growth'),
-          names_to = 'sim'
-        ) |>
-        ggplot(aes(x = BA_comp, y = value, color = sim)) +
-          geom_point(alpha = .5, size = .5) +
-          geom_smooth(method = 'lm') +
-          xlab('Basal area competition') +
-          ylab(ifelse(i == 0, 'Growth', '')) +
-          labs(subtitle = Sp) +
-          theme_minimal() +
-          ylim(yLim)
-  }
+  p3 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(bio_01_mean, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = bio_01_mean, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Mean annual temperature') +
+        ylab('Growth') +
+        labs(subtitle = '') +
+        theme_minimal() +
+        ylim(yLim)
+
+  p4 <- train_sp |>
+      filter(!is.na(pred_growth)) |>
+      mutate(obs_growth = growth) |>
+      select(bio_12_mean, obs_growth, pred_growth) |>
+      pivot_longer(
+        cols = contains('growth'),
+        names_to = 'sim'
+      ) |>
+      ggplot(aes(x = bio_12_mean, y = value, color = sim)) +
+        geom_point(alpha = .5, size = .5) +
+        geom_smooth(method = 'gam') +
+        xlab('Mean annual precipitation') +
+        ylab('Growth') +
+        labs(subtitle = '') +
+        theme_minimal() +
+        ylim(yLim)
+  
   print(
-    ggpubr::ggarrange(plotlist = plot_ls, ncol = 2, legend = 'right', common.legend = TRUE)
+    ggpubr::ggarrange(
+      p1, p2, p3, p4,
+      ncol = 2, nrow = 2, legend = 'top', common.legend = TRUE)
   )
 }
 ```
-
 
 # Out-of-bag cross-validation
 
@@ -721,8 +753,7 @@ for(Sp in spIds)
       sigma_plot = i.sigma_plot,
       sigma_tree = i.sigma_tree,
       sigma_obs = i.sigma_obs,
-      Lmax = i.Lmax,
-      beta = i.beta
+      Lmax = i.Lmax
     ),
     on = 'iter'
   ]
@@ -759,7 +790,7 @@ for(Sp in spIds)
 
   # compute r plot specific parameter
   val_sp[,
-    r_plot := exp(r + rPlot_log + rTree_log + BA_comp * beta)
+    r_plot := exp(r + rPlot_log + rTree_log)
   ]
 
   # predict size
