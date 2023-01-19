@@ -65,7 +65,7 @@
 
 - Von Bertalanffy model v16.0 but using the RESEF dataset ([link v16.1](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_resef.html))
 
-- Von Bertalanffy model v16.0 with plot + individual random effects ([link v17.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_BA_st_randomInd.html))
+- Von Bertalanffy model v16.0 with plot + individual random effects ([link v17.0](https://willvieira.github.io/TreesDemography/growth/bertalanffy_st_randomInd.html))
 
 - Von Bertalanffy model v16.1 with plot + individual random effects and no fixed effects ([link v17.1](https://willvieira.github.io/TreesDemography_reports/growth/bertalanffy_BA_st_randomInd.html))
 
