@@ -46,6 +46,13 @@ posteriorrPlot_files <- grep(
 )
 names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
 
+posteriorrTree_files <- grep(
+  'posteriorrTree',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorrTree_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrTree_files))))
+
 diag_files <- grep(
   'diagnostics',
   dir(file.path('output', simName), full.names = TRUE),
@@ -110,6 +117,27 @@ trainData[
   ),
   on = c('tree_id', 'year_measured')
 ]
+
+# summary by plot_id and tree_id
+plot_id_summary <- treeData[, 
+    .(
+      latitude = unique(latitude),
+      BA_plot = mean(BA_plot),
+      bio_01_mean = mean(bio_01_mean),
+      bio_12_mean = mean(bio_12_mean)
+    ), 
+    by = plot_id
+  ]
+
+tree_id_summary <- treeData[, 
+    .(
+      plot_id = unique(plot_id),
+      dbh = mean(dbh, na.rm = TRUE),
+      BA_comp = mean(BA_comp, na.rm = TRUE),
+      bio_01_mean = mean(bio_01_mean, na.rm = TRUE)
+    ), 
+    by = tree_id
+  ]
 ```
 
 # Rhat
@@ -204,6 +232,7 @@ for(i in 1:ncol(parComb))
 
 ```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
 plotEffect_ls <- list()
+treeEffect_ls <- list()
 for(Sp in spIds)
 {
     r_pop <- post |>
@@ -220,7 +249,11 @@ for(Sp in spIds)
             left_join(
               r_pop
             ) |>
-            mutate(r_real = exp(value + r_pop)) |>
+            mutate(
+              rPlot_log = value,
+              r_real = exp(rPlot_log + r_pop)
+            ) |>
+            select(!value) |>
             left_join(
               trainData[
                 species_id == Sp & !is.na(plot_id_seq),
@@ -229,15 +262,24 @@ for(Sp in spIds)
               ]
             ) |>
             left_join(
-              treeData[, 
-                .(
-                  latitude = unique(latitude),
-                  BA_plot = mean(BA_plot),
-                  bio_01_mean = mean(bio_01_mean),
-                  bio_12_mean = mean(bio_12_mean)
-                ), 
-                by = plot_id 
+              plot_id_summary
+            )
+    
+    dt_toTree <- readRDS(posteriorrTree_files[Sp]) |>
+            mutate(tree_id_seq = parse_number(par)) |>
+            left_join(
+              r_pop
+            ) |>
+            mutate(r_real = exp(value + r_pop)) |>
+            left_join(
+              trainData[
+                species_id == Sp & !is.na(tree_id_seq),
+                .(tree_id = unique(tree_id)),
+                by = tree_id_seq
               ]
+            ) |>
+            left_join(
+              tree_id_summary
             )
 
       # save plot effect mean to plot against other variables
@@ -254,15 +296,45 @@ for(Sp in spIds)
             plot_id, plot_id_seq, r_pop, m_rReal, latitude,
             BA_plot, bio_01_mean, bio_12_mean
           )
+
+      treeEffect_ls[[Sp]] <- dt_toTree |>
+          group_by(par) |>
+          mutate(
+            m_rReal = mean(r_real),
+            r_pop = exp(r_pop)
+          ) |>
+          ungroup() |>
+          filter(iter == 1) |>
+          select(
+            tree_id, tree_id_seq, r_pop, m_rReal, dbh, BA_comp, bio_01_mean
+          )
+
+      # filter tree_ids within plots with higher number of individuals
+      plots_toKeep <- dt_toTree |>
+          filter(iter == 1) |>
+          group_by(plot_id) |>
+          summarise(nInd = n()) |>
+          arrange(desc(nInd)) |>
+          mutate(cumInd = cumsum(nInd)) |>
+          filter(cumInd < 500) |>
+          pull(plot_id)
       
-      # filter to remove some plots so figure is liseable
-      dt_toPlot <- dt_toPlot |>
-          filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
-          mutate(plot_id = fct_reorder(plot_id, latitude))
-  
+      dt_toTree <- dt_toTree |>
+          filter(plot_id %in% plots_toKeep) |>
+          left_join(
+            dt_toPlot |>
+              select(plot_id, iter, plot_id_seq, rPlot_log)
+          ) |>
+          arrange(plot_id_seq) |>
+          mutate(
+            r_realPlotTree = exp(value + r_pop + rPlot_log)
+          )
+
     print(
       ggarrange(
           dt_toPlot |>
+              filter(plot_id_seq %in% sample(plot_id_seq, 1000)) |>
+              mutate(plot_id = fct_reorder(plot_id, latitude)) |>
               ggplot(aes(y = plot_id, x = r_real, color = bio_01_mean)) +
                 stat_pointinterval(alpha = .7, size = .1) +
                 geom_vline(
@@ -274,15 +346,15 @@ for(Sp in spIds)
                   axis.text.y = element_blank()
                 ) +
                 labs(subtitle = Sp),
-          dt_toPlot |>
-              ggplot(aes(y = plot_id, x = r_real, color = BA_plot)) +
+          dt_toTree |>
+              ggplot(aes(y = tree_id, x = r_realPlotTree, color = plot_id)) +
                 stat_pointinterval(alpha = .7, size = .1) +
                 geom_vline(
                   xintercept = r_mean, color = 'red', alpha = .8
                 ) +
-                xlab('r') + ylab('') +
+                xlab('r') + ylab('tree_id (color grouped by plot_id)') +
                 theme(
-                  legend.position = 'top',
+                  legend.position = 'none',
                   axis.text.y = element_blank()
                 ) +
                 labs(subtitle = ''),
@@ -290,54 +362,11 @@ for(Sp in spIds)
       )
     )
 }
-```
 
-
-## Plot random effect in function of annual mean temperature and basal area
-
-```{r plot_randomEffect2, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 12}
-# merge list of sepecies
+# save plot effect ot be used against future models
 plotEffect <- plotEffect_ls |>
   bind_rows(.id = 'species_id')
 
-r_pop <- plotEffect |>
-  group_by(species_id) |>
-  summarise(r = unique(r_pop))
-
-print(
-  plotEffect |>
-    ggplot(aes(x = bio_01_mean, m_rReal, color = BA_plot)) +
-        geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
-        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
-        xlab('Annual mean temperature') +
-        ylab('Plot random effect') +
-        theme_minimal()
-)
-
-print(
-  plotEffect |>
-    ggplot(aes(x = BA_plot, m_rReal, color = bio_01_mean)) +
-        geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
-        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
-        xlab('Plot basal area') +
-        ylab('Plot random effect') +
-        theme_minimal()
-)
-
-print(
-  plotEffect |>
-    ggplot(aes(x = bio_12_mean, m_rReal, color = BA_plot)) +
-        geom_point(size = 0.6) +
-        facet_wrap(~species_id, scales = 'free') +
-        geom_hline(data = r_pop, aes(yintercept = r), color = 'red') +
-        xlab('Total annual precipitation') +
-        ylab('Plot random effect') +
-        theme_minimal()
-)
-
-# save plot effect ot be used against future models
 plotEffect |>
   select(species_id, plot_id, m_rReal) |>
   saveRDS(
@@ -345,6 +374,19 @@ plotEffect |>
         'output', 
         simName,
         'meanPlotEffect_rReal.RDS'
+    )
+  )
+
+treeEffect <- treeEffect_ls |>
+  bind_rows(.id = 'species_id')
+
+treeEffect |>
+  select(species_id, tree_id, r_pop, m_rReal) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanTreeEffect_rReal.RDS'
     )
   )
 ```
@@ -464,7 +506,7 @@ post |>
 
 ```{r size_temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('r', 'optimal_temp', 'sigma_temp')) |>
+  filter(par %in% c('r', 'optimal_temp', 'tau_temp')) |>
   pivot_wider(
     names_from = par,
     values_from = value
@@ -472,7 +514,7 @@ post |>
   group_by(species_id) |>
   expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
   mutate(
-    tempEffect = (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2,
+    tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
     r_T = exp(r + tempEffect)
   ) |>
   select(iter, species_id, bio_01_mean, tempEffect, r_T) |>
@@ -498,7 +540,7 @@ post |>
 
 ```{r size_prec_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('r', 'optimal_prec', 'sigma_prec')) |>
+  filter(par %in% c('r', 'optimal_prec', 'tau_prec')) |>
   pivot_wider(
     names_from = par,
     values_from = value
@@ -506,7 +548,7 @@ post |>
   group_by(species_id) |>
   expand_grid(bio_12_mean = seq(300, 2700, 80)) |>
   mutate(
-    precEffect = (-1/sigma_prec^2) * (bio_12_mean - optimal_prec)^2,
+    precEffect = -tau_prec * (bio_12_mean - optimal_prec)^2,
     r_P = exp(r + precEffect)
   ) |>
   select(iter, species_id, bio_12_mean, precEffect, r_P) |>
@@ -543,7 +585,7 @@ train <- train[deltaTime > 0]
 # prepare parameters
 post_mean <- post |>
   filter(
-    par %in% c('r', 'Lmax', 'Beta', 'optimal_temp', 'sigma_temp', 'optimal_prec', 'sigma_prec')
+    par %in% c('r', 'Lmax', 'Beta', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec')
   ) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
@@ -564,9 +606,9 @@ for(Sp in spIds)
 
   # add parameters
   train_sp[,
-    c('Beta', 'Lmax', 'optimal_temp', 'sigma_temp', 'optimal_prec', 'sigma_prec') := post_mean[
+    c('Beta', 'Lmax', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec') := post_mean[
                       species_id == Sp,
-                      .(Beta, Lmax, optimal_temp, sigma_temp, optimal_prec, sigma_prec)
+                      .(Beta, Lmax, optimal_temp, tau_temp, optimal_prec, tau_prec)
                     ]
   ]
   
@@ -579,13 +621,27 @@ for(Sp in spIds)
     on = 'plot_id'
   ]
 
+  train_sp[
+    treeEffect |>
+      filter(species_id == Sp) |>
+      select(-species_id) |>
+      setDT(),
+    `:=`(
+      r_tree = i.m_rReal,
+      r_pop = i.r_pop
+    ),
+    on = 'tree_id'
+  ]
+
   # compute BA and temp effect on r
   train_sp[,
     r_plotBaTemp := exp(
       log(r_plot) +
+      log(r_tree) -
+      log(r_pop) +
       BA_comp * Beta +
-      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2 +
-      (-1/sigma_prec^2) * (bio_12_mean - optimal_prec)^2
+      -tau_temp * (bio_01_mean - optimal_temp)^2 +
+      -tau_prec * (bio_12_mean - optimal_prec)^2
     )
   ]
   
@@ -682,7 +738,7 @@ for(Sp in spIds)
         ylim(yLim) +
         geom_function(
           fun = function(x) Int * exp(
-            (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_temp))^2) *
+            -(post_mean |> filter(species_id == Sp) |> pull(tau_temp)) *
             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
           ),
           col = 1,
@@ -707,7 +763,7 @@ for(Sp in spIds)
         ylim(yLim) +
         geom_function(
           fun = function(x) Int * exp(
-            (-1/(post_mean |> filter(species_id == Sp) |> pull(sigma_prec))^2) *
+            -(post_mean |> filter(species_id == Sp) |> pull(tau_prec)) *
             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_prec))^2
           ),
           col = 1,
@@ -755,14 +811,15 @@ for(Sp in spIds)
         as.data.table(),
     `:=`(
       r = i.r,
-      sigma_plot = i.sigma_plot,
+      sigma_PlotTree = i.sigma_PlotTree,
+      p_plotTree = i.p_plotTree,
       sigma_obs = i.sigma_obs,
       Lmax = i.Lmax,
       Beta = i.Beta,
       optimal_temp = i.optimal_temp,
-      sigma_temp = i.sigma_temp,
+      tau_temp = i.tau_temp,
       optimal_prec = i.optimal_prec,
-      sigma_prec = i.sigma_prec
+      tau_prec = i.tau_prec
     ),
     on = 'iter'
   ]
@@ -784,7 +841,7 @@ for(Sp in spIds)
   # value from the population distribution
   val_sp[
     is.na(plot_id_seq),
-    rPlot_log := rnorm(.N, 0, sigma_plot)
+    rPlot_log := rnorm(.N, 0, sigma_PlotTree * p_plotTree)
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
@@ -797,8 +854,8 @@ for(Sp in spIds)
       r +
       rPlot_log +
       BA_comp * Beta +
-      (-1/sigma_temp^2) * (bio_01_mean - optimal_temp)^2 +
-      (-1/sigma_prec^2) * (bio_12_mean - optimal_prec)^2
+      -tau_temp * (bio_01_mean - optimal_temp)^2 +
+      -tau_prec * (bio_12_mean - optimal_prec)^2
     )
   ]
 
@@ -1018,64 +1075,6 @@ map_dfr(
     theme(legend.position = 'bottom')
 ```
 
-
-# Intraclass Correlation Coefficient (ICC)
-
-*I should not be using this for my kind of model but I will let it here anyway...*
-
-```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
-post |>
-  filter(grepl('sigma', par)) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id, iter) |>
-  summarise(
-    icc = sigma_plot/(sigma_plot + sigma_obs)
-  ) |>
-  saveRDS(
-    file = paste0('output/', simName, '/ICC.RDS')
-  )
-
-
-# compare between all simulations with random effects
-map_dfr(
-    sim_toLoad,
-    ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
-      bind_cols(sim = .x)
-  ) |>
-  ggplot(aes(x = icc, y = species_id, fill = sim)) +
-      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-      xlab('ICC') +
-      theme_minimal()
-
-# ICC vs R2
-map_dfr( 
-    simName, 
-    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
-      left_join(
-        readRDS(file.path('output', .x, 'ICC.RDS')),
-        by = c('iter', 'species_id')
-      )
-  ) |>
-  select(iter2, species_id, icc, R2reg_growth_mean) |>
-  group_by(species_id) |>
-  summarise(
-    icc_mean = mean(icc),
-    icc_min = quantile(icc, probs = .05),
-    icc_max = quantile(icc, probs = .95),
-    r2_mean = mean(R2reg_growth_mean),
-    r2_min = quantile(R2reg_growth_mean, probs = .05),
-    r2_max = quantile(R2reg_growth_mean, probs = .95)
-  ) |>
-  ggplot(aes(icc_mean, r2_mean, color = species_id)) +
-    geom_point() +
-    geom_errorbar(aes(ymin = r2_min, ymax = r2_max), alpha = .5) + 
-    geom_errorbarh(aes(xmin = icc_min,xmax = icc_max), alpha = .5) +
-    theme_minimal() +
-    xlab('ICC') + ylab('Rsquared (linear regression)')
-```
 
 # Leave-one-out cross-validation to compare models
 

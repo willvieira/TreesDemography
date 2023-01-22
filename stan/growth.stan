@@ -5,6 +5,8 @@ data {
   vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=1,upper=Np> plot_id;
+  int<lower=1> Nt; // number of unique plot_id
+  array[N] int<lower=1,upper=Nt> tree_id;
   vector[N] BA_comp;
   vector[N] bio_01_mean;
   vector[N] bio_12_mean;
@@ -22,38 +24,43 @@ transformed data {
 parameters {
   real r;
   vector[Np] rPlot_log;
-  real<lower=0> sigma_plot;
+  vector[Nt] rTree_log;
+  real<lower=0> sigma_PlotTree;
+  real<lower=0,upper=1> p_plotTree;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
   real Beta;
   real<lower=minTemp,upper=maxTemp> optimal_temp;
-  real<lower=1,upper=100> sigma_temp;
+  real<lower=0> tau_temp;
   real<lower=minPrec,upper=maxPrec> optimal_prec;
-  real<lower=200,upper=30000> sigma_prec;
+  real<lower=0> tau_prec;
 }
 model {
   // priors
   r ~ normal(-3.5, 1);
-  rPlot_log ~ normal(0, sigma_plot);
-  sigma_plot ~ exponential(3);
+  rPlot_log ~ normal(0, sigma_PlotTree * p_plotTree);
+  rTree_log ~ normal(0, sigma_PlotTree * (1 - p_plotTree));
+  sigma_PlotTree ~ exponential(2);
+  p_plotTree ~ beta(2, 2);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
   Beta ~ normal(-1, 1);
   optimal_temp ~ normal(5, 10);
-  sigma_temp ~ normal(8, 8);
+  tau_temp ~ normal(0, 1);
   optimal_prec ~ normal(1700, 800);
-  sigma_prec ~ normal(15000, 5000);
+  tau_prec ~ normal(0, 1);
 
   // What matters here:
   vector[N] rPlot = exp( // growth parameter
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
+    rTree_log[tree_id] + // tree random effect
     BA_comp * Beta + // BA of larger individuals effect
-    (-1/square(sigma_temp)) .* square(bio_01_mean - optimal_temp) +//temp effect
-    (-1/square(sigma_prec)) .* square(bio_12_mean - optimal_prec) //prec effect
+    -tau_temp .* square(bio_01_mean - optimal_temp) +//temp effect
+    -tau_prec .* square(bio_12_mean - optimal_prec) //prec effect
   );
 
-  // pre calculate component of the model mean
+  // pre calculate component of the model
   vector[N] rPlotTime = exp(-rPlot .* time);
 
   // mean
