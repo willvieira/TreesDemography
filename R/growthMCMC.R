@@ -136,6 +136,15 @@ set.seed(0.0)
 ##
 
 
+## Filter data based on plot location only
+
+growth_dt[, lat_class := cut(latitude, seq(min(latitude), max(latitude), length.out = 11),  include.lowest = TRUE)]
+
+set.seed(3)
+plot_to_keep <- growth_dt[, sample(unique(plot_id), 10, replace = T), by = lat_class]$V1
+
+growth_dt = growth_dt[plot_id %in% plot_to_keep]
+growth_dt[, sampled := 'training']
 
 ## compute de deltaTime between measures of dbh
 growth_dt[,
@@ -160,6 +169,13 @@ toSub_plot <- data.table(
   plot_id = plot_id_uq,
   plot_id_seq = 1:length(plot_id_uq)
 )
+
+# add latitude
+toSub_plot[
+  growth_dt,
+  latitude := i.latitude,
+  on = 'plot_id'
+]
 
 ## Do the same for tree_id
 tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
@@ -203,7 +219,10 @@ growth_dt[
           maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
           minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)],
           maxPrec = dataSource[species_id == sp, max(bio_12_mean, na.rm = T)],
-          minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)]
+          minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)],
+          latitude = toSub_plot[, latitude],
+          N_seq = 100,
+          latitude_seq = seq(-2, 2, length.out = 100)
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -401,3 +420,74 @@ growth_dt[
   )
 
 ##
+
+
+
+
+## Fig
+gaus_f <- function(sigma_f, lengthscale_f)
+  return( function(x) sigma_f * exp(-1/(2 * lengthscale_f^2) * x^2) )
+
+curve(gaus_f(1, 1)(x), 0, 20, add = T, col = 2, ylim = c(0, 1))
+
+post_dist |>
+  filter(par %in% c('lengthscale_f', 'sigma_f')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  mutate(sim = 'parameter') |>
+  bind_rows(
+    tibble(
+      iter = 1:4000,
+      lengthscale_f = rnorm(4000, 0, 1),
+      sigma_f = rnorm(4000, 0, 1),
+      sim = 'prior'
+    )
+  ) |>
+  rowwise() |>
+  mutate(
+    gausf = list(gaus_f(sigma_f, lengthscale_f)),
+    x = list(seq(0, 5, 0.1)),
+    y = list(gausf(x))
+  ) |>
+  select(iter, sim, x, y)  |>
+  unnest(cols = c(x, y)) |>
+  ggplot(aes(x, y, color = sim)) +
+    stat_ribbon(.width = 0.5) +
+    scale_fill_brewer() +
+    theme_classic()
+
+
+post_dist |>
+  filter(grepl('rPlot', par)) |>
+  mutate(plot_id_seq = parse_number(par)) |>
+  left_join(toSub_plot) |>
+  ggplot(aes(latitude, value)) +
+    stat_ribbon() +
+    scale_fill_brewer() +
+    theme_minimal() +
+    ylab('Plot random effects')
+
+
+
+tt = post_dist |>
+  filter(grepl('rPlot', par)) |>
+  mutate(plot_id_seq = parse_number(par)) |>
+  filter(plot_id_seq <= 95) |>
+  left_join(toSub_plot) |>
+  group_by(latitude) |>
+  summarise(value = mean(value))
+
+post_dist |>
+  filter(grepl('rPlot', par)) |>
+  mutate(plot_id_seq = parse_number(par)) |>
+  filter(plot_id_seq > 95) |>
+  mutate(latitude = seq(-2, 2, length.out = 100)[plot_id_seq - 95]) |>
+  ggplot(aes(x = latitude * 2.6 + 48.3, y = value)) +
+    stat_lineribbon() +
+    geom_hline(yintercept = 0, alpha = 0.2) +
+    geom_point(data = tt, aes(latitude, value)) +
+    scale_fill_brewer() +
+    theme_classic() +
+    ylab('Plot random effects') + xlab('Latitude')
