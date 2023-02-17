@@ -440,8 +440,8 @@ post_dist |>
   bind_rows(
     tibble(
       iter = 1:4000,
-      lengthscale_f = rnorm(4000, 0, 1),
-      sigma_f = rnorm(4000, 0, 1),
+      lengthscale_f = abs(rnorm(4000, 0, 1)),
+      sigma_f = abs(rnorm(4000, 0, 1)),
       sim = 'prior'
     )
   ) |>
