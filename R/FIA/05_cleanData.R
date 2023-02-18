@@ -17,7 +17,7 @@
 #------------------------------------------------------
 
 
-    
+
 library(data.table)
 
 treeData <- readRDS('data/FIA/treeData_sStar_clim.RDS')

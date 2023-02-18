@@ -250,7 +250,12 @@
     BA_sp := nafill(nafill(BA_sp, "locf"), "nocb"),
     by = .(ID_PE, year_measured, sp_code2)
   ]
-  
+
+  # Interspecific BA
+  final_dt[,
+    BA_inter := BA_plot - BA_sp
+  ]
+
   # Species relative basal area to overcome the potential opposite response of
   # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
   final_dt[,
@@ -281,6 +286,34 @@
     relativeBA_comp := indBA/sum(indBA),
     by = .(ID_PE, year_measured)
   ]
+
+
+# Basal area of larger individuals than the focal individual
+# For intra vs interspecies (competitive index)
+BA_comp_spIntra <- function(size, species_id, BA_ind) {
+    BA_comp_sp <- sapply(
+      1:length(size),
+      function(x)
+        sum(
+          BA_ind[species_id %in% species_id[x]][size[species_id %in% species_id[x]] > size[x]]
+        ) * 1e4/399.7212
+    )
+    BA_comp_intra <- sapply(
+      1:length(size),
+      function(x)
+        sum(
+          BA_ind[!species_id %in% species_id[x]][size[!species_id %in% species_id[x]] > size[x]]
+        ) * 1e4/399.7212
+    )
+    return( list(BA_comp_sp, BA_comp_intra) )
+}
+
+final_dt[
+  state == 'alive',
+  c('BA_comp_sp', 'BA_comp_intra') := BA_comp_spIntra(DHP, sp_code2, indBA),
+  by = .(ID_PE, year_measured)
+]
+
 
 
   # plot(test[, unique(s_star), by = .(ID_PE, year0)]$V1, test[, unique(BA),

@@ -404,6 +404,11 @@ treeData[,
   by = .(plot_id, subplot_id, year_measured, species_id)
 ]
 
+# Interspecific BA
+treeData[,
+  BA_inter := BA_plot - BA_sp
+]
+
 # Species relative basal area to overcome the potential opposite response of
 # regeneration in function of BA (i.e. competition) and BA_sp (i.e. seed source)
 treeData[,
@@ -432,6 +437,33 @@ treeData[
 treeData[
   status == 1,
   relativeBA_comp := indBA/sum(indBA),
+  by = .(plot_id, subplot_id, year_measured)
+]
+
+
+# Basal area of larger individuals than the focal individual
+# For intra vs interspecies (competitive index)
+BA_comp_spIntra <- function(size, species_id, plotSize, BA_ind) {
+    BA_comp_sp <- sapply(
+      1:length(size),
+      function(x)
+        sum(
+          BA_ind[species_id %in% species_id[x]][size[species_id %in% species_id[x]] > size[x]]
+        ) * 1e4/plotSize
+    )
+    BA_comp_intra <- sapply(
+      1:length(size),
+      function(x)
+        sum(
+          BA_ind[!species_id %in% species_id[x]][size[!species_id %in% species_id[x]] > size[x]]
+        ) * 1e4/plotSize
+    )
+    return( list(BA_comp_sp, BA_comp_intra) )
+}
+
+treeData[
+  status == 1,
+  c('BA_comp_sp', 'BA_comp_intra') := BA_comp_spIntra(dbh, species_id, unique(subPlot_size), indBA),
   by = .(plot_id, subplot_id, year_measured)
 ]
 
