@@ -182,7 +182,7 @@ fec_quebec[, db_origin := 'qc']
 
 # Name of columns to keep
 colsToKeep_treeData <- c(
-    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'status', 'year_measured', 'dbh', 'height', 'canopyDistance', 'BA_sp', 'relativeBA_sp'
+    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'status', 'year_measured', 'dbh', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
 )
 
 # Merge treeData
@@ -194,7 +194,7 @@ treeData <- rbind(
 
 # Name of columns to keep
 colsToKeep_growth <- c(
-    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'status', 'year0', 'year1', 'deltaYear', 'dbh0', 'dbh1', 'deltaDbh', 'growth', 'height', 'canopyDistance', 'BA_sp', 'relativeBA_sp'
+    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'status', 'year0', 'year1', 'deltaYear', 'dbh0', 'dbh1', 'deltaDbh', 'growth', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
 )
 
 # Merge growth
