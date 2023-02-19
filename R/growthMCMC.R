@@ -197,7 +197,8 @@ growth_dt[
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
           tree_id = growth_dt[sampled == 'training', tree_id_seq],
-          BA_comp = growth_dt[sampled == 'training', BA_comp],
+          BA_comp_sp = growth_dt[sampled == 'training', BA_comp_sp],
+          BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra],
           bio_01_mean = growth_dt[sampled == 'training', bio_01_mean],
           bio_12_mean = growth_dt[sampled == 'training', bio_12_mean],
           maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
@@ -242,9 +243,10 @@ growth_dt[
     # [3] dbh0,
     # [4] plot_id_seq,
     # [5] tree_id_seq,
-    # [6] BA_comp,
-    # [7] bio_01_mean,
-    # [8] bio_12_mean
+    # [6] BA_comp_sp,
+    # [7] BA_comp_intra,
+    # [8] bio_01_mean,
+    # [9] bio_12_mean
     
     # Add plot_id random effects
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
@@ -257,9 +259,9 @@ growth_dt[
       post[, 'r'] + 
       rPlot_log +
       rTree_log +
-      dt[6] * post[, 'Beta'] +
-      -post[, 'tau_temp'] * (dt[7] - post[, 'optimal_temp'])^2 +
-      -post[, 'tau_prec'] * (dt[8] - post[, 'optimal_prec'])^2
+      post[, 'Beta'] * (dt[6] + post[, 'theta'] * dt[7])  +
+      -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
+      -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
     )
 
     # time component of the model
@@ -310,7 +312,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp, bio_01_mean, bio_12_mean)
+          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean)
         ],
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -333,7 +335,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp, bio_01_mean, bio_12_mean)
+        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean)
       ]
   )
 
