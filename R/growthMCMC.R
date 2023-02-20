@@ -198,6 +198,56 @@ growth_dt[
 ]
 
 
+# distance matrix between plots for gaussian process
+toSub_plot[
+  dataSource,
+  `:=`(
+    longitude = i.longitude,
+    latitude = i.latitude
+  ),
+  on = 'plot_id'
+]
+
+# generate grid of lat and lon points to predict random effects
+xs = toSub_plot[, seq(min(longitude), max(longitude), length.out = 20)]
+ys = toSub_plot[, seq(min(latitude), max(latitude), length.out = 20)]
+
+grid_xy <- expand.grid(longitude = xs, latitude = ys)
+
+# Interpolate grid with plot locations so we predict for the regions around the plot only (to avoid too large matrix of distance)
+plot_buffer <- toSub_plot |>
+  select(longitude, latitude) |>
+  st_as_sf(coords = c('longitude', 'latitude'), crs = st_crs(4326)) |>
+  st_buffer(dist = 300000)
+
+toKeep <- grid_xy |>
+  st_as_sf(coords = c('longitude', 'latitude'), crs = st_crs(4326)) |>
+  st_intersects(plot_buffer, sparse = FALSE) |>
+  apply(1, any) |> which()
+
+plot_xy <- toSub_plot |>
+  select(!plot_id) |>
+  bind_rows(
+    grid_xy[toKeep, ] |>
+      mutate(plot_id_seq = (1:length(toKeep)) + nrow(toSub_plot))
+  )
+
+# calculate distance matrix
+dist_mat <- plot_xy |>
+  st_as_sf(coords = c('longitude', 'latitude'), crs = st_crs(4326)) |>
+  st_distance()
+
+# remove units
+units(dist_mat) <- NULL
+
+# meters to Km
+dist_mat <- dist_mat/1000
+
+# scale
+dist_min <- min(dist_mat)
+dist_max <- max(dist_mat)
+dist_mat_scale <- (dist_mat - dist_min)/(dist_max - dist_min) + 0.00001 # TODO: check if 0 is ok
+
 ## run the model
 
   stanModel <- cmdstan_model('stan/growth.stan')
@@ -220,9 +270,8 @@ growth_dt[
           minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)],
           maxPrec = dataSource[species_id == sp, max(bio_12_mean, na.rm = T)],
           minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)],
-          latitude = toSub_plot[, latitude],
-          N_seq = 100,
-          latitude_seq = seq(-2, 2, length.out = 100)
+          N_grid = length(toKeep),
+          dist = dist_mat_scale
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -491,3 +540,115 @@ post_dist |>
     scale_fill_brewer() +
     theme_classic() +
     ylab('Plot random effects') + xlab('Latitude')
+
+
+
+# Version 2
+#############################################################
+
+## Fig
+gaus_f <- function(sigma_f, lengthscale_f)
+  return( function(x) sigma_f * exp(-lengthscale_f * x^2)  )
+
+post_dist |>
+  filter(par %in% c('lengthscale_f', 'sigma_f')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  mutate(sim = 'parameter') |>
+  bind_rows(
+    tibble(
+      iter = 1:8000,
+      lengthscale_f = abs(rnorm(8000, 0, 1)),
+      sigma_f = abs(rnorm(8000, 0, 1)),
+      sim = 'prior'
+    )
+  ) |>
+  rowwise() |>
+  mutate(
+    gausf = list(gaus_f(sigma_f, lengthscale_f)),
+    x = list(seq(0, 2, 0.1)),
+    y = list(gausf(x))
+  ) |>
+  select(iter, sim, x, y)  |>
+  unnest(cols = c(x, y)) |>
+  ggplot(aes(x, y, color = sim)) +
+    stat_ribbon(.width = 0.5) +
+    scale_fill_brewer() +
+    theme_classic()
+
+
+# Fig 2 (spatial grid)
+toSub_plot_value <- toSub_plot |>
+  left_join(
+    post_dist |>
+      filter(grepl('rPlot', par)) |>
+      mutate(plot_id_seq = parse_number(par)) |>
+      group_by(plot_id_seq) |>
+      summarise(value = mean(value))
+  )
+
+post_dist |>
+  filter(grepl('rPlot', par)) |>
+  mutate(plot_id_seq = parse_number(par)) |>
+  filter(plot_id_seq > nrow(toSub_plot)) |>
+  group_by(plot_id_seq) |>
+  summarise(
+    value = mean(value)
+  ) |>
+  left_join(
+    grid_xy[toKeep, ] |>
+      bind_cols(plot_id_seq = (1:length(toKeep)) + nrow(toSub_plot))
+  ) |>
+  #st_as_sf(coords = c('longitude', 'latitude'), crs = st_crs(4326)) |>
+  ggplot(aes(x = longitude, y = latitude, fill = value)) +
+    geom_raster(interpolate = TRUE) +
+    geom_point(
+      data = toSub_plot_value, aes(longitude, latitude, fill = value), size = 3, shape = 21
+    ) +
+    scale_fill_gradient2() +
+    labs(fill = 'Plot offset') +
+    theme_minimal() +
+    ggtitle('Jack pine')
+
+# Fig 3 (corr between plots)
+post_mean <- post_dist |>
+  filter(par %in% c('sigma_f', 'lengthscale_f', 'sigman')) |>
+  group_by(par) |>
+  summarise(value = mean(value))
+
+K <- matrix(0, nrow = nrow(toSub_plot), ncol = nrow(toSub_plot))
+for(i in 1:nrow(toSub_plot)){
+  for(j in 1:nrow(toSub_plot)){
+    K[i,j] <- median(post_mean$value[2]) * exp(-median(post_mean$value[1]) * (dist_mat/1000)[i,j])
+  }
+}
+diag(K) <- median(post$etasq) + 0.01
+
+Rho <- round(cov2cor(K),2)
+rownames(Rho) <- seq(1, nrow(toSub_plot), 1)
+colnames(Rho) <- rownames(Rho)
+
+plot(
+  latitude ~ longitude,
+  data = toSub_plot,
+  #col = value,
+  pch = 16,
+  cex = 0.4,
+  col = 'blue',
+  main = 'Correlation inferred from model'
+)
+
+for(i in 1:nrow(toSub_plot)){
+  for(j in 1:nrow(toSub_plot)){
+    if(i < j){
+      lines(
+        x = c(toSub_plot$longitude[i], toSub_plot$longitude[j]), 
+        y = c(toSub_plot$latitude[i], toSub_plot$latitude[j]),
+        lwd = .1,
+        col = rgb(0, 0, 0, Rho[i,j]^2)
+      )
+    }
+  }
+}
