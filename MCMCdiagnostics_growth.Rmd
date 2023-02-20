@@ -435,7 +435,7 @@ treeData[is.na(sampled), sampled2 := 'validation']
 treeData[, .(species_id, dbh, deltaTime, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
-    cols = c(dbh, deltaTime, BA_comp, bio_01_mean, bio_12_mean),
+    cols = c(dbh, deltaTime, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
