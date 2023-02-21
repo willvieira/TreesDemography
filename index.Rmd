@@ -77,6 +77,8 @@
 
 - Von Bertalanffy model v21.0 with basal area, mean annual temperature, and mean annual precipitation fixed effects, and plot and individual random effects ([link v21.0](https://willvieira.github.io/TreesDemography_reports/growth/bertalanffy_plotInd_BATempPrec.html))
 
+- Von Bertalanffy model v23.0 with conspecific and heterospecific basal area, mean annual temperature, and mean annual precipitation fixed effects, and plot and individual random effects ([link v23.0](https://willvieira.github.io/TreesDemography_reports/growth/bertalanffy_plotInd_BAspcTempPrec.html))
+
 ## Recruitment
 
 - Fast transition - ([link v1.0](https://willvieira.github.io/TreesDemography/recruit/fastTransition.html))
