@@ -750,8 +750,8 @@ for(Sp in spIds)
         as.data.table(),
     `:=`(
       r = i.r,
-      sigma_plot = i.sigma_plot,
-      sigma_tree = i.sigma_tree,
+      sigma_PlotTree = i.sigma_PlotTree,
+      p_plotTree = i.p_plotTree,
       sigma_obs = i.sigma_obs,
       Lmax = i.Lmax
     ),
@@ -775,13 +775,13 @@ for(Sp in spIds)
   # value from the population distribution
   val_sp[
     is.na(plot_id_seq),
-    rPlot_log := rnorm(.N, 0, sigma_plot)
+    rPlot_log := rnorm(.N, 0, sigma_PlotTree * p_plotTree)
   ]
 
   # as validation and training were selected at the level of tree_id
   # there is no same individual shared between training and validation
   val_sp[,
-    rTree_log := rnorm(.N, 0, sigma_tree)
+    rTree_log := rnorm(.N, 0, sigma_PlotTree * (1 - p_plotTree))
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
@@ -1007,65 +1007,6 @@ map_dfr(
     xlab('Rsquared (linear regression)') +
     theme_bw() +
     theme(legend.position = 'bottom')
-```
-
-
-# Intraclass Correlation Coefficient (ICC)
-
-*I should not be using this for my kind of model but I will let it here anyway...*
-
-```{r ICC,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
-post |>
-  filter(grepl('sigma', par)) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id, iter) |>
-  summarise(
-    icc = sigma_plot/(sigma_plot + sigma_obs)
-  ) |>
-  saveRDS(
-    file = paste0('output/', simName, '/ICC.RDS')
-  )
-
-
-# compare between all simulations with random effects
-map_dfr(
-    sim_toLoad,
-    ~ readRDS(file.path('output', .x, 'ICC.RDS')) |>
-      bind_cols(sim = .x)
-  ) |>
-  ggplot(aes(x = icc, y = species_id, fill = sim)) +
-      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
-      xlab('ICC') +
-      theme_minimal()
-
-# ICC vs R2
-map_dfr( 
-    simName, 
-    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
-      left_join(
-        readRDS(file.path('output', .x, 'ICC.RDS')),
-        by = c('iter', 'species_id')
-      )
-  ) |>
-  select(iter2, species_id, icc, R2reg_growth_mean) |>
-  group_by(species_id) |>
-  summarise(
-    icc_mean = mean(icc),
-    icc_min = quantile(icc, probs = .05),
-    icc_max = quantile(icc, probs = .95),
-    r2_mean = mean(R2reg_growth_mean),
-    r2_min = quantile(R2reg_growth_mean, probs = .05),
-    r2_max = quantile(R2reg_growth_mean, probs = .95)
-  ) |>
-  ggplot(aes(icc_mean, r2_mean, color = species_id)) +
-    geom_point() +
-    geom_errorbar(aes(ymin = r2_min, ymax = r2_max), alpha = .5) + 
-    geom_errorbarh(aes(xmin = icc_min,xmax = icc_max), alpha = .5) +
-    theme_minimal() +
-    xlab('ICC') + ylab('Rsquared (linear regression)')
 ```
 
 # Leave-one-out cross-validation to compare models
