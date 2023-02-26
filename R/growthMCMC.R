@@ -198,13 +198,7 @@ growth_dt[
           Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
           tree_id = growth_dt[sampled == 'training', tree_id_seq],
           BA_comp_sp = growth_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra],
-          bio_01_mean = growth_dt[sampled == 'training', bio_01_mean],
-          bio_12_mean = growth_dt[sampled == 'training', bio_12_mean],
-          maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
-          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)],
-          maxPrec = dataSource[species_id == sp, max(bio_12_mean, na.rm = T)],
-          minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)]
+          BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -244,9 +238,7 @@ growth_dt[
     # [4] plot_id_seq,
     # [5] tree_id_seq,
     # [6] BA_comp_sp,
-    # [7] BA_comp_intra,
-    # [8] bio_01_mean,
-    # [9] bio_12_mean
+    # [7] BA_comp_intra
     
     # Add plot_id random effects
     rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
@@ -259,9 +251,7 @@ growth_dt[
       post[, 'r'] + 
       rPlot_log +
       rTree_log +
-      post[, 'Beta'] * (dt[6] + post[, 'theta'] * dt[7])  +
-      -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
-      -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
+      post[, 'Beta'] * (dt[6] + post[, 'theta'] * dt[7])
     )
 
     # time component of the model

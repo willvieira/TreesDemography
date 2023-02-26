@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v23.0 - Von Bertalanffy model - r in function of `BA_comp_sp`, `BA_comp_intra`, `bio_01_mean`, and `bio_12_mean`."
+ subtitle: "Test v17.9.0 - Von Bertalanffy model - r in function of `BA_comp_sp`, `BA_comp_intra` with plot and individual random effects"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -112,9 +112,7 @@ trainData[
     'deltaTime' = i.deltaTime,
     'dbh0' = i.dbh0,
     'BA_comp_sp' = i.BA_comp_sp,
-    'BA_comp_intra' = i.BA_comp_intra,
-    'bio_01_mean' = i.bio_01_mean,
-    'bio_12_mean' = i.bio_12_mean
+    'BA_comp_intra' = i.BA_comp_intra
   ),
   on = c('tree_id', 'year_measured')
 ]
@@ -124,8 +122,7 @@ plot_id_summary <- treeData[,
     .(
       latitude = unique(latitude),
       BA_plot = mean(BA_plot),
-      bio_01_mean = mean(bio_01_mean),
-      bio_12_mean = mean(bio_12_mean)
+      bio_01_mean = mean(bio_01_mean, na.rm = TRUE)
     ), 
     by = plot_id
   ]
@@ -295,7 +292,7 @@ for(Sp in spIds)
           filter(iter == 1) |>
           select(
             plot_id, plot_id_seq, r_pop, m_rReal, latitude,
-            BA_plot, bio_01_mean, bio_12_mean
+            BA_plot, bio_01_mean
           )
 
       treeEffect_ls[[Sp]] <- dt_toTree |>
@@ -432,10 +429,10 @@ for(Sim in sim_to_compare)
 treeData[, sampled2 := sampled]
 treeData[is.na(sampled), sampled2 := 'validation']
 
-treeData[, .(species_id, dbh, deltaTime, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean, sampled2)] |>
+treeData[, .(species_id, dbh, deltaTime, BA_comp_sp, BA_comp_intra, sampled2)] |>
   mutate(sample = sampled2) |>
   pivot_longer(
-    cols = c(dbh, deltaTime, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean),
+    cols = c(dbh, deltaTime, BA_comp_sp, BA_comp_intra),
     names_to = 'var'
   ) |>
   ggplot(aes(x = value, y = species_id, fill = sample)) +
@@ -507,75 +504,8 @@ post |>
 
 ```
 
-## Mean annual temperature effect
 
-```{r size_temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
-post |>
-  filter(par %in% c('r', 'optimal_temp', 'tau_temp')) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id) |>
-  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
-  mutate(
-    tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
-    r_T = exp(r + tempEffect)
-  ) |>
-  select(iter, species_id, bio_01_mean, tempEffect, r_T) |>
-  pivot_longer(
-    cols = c('tempEffect', 'r_T'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('tempEffect', 'r_T'), labels = c('MAT effect on r parameter', 'r parameter'))
-  ) |>
-  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.9, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
-    scale_fill_brewer() +
-    xlab('Mean annual temperature (MAT)') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
-
-```
-
-## Mean annual precipitation effect
-
-```{r size_prec_pred,echo=FALSE,fig.height = 8, fig.width = 10}
-post |>
-  filter(par %in% c('r', 'optimal_prec', 'tau_prec')) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id) |>
-  expand_grid(bio_12_mean = seq(300, 2700, 80)) |>
-  mutate(
-    precEffect = -tau_prec * (bio_12_mean - optimal_prec)^2,
-    r_P = exp(r + precEffect)
-  ) |>
-  select(iter, species_id, bio_12_mean, precEffect, r_P) |>
-  pivot_longer(
-    cols = c('precEffect', 'r_P'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('precEffect', 'r_P'), labels = c('MAP effect on r parameter', 'r parameter'))
-  ) |>
-  ggplot(aes(x = bio_12_mean, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.9, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
-    scale_fill_brewer() +
-    xlab('Mean annual precipitation (MAP)') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
-
-```
-
-## Growth in function of Basal area and climate variables
+## Growth in function of Basal area
 
 ```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 15, fig.width = 10}
 # get only training data
@@ -590,7 +520,7 @@ train <- train[deltaTime > 0]
 # prepare parameters
 post_mean <- post |>
   filter(
-    par %in% c('r', 'Lmax', 'Beta', 'theta', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec')
+    par %in% c('r', 'Lmax', 'Beta', 'theta')
   ) |>
   group_by(species_id, par) |>
   summarise(value_mean = mean(value)) |>
@@ -611,9 +541,9 @@ for(Sp in spIds)
 
   # add parameters
   train_sp[,
-    c('Beta', 'theta', 'Lmax', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec') := post_mean[
+    c('Beta', 'theta', 'Lmax') := post_mean[
                       species_id == Sp,
-                      .(Beta, theta, Lmax, optimal_temp, tau_temp, optimal_prec, tau_prec)
+                      .(Beta, theta, Lmax)
                     ]
   ]
   
@@ -644,9 +574,7 @@ for(Sp in spIds)
       log(r_plot) +
       log(r_tree) -
       log(r_pop) +
-      Beta * (BA_comp_sp + theta * BA_comp_intra) +
-      -tau_temp * (bio_01_mean - optimal_temp)^2 +
-      -tau_prec * (bio_12_mean - optimal_prec)^2
+      Beta * (BA_comp_sp + theta * BA_comp_intra)
     )
   ]
   
@@ -753,61 +681,10 @@ for(Sp in spIds)
           linetype = 'dashed'
         )
 
-
-  p4 <- train_sp |>
-      filter(!is.na(pred_growth)) |>
-      mutate(obs_growth = growth) |>
-      select(bio_01_mean, obs_growth, pred_growth) |>
-      pivot_longer(
-        cols = contains('growth'),
-        names_to = 'sim'
-      ) |>
-      ggplot(aes(x = bio_01_mean, y = value, color = sim)) +
-        geom_point(alpha = .5, size = .5) +
-        geom_smooth(method = 'gam') +
-        xlab('Mean annual temperature') +
-        ylab('Growth') +
-        labs(subtitle = '') +
-        theme_minimal() +
-        ylim(yLim) +
-        geom_function(
-          fun = function(x) Int * exp(
-            -(post_mean |> filter(species_id == Sp) |> pull(tau_temp)) *
-            (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
-          ),
-          col = 1,
-          linetype = 'dashed'
-        )
-
-  p5 <- train_sp |>
-      filter(!is.na(pred_growth)) |>
-      mutate(obs_growth = growth) |>
-      select(bio_12_mean, obs_growth, pred_growth) |>
-      pivot_longer(
-        cols = contains('growth'),
-        names_to = 'sim'
-      ) |>
-      ggplot(aes(x = bio_12_mean, y = value, color = sim)) +
-        geom_point(alpha = .5, size = .5) +
-        geom_smooth(method = 'gam') +
-        xlab('Mean annual precipitation') +
-        ylab('Growth') +
-        labs(subtitle = '') +
-        theme_minimal() +
-        ylim(yLim) +
-        geom_function(
-          fun = function(x) Int * exp(
-            -(post_mean |> filter(species_id == Sp) |> pull(tau_prec)) *
-            (x - post_mean |> filter(species_id == Sp) |> pull(optimal_prec))^2
-          ),
-          col = 1,
-          linetype = 'dashed'
-        )
-
   print(
     ggpubr::ggarrange(
-      p2, p3, p1, p4, p5,
-      ncol = 2, nrow = 3, legend = 'top', common.legend = TRUE)
+      p2, p3, p1,
+      ncol = 2, nrow = 2, legend = 'top', common.legend = TRUE)
   )
 }
 ```
@@ -850,11 +727,7 @@ for(Sp in spIds)
       sigma_obs = i.sigma_obs,
       Lmax = i.Lmax,
       Beta = i.Beta,
-      theta = i.theta,
-      optimal_temp = i.optimal_temp,
-      tau_temp = i.tau_temp,
-      optimal_prec = i.optimal_prec,
-      tau_prec = i.tau_prec
+      theta = i.theta
     ),
     on = 'iter'
   ]
@@ -879,6 +752,12 @@ for(Sp in spIds)
     rPlot_log := rnorm(.N, 0, sigma_PlotTree * p_plotTree)
   ]
 
+  # for the plots not used in the fit model, generate the rPlot_log
+  # value from the population distribution
+  val_sp[,
+    rTree_log := rnorm(.N, 0, sigma_PlotTree * (1 - p_plotTree))
+  ]
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
@@ -888,9 +767,8 @@ for(Sp in spIds)
     r_plot := exp(
       r +
       rPlot_log +
-      Beta * (BA_comp_sp + theta * BA_comp_intra) +
-      -tau_temp * (bio_01_mean - optimal_temp)^2 +
-      -tau_prec * (bio_12_mean - optimal_prec)^2
+      rTree_log +
+      Beta * (BA_comp_sp + theta * BA_comp_intra)
     )
   ]
 

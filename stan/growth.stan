@@ -9,14 +9,6 @@ data {
   array[N] int<lower=1,upper=Nt> tree_id;
   vector[N] BA_comp_sp;
   vector[N] BA_comp_intra;
-  vector[N] bio_01_mean;
-  vector[N] bio_12_mean;
-  // range limit to optimal_temp parameter is species specific
-  // And must be within the observed distribution of the species
-  real maxTemp;
-  real minTemp;
-  real maxPrec;
-  real minPrec;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -32,10 +24,6 @@ parameters {
   real<lower=maxSize> Lmax;
   real Beta;
   real<lower=0> theta;
-  real<lower=minTemp,upper=maxTemp> optimal_temp;
-  real<lower=0> tau_temp;
-  real<lower=minPrec,upper=maxPrec> optimal_prec;
-  real<lower=0> tau_prec;
 }
 model {
   // priors
@@ -48,19 +36,13 @@ model {
   Lmax ~ normal(1000, 80);
   Beta ~ normal(-1, 1);
   theta ~ lognormal(1, 3);
-  optimal_temp ~ normal(5, 10);
-  tau_temp ~ normal(0, 1);
-  optimal_prec ~ normal(1700, 800);
-  tau_prec ~ normal(0, 1);
 
   // What matters here:
   vector[N] rPlot = exp( // growth parameter
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
     rTree_log[tree_id] + // tree random effect
-    Beta * (BA_comp_sp + theta * BA_comp_intra) + // Intra and inter competition
-    -tau_temp .* square(bio_01_mean - optimal_temp) +//temp effect
-    -tau_prec .* square(bio_12_mean - optimal_prec) //prec effect
+    Beta * (BA_comp_sp + theta * BA_comp_intra) // Intra and inter competition
   );
 
   // pre calculate component of the model
