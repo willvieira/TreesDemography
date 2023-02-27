@@ -3,6 +3,7 @@ cat('####### Sending simulations to the server #######\n')
 # Send folder to run simulations on the server
 # Will Vieira
 # February 8, 2020
+# Last edited: Nov, 2022
 ##############################
 
 
@@ -11,14 +12,18 @@ cat('####### Sending simulations to the server #######\n')
 # Steps:
   # Load simulation variables
   # Send simulations
+  # create bash submission script
 ##############################
 
 
 ## Set variables to be simulated
 
   serverInfo <- yaml::read_yaml('_serverInfo.yml')
-  simName <- yaml::read_yaml('_simulation_info.yml')$simName
-  vitalRate <- yaml::read_yaml('_simulation_info.yml')$vitalRates
+  simInfo <- yaml::read_yaml('_simulation_info.yml')
+  
+  simName <- simInfo$simName
+  vitalRates <- simInfo$vitalRates
+  dataSources <- simInfo$dataSources
 
 ##
 
@@ -26,8 +31,9 @@ cat('####### Sending simulations to the server #######\n')
 
 ## Folders and files
 
-  filesToSend <- c('_simulation_info.yml', '_rawDataLink', paste0('data/quebec/', vitalRate, '_dt.RDS'))
+  filesToSend <- c('_simulation_info.yml', '_rawDataLink', dataSources)
   foldersToSend <- c('R', 'stan')
+
 ##
 
 
@@ -39,7 +45,16 @@ cat('####### Sending simulations to the server #######\n')
   myAddress <- serverInfo$myAddress
   
   # first create same folder on the server side
-  system(paste0('sshpass -f ', myPass, ' ssh -t ', myUser, '@', myAddress, ' "mkdir -p ', simName, '/data/quebec"'))
+  sapply(
+    paste0(
+      'sshpass -f ', myPass,
+      ' ssh -t ',
+      myUser, '@', myAddress,
+      ' "mkdir -p ',
+      simName, c('/data"', '/output"')
+    ),
+    system
+  )
 
   # now send only files and folders necessary to the run the simulations
   
@@ -84,5 +99,50 @@ cat('####### Sending simulations to the server #######\n')
 
     system(script)
   }
+
+##
+
+
+
+## Ccreate bash submission script
+
+bash_file <- paste0('#!/bin/bash
+#SBATCH --account=def-dgravel
+#SBATCH -t 1-23:40:00
+#SBATCH --mem-per-cpu=5000M
+#SBATCH --ntasks=', simInfo$nC, '
+#SBATCH --job-name=', simInfo$simName, '
+#SBATCH --mail-user=', serverInfo$email, '
+#SBATCH --mail-type=ALL
+#SBATCH --array=1-', length(simInfo$spIds), '
+
+module load StdEnv/2020 r/4.1.0
+
+NCORES=\\$SLURM_CPUS_PER_TASK R -f R/growthMCMC.R
+')
+
+  # write in the server
+  system(
+    paste0(
+      'echo "',
+      bash_file,
+      '" | ssh ',
+      serverInfo$myUser,
+      '@',
+      serverInfo$myAddress,
+      '-T "cat > ',
+      simName,
+      '/sub.sh'
+    )
+  )
+
+  system(
+    paste0(
+      'sshpass -f ', myPass,
+      ' ssh -t ',
+      myUser, '@', myAddress,
+      ' "echo \'', bash_file, '\' > ', simName, '/sub.sh"'
+    )
+  )
 
 ##
