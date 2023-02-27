@@ -31,8 +31,8 @@ treeData_quebec <- readRDS(file.path('data', 'quebec', 'treeDataQuebec_beforeTra
 growth_fia <- readRDS(file.path('data', 'FIA', 'growth_transition_dt.RDS'))
 growth_quebec <- readRDS(file.path('data', 'quebec', 'growth_transition_dt.RDS'))
 
-mort_fia <- readRDS(file.path('data', 'FIA', 'mort_dt.RDS'))
-mort_quebec <- readRDS(file.path('data', 'quebec', 'mort_dt.RDS'))
+mort_fia <- readRDS(file.path('data', 'FIA', 'mort_transition_dt.RDS'))
+mort_quebec <- readRDS(file.path('data', 'quebec', 'mort_transition_dt.RDS'))
 
 fec_fia <- readRDS(file.path('data', 'FIA', 'fec_dt.RDS'))
 fec_quebec <- readRDS(file.path('data','quebec', 'fec_dt.RDS'))
@@ -205,7 +205,7 @@ growth <- rbind(
 
 # Name of columns to keep
 colsToKeep_mort<- c(
-    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'mort', 'year0', 'year1', 'deltaYear', 'dbh0', 'dbh1', 'deltaDbh', 'height', 'canopyDistance', 'BA_sp', 'relativeBA_sp'
+    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'mort', 'year0', 'year1', 'deltaYear', 'dbh0', 'dbh1', 'deltaDbh', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
 )
 
 # Merge mort
