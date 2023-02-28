@@ -136,6 +136,8 @@ set.seed(0.0)
 
     mort_dt <- mort_dt[!is.na(sampled)]
 
+  }else{
+    mort_dt[, sampled := 'training']
   }
 
 ##
@@ -176,21 +178,12 @@ mort_dt[
   md_out <- stanModel$sample(
       data = list(
           N = mort_dt[sampled == 'training', .N],
-          obs_size_t1 = mort_dt[sampled == 'training', dbh],
-          time = mort_dt[sampled == 'training', deltaTime],
-          obs_size_t0 = mort_dt[sampled == 'training', dbh0],
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
           Nt = mort_dt[sampled == 'training', length(unique(tree_id))],
           tree_id = mort_dt[sampled == 'training', tree_id_seq],
-          BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_intra = mort_dt[sampled == 'training', BA_comp_intra],
-          bio_01_mean = mort_dt[sampled == 'training', bio_01_mean],
-          bio_12_mean = mort_dt[sampled == 'training', bio_12_mean],
-          maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
-          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)],
-          maxPrec = dataSource[species_id == sp, max(bio_12_mean, na.rm = T)],
-          minPrec = dataSource[species_id == sp, min(bio_12_mean, na.rm = T)]
+          state_t1 = mort_dt[sampled == 'training', mort],
+          delta_time = mort_dt[sampled == 'training', deltaYear]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -224,46 +217,47 @@ mort_dt[
   mort_model <- function(dt, post, log)
   {
     # dt is a vector of:
-    # [1] dbh0,
-    # [...] ...
+    # [1] status
+    # [2] deltaTime
+    # [3] plot_id
+    # [4] tree_id
     
     # Add plot_id random effects
-    rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
+    psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
 
     # Add tree_id random effects
-    rTree_log <- post[, paste0('rTree_log[', dt[5], ']')]
+    psiTree <- post[, paste0('psiTree[', dt[4], ']')]
 
     # fixed effects
-    rPlot_beta <- exp(
-      post[, 'r'] + 
-      rPlot_log +
-      rTree_log +
-      post[, 'Beta'] * (dt[6] + post[, 'theta'] * dt[7])  +
-      -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
-      -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
+    longev_log <- 1/(1 + exp(
+        -post[, 'psi'] + 
+        psiPlot +
+        psiPlot
+      )
     )
 
     # time component of the model
-    rPlotTime <- exp(-rPlot_beta * dt[2])
+    mortality_time <- 1 - (longev_log^dt[2])
 
-    # mean
-    Mean <- dt[3] * rPlotTime + post[, 'Lmax'] * (1 - rPlotTime)
+    # deal with numerical instability
+    if(any(mortality_time == 1))
+      mortality_time[which(mortality_time == 1)] = 0.999999
 
     # likelihood
-    dnorm(
+    dbinom(
       x = dt[1],
-      mean = Mean,
-      sd = post[, 'sigma_obs'],
+      size = 1,
+      prob = mortality_time,
       log = log
     )
   }
 
-  llfun_bertalanffy <- function(data_i, draws, log = TRUE)
+  llfun_mort <- function(data_i, draws, log = TRUE)
     apply(
       data_i,
       1,
       function(x, y)
-        growth_bertalanffy(
+        mort_model(
           x,
           y,
           log = log
@@ -283,38 +277,28 @@ mort_dt[
   # compute relative efficiency
   # this is slow and optional but is recommended to allow for adjusting PSIS
   # effective sample size based on MCMC effective sample size)
-  keepTrying <- TRUE; nTry = 1
-  while(keepTrying & nTry < 10) {
-    r_eff <- loo::relative_eff(
-        llfun_bertalanffy, 
-        log = FALSE, # relative_eff wants likelihood not log-likelihood values
-        chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-        data = mort_dt[
-          sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean)
-        ],
-        draws = post_dist_lg,
-        cores = sim_info$nC
-    )
-
-    if(is.numeric(r_eff[1])) {
-      keepTrying <- FALSE
-    }else{
-      nTry <- nTry + 1
-    }
-  }
+  r_eff <- loo::relative_eff(
+      llfun_mort, 
+      log = FALSE, # relative_eff wants likelihood not log-likelihood values
+      chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+      data = mort_dt[
+        sampled == 'training',
+        .(mort, deltaYear, plot_id_seq, tree_id_seq)
+      ],
+      draws = post_dist_lg,
+      cores = sim_info$nC
+  )
 
   # Loo using x samples
-  loo_obj <-
-    loo::loo_subsample(
-      llfun_bertalanffy,
-      observations = sampleSize/10, # take a subsample of size x
+  loo_obj <- loo::loo_subsample(
+      llfun_mort,
+      observations = sampleSize/5, # take a subsample of size x
       cores = sim_info$nC,
       r_eff = r_eff, 
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean)
+        .(mort, deltaYear, plot_id_seq, tree_id_seq)
       ]
   )
 
@@ -337,20 +321,20 @@ mort_dt[
   # posterior of plot_id parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'rPlot_log', par)),
+      filter(grepl(pattern = 'psiPlot', par)),
     file = file.path(
       'output',
-      paste0('posteriorrPlot_', sp, '.RDS')
+      paste0('posteriorpsiPlot_', sp, '.RDS')
     )
   )
 
   # posterior of tree_id parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'rTree_log', par)),
+      filter(grepl(pattern = 'psiTree', par)),
     file = file.path(
       'output',
-      paste0('posteriorrTree_', sp, '.RDS')
+      paste0('posteriorpsiTree_', sp, '.RDS')
     )
   )
 
@@ -365,7 +349,7 @@ mort_dt[
 
   # save train and validate data
   saveRDS(
-    mort_dt[, .(tree_id, tree_id_seq, plot_id_seq, year_measured, sampled)],
+    mort_dt[, .(tree_id, tree_id_seq, plot_id_seq, year0, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
