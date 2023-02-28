@@ -2,8 +2,13 @@
 spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
         '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
         '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
-        '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
-        '183319PINBAN']
+        '19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+        '183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
+        '22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
+        '32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
+        '32929FRAPEN', '24799PRUPEN', '19049ULMAME', '26879PROGLA',
+        '19511OSTVIR', 'NACARALB', '27821NYSSYL'
+]
 # Which vital rates to run
 vitalRates: ["recruit"]
 # Source of data (vector must much the same as `vitalRates`)
@@ -13,7 +18,7 @@ maxIter: 4000
 # Number of cores and chains
 nC: 4
 # number of observations to use in the model fit
-sampleSize: NA
+sampleSize: Inf
 # The simulation and folder name
 simName: "rec_m_p_BA_v2"
 # simulations to compare with
