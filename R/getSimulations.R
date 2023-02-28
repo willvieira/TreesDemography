@@ -27,7 +27,7 @@ cat('####### Loading simulations from the server #######\n')
   dataSources <- simInfo$dataSources
   spIds <- simInfo$spIds
 
-  serverDir <- paste0('/', simName, '/output/*')
+  serverDir <- paste0('/scratch/', simName, '/output/*')
   mainDir <- paste0('output/', simName)
 
   myPass <- serverInfo$myPass
