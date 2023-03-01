@@ -15,7 +15,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plotInd"
+simName: "mort_plot"
 # simulations to compare with
 simCompare: []
 
@@ -23,9 +23,6 @@ simCompare: []
 ########## DESCRIPTION  ##########
 ##################################
 
-## mort test 11.0 - new version using cmdstanr
+## mort test 10.0 - new version using cmdstanr
 
 # V10.0 - Intercept only model with random effects on plotID
-
-# V11.0 - Add random effect on individual ID
-

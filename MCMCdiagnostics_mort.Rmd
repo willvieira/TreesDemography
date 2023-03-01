@@ -1,525 +1,453 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v9.0 - random effect plot:year"
+ subtitle: "Test v10.0 - plot random effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
 
 
-## Test if plot:year random effects on baseline longevity improve predictions:
+## Diagnostics for the Von Bertalanffy model
 
-- **sim1**: year random effect on $\psi$
-- **sim2**: plot:year random effect on $\psi$
-
-```{r, echo=F,warning=FALSE}
-suppressPackageStartupMessages(library(rstan))
-suppressPackageStartupMessages(require(RColorBrewer))
-suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(ggpubr))
-suppressPackageStartupMessages(library(ggridges))
-suppressPackageStartupMessages(library(DT))
+```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
 ```
+
+
 ```{r load simulations, echo = F}
 # Load simulation variables
-  simInfo <- yaml::read_yaml('_simulation_info.yml')
+simInfo <- yaml::read_yaml('_simulation_info.yml')
 
-  # species id
-  if(is.null(simInfo$spIds)) {
-    spIds <- readRDS('data/spIds.RDS')
-  }else {
-    spIds <- simInfo$spIds
-  }
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+simulations <- simInfo$simulations
 
-  simName <- simInfo$simName
+# List output files and set vector names to species_id
+posteriorPop_files <- grep(
+  'posteriorPop',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
 
-  simulations <- simInfo$simulations
+posteriorrPlot_files <- grep(
+  'posteriorpsiPlot',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
 
-  # Human readble simName
-  sim1name <- 'year random effect'
-  sim2name <- 'plot:year random effect'
+# posteriorrTree_files <- grep(
+#   'posteriorrTree',
+#   dir(file.path('output', simName), full.names = TRUE),
+#   value = TRUE
+# )
+# names(posteriorrTree_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrTree_files))))
 
-#
+diag_files <- grep(
+  'diagnostics',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 
-
-# Load rStan output and scaleInfo for all species_id
-  # get output name for each species_id
-  simNames = list.files(path = paste('output', simName, sep = '/'), pattern = '.RDS', recursive = TRUE, full.names = TRUE)
-  output = simNames[grep('mortMCMC', simNames)]
-
-  # get name of parameters for each simulation
-  for(sim in simulations)
-  {
-    # get one MCMC file for a specific sim
-    sim_out <- readRDS(grep(sim, output, value = TRUE)[1])
-    assign(paste0('pars_', sim), rownames(summary(sim_out)[[1]]))
-  }
-
-#
-
-###########################################
-# Diagnostics
-###########################################
+trainData_files <- grep(
+  'trainData',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
 ```
 
+```{r load dataset,echo =FALSE}
+trainData <- map2_dfr(
+  trainData_files,
+  names(trainData_files),
+  ~ readRDS(.x)
+)
 
-```{r load all metrics, echo = FALSE}
+mort_dt <- readRDS('data/mort_dt.RDS')
+mort_dt <- mort_dt[species_id %in% spIds]
 
-# data.frames to fill for each simulation and species ID
-Rhat <- data.frame()
-divergentDF <- data.frame()
-mcmcSampleDF <- data.frame()
-samplingDF <- data.frame()
+# merge with train data
+mort_dt[
+  trainData,
+  sampled := i.sampled,
+  on = c('tree_id', 'year0')
+]
 
-for(sim in simulations)
-{
-  for(sp in spIds)
-  {
-    # load simulation
-    sim_sp_output <- readRDS(grep(sim, grep(sp, output, value = TRUE), value = TRUE))
+# add species_id to trainData
+trainData[
+  mort_dt,
+  `:=`(
+    'plot_id' = i.plot_id,
+    'species_id' = i.species_id,
+    'deltaYear' = i.deltaYear,
+    'mort' = i.mort,
+    'dbh0' = i.dbh0,
+    'BA_comp_sp' = i.BA_comp_sp,
+    'BA_comp_intra' = i.BA_comp_intra,
+    'bio_01_mean' = i.bio_01_mean,
+    'bio_12_mean' = i.bio_12_mean
+  ),
+  on = c('tree_id', 'year0')
+]
 
+# summary by plot_id and tree_id
+plot_id_summary <- mort_dt[, 
+    .(
+      latitude = unique(latitude),
+      BA_plot = mean(BA_plot),
+      bio_01_mean = mean(bio_01_mean),
+      bio_12_mean = mean(bio_12_mean)
+    ), 
+    by = plot_id
+  ]
 
-    # Rhat section
-    df <- summary(sim_sp_output)$summary
-    nRow = nrow(df)
-    dfToAdd <- data.frame(
-        sim = sim,
-        sp = sp,
-        pars = rownames(df),
-        Rhat = df[, 'Rhat'],
-        row.names = NULL
-    )
-    Rhat <- rbind(Rhat, dfToAdd)
-
-
-    # Divergent transitions section
-    sampler_params <- get_sampler_params(sim_sp_output, inc_warmup = FALSE)
-    nbDivergent <- sum(
-      unlist(
-        lapply(
-          sampler_params,
-          function(mat)
-            mat[, 'divergent__']
-        )
-      )
-    )
-
-    divergentDF <- rbind(
-      divergentDF,
-      data.frame(
-        sim = sim,
-        sp = sp,
-        nbDivergent = nbDivergent
-      )
-    )
-
-
-    # Sampling section
-    dfToAdd <- gather(as.data.frame(sim_sp_output), key = 'pars')
-    dfToAdd <- subset(dfToAdd, pars %in% grep('psi_pmean', get(paste0('pars_', sim)), value = TRUE, invert = TRUE))
-    dfToAdd$sim <- sim
-    dfToAdd$sp <- sp
-
-    mcmcSampleDF <- rbind(
-      mcmcSampleDF,
-      dfToAdd
-    )
-
-
-    # sampling time
-    sumTime <- rowSums(get_elapsed_time(sim_sp_output))
-
-    samplingDF <- rbind(
-      samplingDF,
-      data.frame(
-        sim = sim,
-        sp = sp,
-        time = sumTime/60/60
-      )
-    )
-  }
-}
-
-# Get the parameters from the random plot_id
-# mcmcsSampleDF_random <- subset(mcmcSampleDF, pars %in% grep('psi_pmean', unique(mcmcSampleDF$pars), value = TRUE))
+tree_id_summary <- mort_dt[, 
+    .(
+      plot_id = unique(plot_id),
+      dbh0 = mean(dbh0, na.rm = TRUE),
+      BA_comp = mean(BA_comp, na.rm = TRUE),
+      bio_01_mean = mean(bio_01_mean, na.rm = TRUE)
+    ), 
+    by = tree_id
+  ]
 ```
 
 # Rhat
 
-```{r, echo = F, fig.height = 6, fig.width = 10}
-  p <- ggplot(data = Rhat, aes(x = sp, y = Rhat)) +
-       geom_boxplot() +
-       coord_flip() +
-       facet_grid(~sim) +
-       theme_classic()
-  print(p)
+```{r rhat, echo = F, fig.height = 7, fig.width = 7}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['rhat']] |>
+      bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = rhat, y = species_id)) +
+  geom_boxplot() +
+  theme_minimal()
 ```
 
 
 
 # Divergent transitions
 
-```{r divergent table, echo = FALSE}
-DT::datatable(divergentDF)
+```{r divergentTransitions, echo = FALSE}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+      bind_cols(species_id = .y) |>
+      mutate(chain = row_number())
+) |>
+pivot_wider(
+  names_from = chain,
+  values_from = num_divergent,
+  names_prefix = 'chain '
+) |>
+DT::datatable()
 ```
 
 
 
-# Density plot of each parameter by species id
+# Posterior distribution of parameters
 
-```{r plot mcmcSample by pars, echo = F, message=FALSE, fig.height = 7, fig.width = 9}
-  parsToPlot <- setdiff(unique(mcmcSampleDF$pars), grep('psi_pmean', unique(mcmcSampleDF$pars), value = TRUE))
-  for(par in parsToPlot)
-  {
-    p <- ggplot(data = subset(mcmcSampleDF, pars == par), aes(value, sp, fill = sim, color = sim)) +
-         geom_density_ridges(alpha = 0.5) +
-         theme_classic() +
-         xlab(par)
-    print(p)
-  }
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
+post <- map2_dfr(
+  posteriorPop_files,
+  names(posteriorPop_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
+)
 
-  # ggplot(data = mcmcSampleDF_random, aes(value, sp)) +
-  #       geom_density_ridges(alpha = 0.5) +
-  #       theme_classic() +
-  #       xlab('Random effect of psi at the population level')
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot(aes(x = value, y = species_id)) +
+        stat_eye() +
+        ggtitle(Par) +
+        xlab('') +
+        theme_minimal()
+  )
+}
 ```
+
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
+parComb <- post |>
+  summarise(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_id) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot(aes_string(x = parComb[1, i], y = parComb[2, i])) + 
+          geom_point() +
+          facet_wrap(~ species_id) +
+          xlab(parComb[1, i]) +
+          ylab(parComb[2, i]) +
+          theme_minimal()
+  )
+}
+```
+
+
+# Plot random effect
+
+```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
+plotEffect_ls <- list()
+# treeEffect_ls <- list()
+for(Sp in spIds)
+{
+    psi_pop <- post |>
+        filter(species_id == Sp & par == 'psi') |>
+        mutate(psi_pop = value) |>
+        select(psi_pop, iter)
+
+    psi_mean <- psi_pop |>
+        summarise(psi_mean = mean(exp(psi_pop))) |>
+        pull(psi_mean)
+
+    dt_toPlot <- readRDS(posteriorrPlot_files[Sp]) |>
+            mutate(plot_id_seq = parse_number(par)) |>
+            left_join(
+              psi_pop
+            ) |>
+            mutate(
+              psiPlot = value,
+              psi_natural = exp(psiPlot + psi_pop)
+            ) |>
+            select(!value) |>
+            left_join(
+              trainData[
+                species_id == Sp & !is.na(plot_id_seq),
+                .(plot_id = unique(plot_id)),
+                by = plot_id_seq
+              ]
+            ) |>
+            left_join(
+              plot_id_summary
+            )
+    
+    # dt_toTree <- readRDS(posteriorrTree_files[Sp]) |>
+    #         mutate(tree_id_seq = parse_number(par)) |>
+    #         left_join(
+    #           psi_pop
+    #         ) |>
+    #         mutate(psi_natural = exp(value + psi_pop)) |>
+    #         left_join(
+    #           trainData[
+    #             species_id == Sp & !is.na(tree_id_seq),
+    #             .(tree_id = unique(tree_id)),
+    #             by = tree_id_seq
+    #           ]
+    #         ) |>
+    #         left_join(
+    #           tree_id_summary
+    #         )
+
+      # save plot effect mean to plot against other variables
+      # in the next code block
+      plotEffect_ls[[Sp]] <- dt_toPlot |>
+          group_by(par) |>
+          mutate(
+            psi_natural_mean = mean(psi_natural),
+            psi_pop = exp(psi_pop)
+          ) |>
+          ungroup() |>
+          filter(iter == 1) |>
+          select(
+            plot_id, plot_id_seq, psi_pop, psi_natural_mean, latitude,
+            BA_plot, bio_01_mean, bio_12_mean
+          )
+
+      # treeEffect_ls[[Sp]] <- dt_toTree |>
+      #     group_by(par) |>
+      #     mutate(
+      #       psi_natural_mean = mean(psi_natural),
+      #       r_pop = exp(r_pop)
+      #     ) |>
+      #     ungroup() |>
+      #     filter(iter == 1) |>
+      #     select(
+      #       tree_id, tree_id_seq, r_pop, psi_natural_mean, dbh, BA_comp, bio_01_mean
+      #     )
+
+      # filter tree_ids within plots with higher number of individuals
+      # plots_toKeep <- dt_toTree |>
+      #     filter(iter == 1) |>
+      #     group_by(plot_id) |>
+      #     summarise(nInd = n()) |>
+      #     arrange(desc(nInd)) |>
+      #     mutate(cumInd = cumsum(nInd)) |>
+      #     filter(cumInd < 500) |>
+      #     pull(plot_id)
+      
+      # dt_toTree <- dt_toTree |>
+      #     filter(plot_id %in% plots_toKeep) |>
+      #     left_join(
+      #       dt_toPlot |>
+      #         select(plot_id, iter, plot_id_seq, rPlot_log)
+      #     ) |>
+      #     arrange(plot_id_seq) |>
+      #     mutate(
+      #       psi_naturalPlotTree = exp(value + r_pop + rPlot_log)
+      #     )
+
+    print(
+    #   ggarrange(
+          dt_toPlot |>
+              filter(plot_id_seq %in% sample(plot_id_seq, 800)) |>
+              mutate(plot_id = fct_reorder(plot_id, latitude)) |>
+              ggplot(aes(y = plot_id, x = psi_natural, color = bio_01_mean)) +
+                stat_pointinterval(alpha = .7, size = .1) +
+                geom_vline(
+                  xintercept = psi_mean, color = 'red', alpha = .8
+                ) +
+                xlab('Longevity (years)') +
+                ylab('plot_id (ordered by latitude)') +
+                theme(
+                  legend.position = 'top',
+                  axis.text.y = element_blank()
+                ) +
+                labs(subtitle = Sp)#,
+    #       dt_toTree |>
+    #           ggplot(aes(y = tree_id, x = psi_naturalPlotTree, color = plot_id)) +
+    #             stat_pointinterval(alpha = .7, size = .1) +
+    #             geom_vline(
+    #               xintercept = psi_mean, color = 'red', alpha = .8
+    #             ) +
+    #             xlab('Longetivity') +
+    #             ylab('tree_id (color grouped by plot_id)') +
+    #             theme(
+    #               legend.position = 'none',
+    #               axis.text.y = element_blank()
+    #             ) +
+    #             labs(subtitle = ''),
+    #       ncol = 2
+    #   )
+    )
+}
+
+# save plot effect ot be used against future models
+plotEffect <- plotEffect_ls |>
+  bind_rows(.id = 'species_id')
+
+plotEffect |>
+  select(species_id, plot_id, psi_natural_mean) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanPlotEffect_rReal.RDS'
+    )
+  )
+
+# treeEffect <- treeEffect_ls |>
+#   bind_rows(.id = 'species_id')
+
+# treeEffect |>
+#   select(species_id, tree_id, r_pop, psi_natural_mean) |>
+#   saveRDS(
+#     file.path(
+#         'output', 
+#         simName,
+#         'meanTreeEffect_rReal.RDS'
+#     )
+#   )
+```
+
+
+# Changes in plot random effect from past models
+
+Compare plot random effect with last model to check how variance is changing. 
+
+```{r compare_rReal, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 8, fig.width = 12}
+sim_to_compare <- simInfo$simCompare
+
+# for(Sim in sim_to_compare)
+# {
+#   sim_toLoad <- c(Sim, simName)
+    
+#   print(
+#     map_dfr(
+#       sim_toLoad,
+#       ~ readRDS(file.path('output', .x, 'meanPlotEffect_rReal.RDS')) |>
+#         bind_cols(sim = .x)
+#     ) |>
+#     pivot_wider(
+#       names_from = sim,
+#       values_from = psi_natural_mean
+#     ) |>
+#     ggplot(aes(x = !!sym(sim_toLoad[1]), y = !!sym(sim_toLoad[2]))) +
+#       geom_point(size = 0.8, alpha = .7) +
+#       geom_abline(intercept = 0, slope = 1) +
+#       #tune::coord_obs_pred() +
+#       facet_wrap(~species_id, scales = 'free') +
+#       theme_minimal()
+#   )
+# }
+```
+
 
 # Data distribution
 
-```{r organize data, echo = FALSE}
-mort_dt <- readRDS('data/quebec/mort_dt.RDS')
-mort_dt <- mort_dt[sp_code2 %in% spIds]
-mort <- mort_dt[, .(sp_code2, mort, dbh0, value5_bio60_01, value5_bio60_12, BA)]
+```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 10, fig.width = 8}
+# split between train and everything else (merge validate with rest of data)
+mort_dt[, sampled2 := sampled]
+mort_dt[is.na(sampled), sampled2 := 'validation']
 
-# transform dt
-mort <- tidyr::gather(data = mort,
-            mort, dbh0, value5_bio60_01, value5_bio60_12, BA,
-            key = 'var', value = 'value')
-```
-
-```{r plot data distribution, echo = FALSE, message=FALSE, fig.height = 7, fig.width = 10}
-p <- ggplot(data = mort, aes(value, sp_code2)) +
-      geom_density_ridges_gradient() +
-      facet_grid(~var, scales = 'free_x') + #,
-      #          labeller = labeller(sim = setNames(c(sim1name,
-      #                              sim2name),
-      #                              c('sim1', 'sim2')))) +
-      theme_classic()
-print(p)
-```
-
-
-# Size, temperature, precipitation and competition effect
-
-## Survival functions
-
-```{r function effects, echo = F, fig.height = 11, fig.width = 9}
-# Plot of size, temperature, precipitation and competition effect
-
-  # define functions of the model
-    # size effect
-    sizeEffect = function(x, DBHopt, DBHvar) {
-      lgPart <- (log(x/DBHopt)/DBHvar)^2
-      return( exp(-lgPart))
-    }
-
-    # temperature effect
-    tempEffect = function(xtemp, T_opt, sigmaT_opt) {
-      return(exp(-0.5*(xtemp - T_opt)^2/sigmaT_opt^2))
-    }
-
-    # precipitation effect
-    precEffect = function(xprec, P_opt, sigmaP_opt) {
-      return(exp(-0.5*(xprec - P_opt)^2/sigmaP_opt^2))
-    }
-
-    # competition effect
-    compEffect = function(xba, param, sim) {
-        return(param[param$pars == 'Lo', 4] + ((1 - param[param$pars == 'Lo', 4]) / (1 + exp(0.25 * (xba - param[param$pars == 'Mid', 4])))))
-    }
-
-  #
-
-  ## PLOT ##
-
-  # define x axis
-  sizex = seq(91, 700, 0.5)
-  tempx = seq(-8, 25)
-  precx = seq(500, 1700)
-  BAx = seq(0, 80, 0.1)
-
-  # species specfic colours
-  spCols <- setNames(rev(RColorBrewer::brewer.pal(length(spIds), "Set3")), spIds)
-
-  # get sample mean
-  mcmc_mean <- mcmcSampleDF %>%
-    group_by(sp, sim, pars) %>%
-    summarise(mean_par = mean(value)) %>%
-    as.data.frame()
-
-  par(mfrow = c(4, length(simulations)), xaxs = "i", las = 1, mar = c(3, 1, 1.5, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
-
-  # plot size effect
-  for(Sim in simulations) {
-    for(Sp in spIds) {
-      # get parameters
-      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
-
-      # plot
-      if(Sp == spIds[1]) plot(sizex, sizeEffect(sizex, out[out$pars == 'DBHopt', 4], out[out$pars == 'DBHvar', 4]),
-                  type = 'l', ylim = c(0, 1), xlab = 'Size (mm)', ylab = 'Size effect',
-                  col = spCols[Sp],
-                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
-      if(Sim == 'sim2') axis(2, labels = FALSE)
-      points(sizex, sizeEffect(sizex, out[out$pars == 'DBHopt', 4], out[out$pars == 'DBHvar', 4]), type = 'l', col = spCols[Sp])
-    }
-    mtext(ifelse(Sim == 'sim1', sim1name, ifelse(Sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
-    if(Sim == 'sim1') mtext("Size effect", 2, las = 0, cex = .8, line = 1.9)
-  }
-
-  # plot temp effect
-  for(Sim in simulations) {
-    for(Sp in spIds) {
-      # get parameters
-      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
-
-      topt <- out[out$pars == 'T_opt', 4]
-      sigTopt <- out[out$pars == 'sigmaT_opt', 4]
-
-      if(Sp == spIds[1]) plot(tempx, tempEffect(tempx, topt, sigTopt), type = 'l',
-                  ylim = c(0, 1), xlab = 'Temperature (°C)', ylab = 'Temperature effect',
-                  col = spCols[Sp],
-                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
-      if(Sim == 'sim2') axis(2, labels = FALSE)
-      points(tempx, tempEffect(tempx, topt, sigTopt), type = 'l', col = spCols[Sp])
-    }
-    if(Sim == 'sim1') mtext("Temperature effect", 2, las = 0, cex = .8, line = 1.9)
-  }
-
-  # plot precipitation effect
-  for(Sim in simulations) {
-    for(Sp in spIds) {
-      # get parameters
-      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
-
-      popt <- out[out$pars == 'P_opt', 4]
-      sigPopt <- out[out$pars == 'sigmaP_opt', 4]
-
-      if(Sp == spIds[1]) plot(precx, precEffect(precx, popt, sigPopt), type = 'l',
-                  ylim = c(0, 1), xlab = 'Precipiation (mm)', ylab = 'Precipiation effect',
-                  col = spCols[Sp],
-                  yaxt = ifelse(Sim == 'sim1', "s", "n"))
-      if(Sim == 'sim2') axis(2, labels = FALSE)
-      points(precx, precEffect(precx, popt, sigPopt), type = 'l', col = spCols[Sp])
-    }
-    if(Sim == 'sim1') mtext("Precipiation effect", 2, las = 0, cex = .8, line = 1.9)
-  }
-
-  # plot basal area effect
-  for(Sim in simulations) {
-    for(Sp in spIds) {
-      # get parameters
-      out <- subset(mcmc_mean, sp == Sp & sim == Sim)
-
-      if(Sp == spIds[1]) plot(BAx, compEffect(BAx, param = out, sim = sim),
-      ylim = c(0, 1), type = 'l', xlab = 'Basal area (m2/ha)', ylab = 'Competition effect',
-      col = spCols[Sp],
-      yaxt = ifelse(Sim == 'sim1', "s", "n"))
-      if(Sim == 'sim2') axis(2, labels = FALSE)
-
-      points(BAx, compEffect(BAx, param = out, sim = Sim), type = 'l', col = spCols[Sp])
-    }
-
-    if(Sim == 'sim1') mtext("Competition effect", 2, las = 0, cex = .8, line = 1.9)
-  }
-  legend('topleft', legend = spIds, col = spCols, lty = 1, lwd = 1.5, bty = 'n', cex = 0.7)
+mort_dt[, .(species_id, dbh0, deltaYear, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean, sampled2)] |>
+  mutate(sample = sampled2) |>
+  pivot_longer(
+    cols = c(dbh0, deltaYear, BA_comp_sp, BA_comp_intra, bio_01_mean, bio_12_mean),
+    names_to = 'var'
+  ) |>
+  ggplot(aes(x = value, y = species_id, fill = sample)) +
+    geom_density_ridges(alpha = 0.7, color = NA) +
+    facet_wrap(~var, scales = 'free_x') +
+    xlab('') +
+    theme_minimal() +
+    theme(legend.position = 'top')
 ```
 
 
 
 # Predictions
 
-```{r prediction functions, echo = F,fig.width = 9,message = FALSE}
-# Plot predictions
-  # define model
+## Longevitity `exp(psi)`
 
-  mort_model <- function(param, sim, newdata) {
-
-    lgPart <- (log(newdata$D/param["DBHopt"])/param["DBHvar"])^2
-
-    mort <- 1 / (1 + (param["psi"] *
-                ((param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.25 * (newdata$CD - param["Mid"])))))) *
-                exp(-0.5*(newdata$TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
-                exp(-0.5*(newdata$PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-                exp(-lgPart)))
-    mort_df <- cbind(mort, newdata)
-  }
-
-  # Function in which you give a rstan output (species_id) and it returns the three plots
-  plot_prediction <- function(Sim, Sp, model, data) {
-
-    # Prepare data
-    newdataT <- data[['newdataT']]
-    newdataP <- data[['newdataP']]
-    newdataD <- data[['newdataD']]
-    newdataC <- data[['newdataC']]
-
-    # Prepare parameters
-    fit <- subset(mcmcSampleDF, sim == Sim & sp == Sp) %>%
-      group_by(pars) %>%
-      summarise(
-        mean = mean(value),
-        ci10 = quantile(value, 0.025),
-        ci90 = quantile(value, 0.975)
-      )
-    
-    # define parameters
-    param_mean <- setNames(fit$mean, fit$pars)
-    param_ci10 <- setNames(fit$ci10, fit$pars)
-    param_ci90 <- setNames(fit$ci90, fit$pars)
-
-    # get predictions
-    mort_meanT <- mort_model(param = param_mean, sim = Sim, newdata = newdataT)
-    mort_ci10T <- mort_model(param = param_ci10, sim = Sim, newdata = newdataT)
-    mort_ci90T <- mort_model(param = param_ci90, sim = Sim, newdata = newdataT)
-
-    mort_meanP <- mort_model(param = param_mean, sim = Sim, newdata = newdataP)
-    mort_ci10P <- mort_model(param = param_ci10, sim = Sim, newdata = newdataP)
-    mort_ci90P <- mort_model(param = param_ci90, sim = Sim, newdata = newdataP)
-
-    mort_meanD <- mort_model(param = param_mean, sim = Sim, newdata = newdataD)
-    mort_ci10D <- mort_model(param = param_ci10, sim = Sim, newdata = newdataD)
-    mort_ci90D <- mort_model(param = param_ci90, sim = Sim, newdata = newdataD)
-
-    mort_meanC <- mort_model(param = param_mean, sim = Sim, newdata = newdataC)
-    mort_ci10C <- mort_model(param = param_ci10, sim = Sim, newdata = newdataC)
-    mort_ci90C <- mort_model(param = param_ci90, sim = Sim, newdata = newdataC)
-
-
-    cd2plot <- unique(newdataT$CD)
-    colcd <- rev(RColorBrewer::brewer.pal(length(cd2plot) + 1, "PuBuGn"))
-
-    if(sim == 'sim1')
-      par(mfcol = c(4, length(simulations)), xaxs="i", las = 1, mar = c(3, 1, 3, 1.5), oma = c(1,3.5,2,.2), mgp = c(1.5, 0.3, 0), tck = -.008, cex.lab = 1.2, cex.axis = 1.2)
-
-    # Mortality vs temperature
-    plot(mort ~ TP, mort_ci10T, type = "n", ylim = c(0, 1),
-         xlab = "Temperature (°C)", ylab = "", cex.lab = 1.2, yaxt = ifelse(sim == 'sim1', "s", "n"))
-    if(Sim == 'sim2') axis(2,labels=F)
-
-    for(cd in cd2plot) {
-      mu <- subset(mort_meanT, CD == cd)
-      ci10 <- subset(mort_ci10T, CD == cd)
-      ci90 <- subset(mort_ci90T, CD == cd)
-      mycol <- colcd[cd2plot == cd]
-
-      lines(mort ~ TP, mu, cex=.5, pch=19, col = mycol)
-      polygon(c(mu$TP, rev(mu$TP)),
-              c(ci10$mort, rev(ci90$mort)),
-              col = alpha(mycol, 0.5), border = NA)
-    }
-    legend("topleft", legend = cd2plot, title = ifelse(Sim == 'sim1', "Canopy distance", "Basal area"),
-            fill = colcd[1:3], bty = "n", border = "transparent")
-
-    # data range
-    abline(v = mort_dt[sp_code2 == sp, range(value5_bio60_01)], col = 'grey', lty = 2)
-
-     mtext(ifelse(Sim == 'sim1', sim1name, ifelse(Sim == 'sim2', sim2name, sim3name)), side = 3, line = 0)
-     mtext(Sp, side = 3, outer = TRUE, cex = 1, line = -1.8)
-
-    # Mortality vs precipitation
-    plot(mort ~ PP, mort_ci10P, type = "n", ylim = c(0, 1),
-         xlab = "Precipiation (mm)", ylab = " ", yaxt = ifelse(sim == 'Sim1', "s", "n"), cex.lab = 1.2)
-    axis(2, labels = F)
-    for(cd in cd2plot) {
-      mu <- subset(mort_meanP, CD == cd)
-      ci10 <- subset(mort_ci10P, CD == cd)
-      ci90 <- subset(mort_ci90P, CD == cd)
-      mycol <- colcd[cd2plot == cd]
-
-      lines(mort ~ PP, mu, cex = .5, pch = 19, col = mycol)
-      polygon(c(mu$PP, rev(mu$PP)),
-              c(ci10$mort, rev(ci90$mort)),
-              col = alpha(mycol, 0.5), border = NA)
-    }
-    mtext("P(Mortality)/year", 2, outer = T, las = 0, cex = .8, line = 1.5)
-
-    # data range
-    abline(v = mort_dt[sp_code2 == Sp, range(value5_bio60_12)], col = 'grey', lty = 2)
-    
-    # Mortality vs size
-    plot(mort ~ D, mort_ci10D, type = "n", ylim = c(0, 1),
-         xlab = "Size (mm)", ylab = "", yaxt = ifelse(Sim == 'sim1', "s", "n"), cex.lab = 1.2)
-    axis(2, labels = F)
-    for(cd in cd2plot) {
-      mu <- subset(mort_meanD, CD == cd)
-      ci10 <- subset(mort_ci10D, CD == cd)
-      ci90 <- subset(mort_ci90D, CD == cd)
-      mycol <- colcd[cd2plot == cd]
-
-      lines(mort ~ D, mu, cex = .5, pch = 19, col = mycol)
-      polygon(c(mu$D, rev(mu$D)),
-              c(ci10$mort, rev(ci90$mort)),
-              col = alpha(mycol, 0.5), border = NA)
-    }
-
-    # data range
-    abline(v = mort_dt[sp_code2 == Sp, range(dbh0)], col = 'grey', lty = 2)
-
-    # Mortality vs competition
-    plot(mort ~ CD, mort_ci10C, type = "n", ylim = c(0, 1),
-         xlab = ifelse(Sim == 'sim1', "Canopy distance from S* (m)", "Basal area (m²/ha)"), ylab = "", yaxt = ifelse(sim == 'sim1', "s", "n"), cex.lab = 1.2)
-    axis(2, labels = F)
-    lines(mort ~ CD, mort_meanC, cex = .5, pch = 19, col = mycol)
-      polygon(c(mort_meanC$CD, rev(mort_meanC$CD)),
-              c(mort_ci10C$mort, rev(mort_ci90C$mort)),
-              col = alpha(mycol, 0.5), border = NA)
-
-    # add data range
-    if(Sim == 'sim1')
-    {
-      abline(v = mort_dt[sp_code2 == Sp, range(canopyDistance)], col = 'grey', lty = 2)
-    }else{
-      abline(v = mort_dt[sp_code2 == Sp, range(BA)], col = 'grey', lty = 2)
-    }  
-  }
-  ```
-
-  ```{r plot predictions,echo=FALSE,fig.height = 12, fig.width = 8}
-  # plot all species
-  for(sp in spIds) {
-    for(sim in simulations) {
-      # Temp
-      newdataT <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                        TP = seq(-10, 25, length.out = 300),
-                                        PP = 1000,
-                                        D = 200))
-      # Prec
-      newdataP <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                        TP = 4,
-                                        PP = seq(250, 1800, length.out = 300),
-                                        D = 200))
-      # Size
-      newdataD <- data.frame(expand.grid(CD = c(5, 20, 40),
-                                        TP = 4,
-                                        PP = 1000,
-                                        D = seq(0, 1200, length.out = 300)))
-      # Canopy distance
-      newdataC <- data.frame(expand.grid(CD = seq(0, 80, length.out = 300),
-                                        TP = 4,
-                                        PP = 1000,
-                                        D = 200))
-
-      plot_prediction(sim, sp, mort_model,
-        data = list(newdataT = newdataT, newdataP = newdataP, newdataD = newdataD, newdataC = newdataC))
-    }
-  }
-  #
-#
+```{r sizePred,echo=FALSE,fig.height = 6.5, fig.width = 7}
+post |>
+  filter(par == 'psi') |>
+  mutate(long = exp(value)) |>
+  ggplot(aes(x = long, y = species_id)) +
+    ggridges::geom_density_ridges2() +
+    theme_minimal() +
+    xlab('Longevity (years)')
 ```
 
-
-# Out-of-bag accuracy
+## Accuracy
 
 Using four different metrics:
 
@@ -528,213 +456,561 @@ Using four different metrics:
 - **Accuracy** is the ratio of number of correct predictions to the total of predictions
 - **Accuracy balanced** considers unbalanced accuracy predictions of positive and negative events (sensitivity and specificity)
 
-```{r organize data by sp for OOB predictions,echo=FALSE,fig.height = 12, fig.width = 12}
-  # create a list of data.table objects for each spIds
-  # For each data.table, we will get all rows that were not used in the fitting stan model
+```{r plot_accur, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
+# list accuracy db for each species
+accur_ls <- list()
 
-  oob_list <- list()
-  for(sp in spIds)
-  {
-    # sp specific db
-    db <- mort_dt[sp_code2 == sp]
+for(Sp in spIds)
+{
+  train_sp <- trainData[species_id == Sp & sampled == 'training']
 
-    # load plot_id references and update plot_id to ID_PE
-    toSub_sim1 <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim1.RDS'))
-    db[toSub_sim1, on = .(year0), year_sq := i.year_sq]
-    toSub_sim2 <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/toSub_sim2.RDS'))
-    db[toSub_sim2, on = .(year0, ID_PE), plotYear := i.plotYear]
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 300 iterations of the 8000 to speed calculation as the final
+  # result is quite similar to use the 8000 iteractions
+  train_sp[, obsID := .I]
+  train_sp <- train_sp[rep(obsID, each = 300)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 300)
+  train_sp[, iter := sampledIter, by = obsID]
 
-    # load rows used for stan fit
-    sampledIndices <- readRDS(paste0('output/', simName, '/', sp, '/sampleInfo/sampledIndices.RDS'))
-
-    # get validation dataset
-    db <- db[!sampledIndices, ]
-
-    oob_list[[sp]] <- db[!(is.na(year_sq) | is.na(plotYear)), ]
-  }
-```
-
-```{r calculate OOB predictions and confusion matrix, echo=FALSE,fig.height = 12, fig.width = 12}
-  mort_model2 <- function(param, sim, year, plotYear, D, TP, PP, C)
-  {
-    if(sim == 'sim1') {
-      psi_pop <- param["psi"] + param[paste0("psi_pmean[", year, "]")]
-    }else{
-      psi_pop <- param["psi"] + param[paste0("psi_pmean[", plotYear, "]")]
-    }
-
-
-    lgPart <- (log(D/param["DBHopt"])/param["DBHvar"])^2
-
-    mort <- 1 / (1 + (psi_pop *
-                ((param["Lo"] + ((1 - param["Lo"]) / (1 + exp(0.25 * (C - param["Mid"])))))) *
-                exp(-0.5*(TP - param["T_opt"])^2/param["sigmaT_opt"]^2) *
-                exp(-0.5*(PP - param["P_opt"])^2/param["sigmaP_opt"]^2) *
-                exp(-lgPart)))
-    
-    return( mort )
-
-  }
-
-  acc_dt <- data.table(sp = character(),
-                       sim = character(),
-                       Acc = numeric(),
-                       Sensitivity = numeric(),
-                       Specificity = numeric(),
-                       AccCorrected = numeric())
-  sampleN <- 300
-  count <- 0; totalN <- sampleN * length(sim) * length(spIds)
-
-  for(sp in spIds)
-  {
-    db <- oob_list[[sp]]
-
-    for(sim in simulations)
-    {
-      # get params
-      fit <- readRDS(grep(sim, grep(sp, output, value = TRUE), value = TRUE))
-      posterior <- rstan::extract(fit)
-    
-      # First sample for the random effect parameters and rename them
-      psi_pars <- lapply(lapply(seq_len(ncol(posterior[['psi_pmean']])), function(i) posterior[['psi_pmean']][, i]), sample, sampleN)
-      names(psi_pars) <- paste0('psi_pmean[', 1:length(psi_pars), ']')
-      # sample the remaining parameters and merge with pdg_ random effect
-      params <- lapply(posterior[-which(names(posterior) == 'psi_pmean')], sample, sampleN)
-      params <- append(params, psi_pars)
-      
-      Acc <- Sensitivity <- Specificity <- AccCorrected <- numeric(sampleN)
-      for(i in 1:sampleN)
-      {
-        pars <- unlist(lapply(params, `[[`, i))
-        
-        # get mortality
-        db[, mortByYear := 1 - mort_model2(param = pars, sim = sim, year = year_sq, plotYear = plotYear, D = dbh0, TP = value5_bio60_01, PP = value5_bio60_12, C = BA)]
-        db[, mort_det := 1 - (mortByYear^deltaYear)]
-        db[, mort_pred := LaplacesDemon::rbern(dbh0, mort_det)]
-
-        TP <- db[mort == 1 & mort_pred == 1, .N]
-        TN <- db[mort == 0 & mort_pred == 0, .N]
-        FN <- db[mort == 0 & mort_pred == 1, .N]
-        FP <- db[mort == 1 & mort_pred == 0, .N]
-
-        Acc[i] <- (TP + TN)/(TP + TN + FP + FN)
-        Sensitivity[i] <- TP/(TP + FN)
-        Specificity[i] <- TN/(FP + TN)
-        AccCorrected[i] <- (Sensitivity[i] + Specificity[i])/2
-      }      
-      acc_dt <- rbind(acc_dt, data.table(sp = rep(sp, sampleN), sim = rep(sim, sampleN), Acc = Acc, Sensitivity = Sensitivity, Specificity = Specificity, AccCorrected = AccCorrected))
-    }
-    oob_list[[sp]] <- db
-  }
-
-  rm(oob_list, db, sampledIndices)
-
-```
-
-```{r plot confusion matrix,echo=FALSE,message=FALSE,warning=FALSE,fig.height = 12, fig.width = 8}
-
-  # load random forest output
-  rf_dt <- readRDS('data/quebec/randomForest_mort.RDS')
-  rf_dt <- rf_dt[rev(spIds), on = "sp"] # reorder to match spIds order
-  rf_dt$RandomForest <- plyr::revalue(rf_dt$model, c('1' = 'sim1', '2' = 'sim2', 'Full' = 'sim_full'))
-
-  p1 <- ggplot(acc_dt) +
-          geom_density_ridges(aes(Acc, sp, colour = sim, fill = sim), alpha = 0.4) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "red", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "#4aaab0", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = acc, xend = acc, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "black", alpha = 0.6) +
-          xlab('Accuracy (%)') +
-          xlim(0.65, .91) +
-          theme(legend.position = 'none') +
-          theme_classic() +
-          scale_y_discrete(limits = spIds)
-
-  p2 <- ggplot(acc_dt) +
-          geom_density_ridges(aes(AccCorrected, sp, colour = sim, fill = sim), alpha = 0.4) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "red", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "#4aaab0", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = accCorrected, xend = accCorrected, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "black", alpha = 0.6) +
-          xlab('Accuracy corrected (%)') +
-          theme_classic() +
-          scale_y_discrete(limits = spIds)
+  # merge global parameters
+  train_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        setDT(),
+    `:=`(
+      psi = i.psi,
+      sigma_plot = i.sigma_plot
+    ),
+    on = 'iter'
+  ]
   
-  p3 <- ggplot(acc_dt) +
-          geom_density_ridges(aes(Sensitivity, sp, colour = sim, fill = sim), alpha = 0.4) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "red", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "#4aaab0", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = sensitivity, xend = sensitivity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "black", alpha = 0.6) +
-          theme(legend.position = 'none') +
-          theme_classic() +
-          scale_y_discrete(limits = spIds)
+  # merge plot_id parameters if plot is present in validation data
+  train_sp[
+    readRDS(posteriorrPlot_files[Sp]) |>
+      mutate(
+        plot_id_seq = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiPlot := i.value,
+    on = c('iter', 'plot_id_seq')
+  ]
 
-  p4 <- ggplot(acc_dt) +
-          geom_density_ridges(aes(Specificity, sp, colour = sim, fill = sim), alpha = 0.4) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim1'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "red", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim2'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "#4aaab0", alpha = 0.6) +
-          geom_segment(data = subset(rf_dt, RandomForest == 'sim_full'), aes(linetype = `RandomForest`, x = specificity, xend = specificity, y = length(sp):1,
-                                  yend = (length(sp):1) + .8),
-            color = "black", alpha = 0.6) +
-          theme_classic() +
-          scale_y_discrete(limits = spIds)
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  train_sp[, iter2 := 1:.N, by = obsID]
 
-  ggpubr::ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2, common.legend = TRUE, legend = 'bottom')
+  # compute longevity logit
+  train_sp[,
+    longev_log := 1/(1 + exp(
+        -psi + 
+        psiPlot
+      )
+    )
+  ]
 
+  # compute mortality rate in function of time
+  train_sp[,
+    mortality_prob := 1 - (longev_log^deltaYear)
+  ]
+
+  # predict mortality event
+  train_sp[,
+    mort_pred := rbinom(.N, size = 1, mortality_prob)
+  ]
+
+  # Compute model accuracy
+  accur_sp <- train_sp |>
+    group_by(iter2) |>
+    summarise(
+      TP = sum(mort == 1 & mort_pred == 1),
+      TN = sum(mort == 0 & mort_pred == 0),
+      FN = sum(mort == 0 & mort_pred == 1),
+      FP = sum(mort == 1 & mort_pred == 0)
+    ) |>
+    mutate(
+      Acc = (TP + TN)/(TP + TN + FP + FN),
+      Sensitivity = TP/(TP + FN),
+      Specificity = TN/(FP + TN),
+      AccCorrected = (Sensitivity + Specificity)/2
+    ) |>
+    bind_cols(species_id = Sp)
+  
+  # save to list
+  accur_ls[[Sp]] <- accur_sp
+
+}
+
+# save accuracy to be used for model comparison
+accur_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'accuracy.RDS'))
+
+accur_ls |>
+  bind_rows() |>
+  select(species_id, iter2, Acc, Sensitivity, Specificity, AccCorrected) |>
+  pivot_longer(
+    cols = c(Acc, Sensitivity, Specificity, AccCorrected)
+  ) |>
+  mutate(
+    name = recode_factor(
+      name,
+      Acc = 'Accuracy',
+      AccCorrected = 'Accuracy corrected',
+      Sensitivity = 'Sensitivity',
+      Specificity = 'Specificity'
+    )
+  ) |>
+  ggplot(aes(x = value, y = species_id)) +
+    ggridges::geom_density_ridges2() +
+    facet_wrap(~ name, scales = 'free_x') +
+    theme_classic() +
+    xlab('') + ylab('')
 ```
 
-```{r plot sensitivity vs specificity,echo=FALSE,message=FALSE,warning=FALSE,fig.height = 6, fig.width = 8}
-  # Summarize data
-  acc_summary <- acc_dt %>%
-                 dplyr::group_by(sp, sim) %>%
-                 dplyr::summarise(mean_sens = mean(Sensitivity),
-                           sd_sens = sd(Sensitivity),
-                           mean_spec = mean(Specificity),
-                           sd_spec = sd(Specificity))
+## Mortality in function of Basal area and climate variables
 
-  ggplot(acc_summary, aes(x = mean_sens, y = mean_spec)) +
-    geom_pointrange(aes(xmin = mean_sens-sd_sens, xmax = mean_sens+sd_sens), shape = 20, size = 0.3) +
-    geom_pointrange(aes(ymin = mean_spec-sd_spec, ymax = mean_spec+sd_spec), shape = 20, size = 0.3) +
-    xlab('Sensitivity (%)') +
-    ylab('Specificity (%)') +
-    geom_text(aes(label = sp), hjust = -.2, vjust = -.5, size = 2) +
-    facet_grid(~sim)
+Not yet...
+
+```{r BApred,echo=FALSE, warning=FALSE, message=FALSE,fig.height = 15, fig.width = 10}
+# # get only training data
+# train <- trainData[sampled == 'training']
+
+# # compute growth
+# train[, growth := (dbh - dbh0)/deltaYear]
+
+# # remove NA
+# train <- train[deltaYear > 0]
+
+# # prepare parameters
+# post_mean <- post |>
+#   filter(
+#     par %in% c('r', 'Lmax', 'Beta', 'theta', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec')
+#   ) |>
+#   group_by(species_id, par) |>
+#   summarise(value_mean = mean(value)) |>
+#   pivot_wider(
+#     names_from = par,
+#     values_from = value_mean
+#   ) |>
+#   setDT()
+
+# # plot per species_id
+# for(Sp in spIds) 
+# {
+#   train_sp <- train[species_id == Sp]
+
+#   # sample few tree_ids that have at least 2 measures
+#   tree_ids <- train_sp[, .N, by = tree_id][N > 2, sample(tree_id, 1000)]
+#   train_sp <- train_sp[tree_id %in% tree_ids]
+
+#   # add parameters
+#   train_sp[,
+#     c('Beta', 'theta', 'Lmax', 'optimal_temp', 'tau_temp', 'optimal_prec', 'tau_prec') := post_mean[
+#                       species_id == Sp,
+#                       .(Beta, theta, Lmax, optimal_temp, tau_temp, optimal_prec, tau_prec)
+#                     ]
+#   ]
+  
+#   train_sp[
+#     plotEffect |>
+#       filter(species_id == Sp) |>
+#       select(-species_id) |>
+#       setDT(),
+#     r_plot := i.psi_natural_mean,
+#     on = 'plot_id'
+#   ]
+
+#   train_sp[
+#     treeEffect |>
+#       filter(species_id == Sp) |>
+#       select(-species_id) |>
+#       setDT(),
+#     `:=`(
+#       r_tree = i.psi_natural_mean,
+#       r_pop = i.r_pop
+#     ),
+#     on = 'tree_id'
+#   ]
+
+#   # compute BA and temp effect on r
+#   train_sp[,
+#     r_plotBaTemp := exp(
+#       log(r_plot) +
+#       log(r_tree) -
+#       log(r_pop) +
+#       Beta * (BA_comp_sp + theta * BA_comp_intra) +
+#       -tau_temp * (bio_01_mean - optimal_temp)^2 +
+#       -tau_prec * (bio_12_mean - optimal_prec)^2
+#     )
+#   ]
+  
+#   # predict size
+#   train_sp[,
+#     pred_size := dbh0 *
+#                 exp(-r_plotBaTemp * deltaYear) +
+#                 Lmax * (1 -exp(-r_plotBaTemp * deltaYear))
+#   ]
+
+#   # compute growth from predicted size
+#   train_sp[, pred_growth := (pred_size - dbh0)/deltaYear]
+
+#   # compute observed and predicted relative growth
+#   train_sp[, obs_relativeGrowth := growth/dbh0]
+#   train_sp[, pred_relativeGrowth := pred_growth/dbh0]
+
+#   # define ylim to remove outliers
+#   yLim <- train_sp[, quantile(growth, probs = c(0.001, .999))]
+#   yLim_rel <- train_sp[, quantile(obs_relativeGrowth, probs = c(0.001, 0.999))]
+
+#   # species parameters
+#   post_sp <- post_mean |> 
+#         filter(species_id == Sp)
+
+#   # define intercept of effect functions
+#   # Formula: Lmax  * (1 - r)
+#   Int <- post_sp$Lmax * (1 - exp(-exp(post_sp$r)))
+
+#   # update ylim if Intercept if larger than max limit
+#   yLim[2] = max(c(Int, yLim[2]))
+#   yLim_rel[2] = max(c(Int/train_sp[, min(dbh0, na.rm = T)], yLim_rel[2]))
+
+#   p1 <- train_sp |>
+#       filter(!is.na(pred_growth)) |>
+#       select(dbh0, obs_relativeGrowth, pred_relativeGrowth) |>
+#       pivot_longer(
+#         cols = contains('growth'),
+#         names_to = 'sim'
+#       ) |>
+#       ggplot(aes(x = dbh0, y = value, color = sim)) +
+#         geom_point(alpha = .5, size = .5) +
+#         geom_smooth(method = 'gam') +
+#         xlab('Size (t0)') +
+#         ylab('Relative growth') +
+#         labs(subtitle = Sp) +
+#         theme_minimal() + 
+#         ylim(yLim_rel) + 
+#         geom_function(
+#           fun = function(x)
+#             (Int + exp(-exp(post_sp$r)) * x - x)/x,
+#           color = 1,
+#           linetype = 'dashed'
+#         )
+
+#   # define xlim fro BA
+#   xLim <- train_sp[, range(c(BA_comp_sp, BA_comp_intra))]
+  
+#   p2 <- train_sp |>
+#       filter(!is.na(pred_growth)) |>
+#       mutate(obs_growth = growth) |>
+#       select(BA_comp_sp, obs_growth, pred_growth) |>
+#       pivot_longer(
+#         cols = contains('growth'),
+#         names_to = 'sim'
+#       ) |>
+#       ggplot(aes(x = BA_comp_sp, y = value, color = sim)) +
+#         geom_point(alpha = .5, size = .5) +
+#         geom_smooth(method = 'gam') +
+#         xlab('Conspecific basal area') +
+#         ylab('Growth') +
+#         labs(subtitle = '') +
+#         theme_minimal() +
+#         ylim(yLim) + 
+#         xlim(xLim) +
+#         geom_function(
+#           fun = function(x)
+#             Int * exp(x * post_mean |> filter(species_id == Sp) |> pull(Beta)),
+#           color = 1,
+#           linetype = 'dashed'
+#         )
+
+#   p3 <- train_sp |>
+#       filter(!is.na(pred_growth)) |>
+#       mutate(obs_growth = growth) |>
+#       select(BA_comp_intra, obs_growth, pred_growth) |>
+#       pivot_longer(
+#         cols = contains('growth'),
+#         names_to = 'sim'
+#       ) |>
+#       ggplot(aes(x = BA_comp_intra, y = value, color = sim)) +
+#         geom_point(alpha = .5, size = .5) +
+#         geom_smooth(method = 'gam') +
+#         xlab('Heterospecific basal area') +
+#         ylab('Growth') +
+#         labs(subtitle = '') +
+#         theme_minimal() +
+#         ylim(yLim) + 
+#         xlim(xLim) +
+#         geom_function(
+#           fun = function(x)
+#             Int * exp(x * post_mean |> filter(species_id == Sp) |> mutate(betaTheta = Beta * theta) |> pull(betaTheta)),
+#           color = 1,
+#           linetype = 'dashed'
+#         )
+
+
+#   p4 <- train_sp |>
+#       filter(!is.na(pred_growth)) |>
+#       mutate(obs_growth = growth) |>
+#       select(bio_01_mean, obs_growth, pred_growth) |>
+#       pivot_longer(
+#         cols = contains('growth'),
+#         names_to = 'sim'
+#       ) |>
+#       ggplot(aes(x = bio_01_mean, y = value, color = sim)) +
+#         geom_point(alpha = .5, size = .5) +
+#         geom_smooth(method = 'gam') +
+#         xlab('Mean annual temperature') +
+#         ylab('Growth') +
+#         labs(subtitle = '') +
+#         theme_minimal() +
+#         ylim(yLim) +
+#         geom_function(
+#           fun = function(x) Int * exp(
+#             -(post_mean |> filter(species_id == Sp) |> pull(tau_temp)) *
+#             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_temp))^2
+#           ),
+#           col = 1,
+#           linetype = 'dashed'
+#         )
+
+#   p5 <- train_sp |>
+#       filter(!is.na(pred_growth)) |>
+#       mutate(obs_growth = growth) |>
+#       select(bio_12_mean, obs_growth, pred_growth) |>
+#       pivot_longer(
+#         cols = contains('growth'),
+#         names_to = 'sim'
+#       ) |>
+#       ggplot(aes(x = bio_12_mean, y = value, color = sim)) +
+#         geom_point(alpha = .5, size = .5) +
+#         geom_smooth(method = 'gam') +
+#         xlab('Mean annual precipitation') +
+#         ylab('Growth') +
+#         labs(subtitle = '') +
+#         theme_minimal() +
+#         ylim(yLim) +
+#         geom_function(
+#           fun = function(x) Int * exp(
+#             -(post_mean |> filter(species_id == Sp) |> pull(tau_prec)) *
+#             (x - post_mean |> filter(species_id == Sp) |> pull(optimal_prec))^2
+#           ),
+#           col = 1,
+#           linetype = 'dashed'
+#         )
+
+#   print(
+#     ggpubr::ggarrange(
+#       p2, p3, p1, p4, p5,
+#       ncol = 2, nrow = 3, legend = 'top', common.legend = TRUE)
+#   )
+# }
 ```
+
+
+# Out-of-bag cross-validation
+
+```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
+# As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
+# So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
+
+# list accuracy db for each species
+accurOBB_ls <- list()
+
+# some species did not have enough data for spliting train and validation
+# run only for species with validation data
+spIds_val <- trainData[sampled == 'validation', unique(species_id)]
+for(Sp in spIds_val)
+{
+  val_sp <- trainData[species_id == Sp & sampled == 'validation']
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 300 iterations of the 8000 to speed calculation as the final
+  # result is quite similar to use the 8000 iteractions
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 300)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 300)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        setDT(),
+    `:=`(
+      psi = i.psi,
+      sigma_plot = i.sigma_plot
+    ),
+    on = 'iter'
+  ]
+  
+  # merge plot_id parameters if plot is present in validation data
+  val_sp[
+    readRDS(posteriorrPlot_files[Sp]) |>
+      mutate(
+        plot_id_seq = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiPlot := i.value,
+    on = c('iter', 'plot_id_seq')
+  ]
+
+  # for the plots not used in the fit model, generate the rPlot_log
+  # value from the population distribution
+  val_sp[
+    is.na(plot_id_seq),
+    psiPlot := rnorm(.N, 0, sigma_plot)
+  ]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
+
+  # compute longevity logit
+  val_sp[,
+    longev_log := 1/(1 + exp(
+        -psi + 
+        psiPlot
+      )
+    )
+  ]
+
+  # compute mortality rate in function of time
+  val_sp[,
+    mortality_prob := 1 - (longev_log^deltaYear)
+  ]
+
+  # predict mortality event
+  val_sp[,
+    mort_pred := rbinom(.N, size = 1, mortality_prob)
+  ]
+
+  # Compute model accuracy
+  accurOOB_sp <- val_sp |>
+    group_by(iter2) |>
+    summarise(
+      TP = sum(mort == 1 & mort_pred == 1),
+      TN = sum(mort == 0 & mort_pred == 0),
+      FN = sum(mort == 0 & mort_pred == 1),
+      FP = sum(mort == 1 & mort_pred == 0)
+    ) |>
+    mutate(
+      Acc = (TP + TN)/(TP + TN + FP + FN),
+      Sensitivity = TP/(TP + FN),
+      Specificity = TN/(FP + TN),
+      AccCorrected = (Sensitivity + Specificity)/2
+    ) |>
+    bind_cols(species_id = Sp)
+  
+  # save to list
+  accurOBB_ls[[Sp]] <- accurOOB_sp
+
+}
+
+# save accuracy to be used for model comparison
+accurOBB_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'accuracy_oob.RDS'))
+```
+
+```{r plot_accurOOB, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
+accurOBB_ls |>
+  bind_rows() |>
+  select(species_id, iter2, Acc, Sensitivity, Specificity, AccCorrected) |>
+  pivot_longer(
+    cols = c(Acc, Sensitivity, Specificity, AccCorrected)
+  ) |>
+  mutate(
+    name = recode_factor(
+      name,
+      Acc = 'Accuracy',
+      AccCorrected = 'Accuracy corrected',
+      Sensitivity = 'Sensitivity',
+      Specificity = 'Specificity'
+    )
+  ) |>
+  ggplot(aes(x = value, y = species_id)) +
+    ggridges::geom_density_ridges2() +
+    facet_wrap(~ name, scales = 'free_x') +
+    theme_classic() +
+    xlab('') + ylab('')
+```
+
+
+# Leave-one-out cross-validation to compare models
+
+Not yet...
+
+```{r loo, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+
+# sim_toLoad <- c(simInfo$simCompare, simName)
+
+# map_dfr(
+#     spIds,
+#     ~ map2(
+#         setNames(sim_toLoad, sim_toLoad),
+#         .x,
+#         ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+#       ) |>
+#       loo::loo_compare() |>
+#       as.data.frame() |>
+#       bind_cols(species_id = .x) |>
+#       rownames_to_column(var = 'sim')
+#   ) |>
+#   select(species_id, sim, elpd_diff, se_diff) |>
+#   pivot_longer(
+#     cols = c(elpd_diff, se_diff),
+#     names_to = 'variable',
+#     values_to = 'value'
+#   ) |>
+#   ggplot(aes(x = value, y = species_id, color = sim)) +
+#     geom_point() +
+#     facet_wrap(~ variable, scales = 'free_x') +
+#     xlab('') + ylab('') +
+#     theme_bw() +
+#     theme(legend.position = 'bottom')
+```
+
+```{r loo2, echo = FALSE, warning=FALSE,fig.height = 4, fig.width = 8, warning=FALSE, message=FALSE}
+# map_dfr(
+#     spIds,
+#     ~ map2(
+#         setNames(sim_toLoad, sim_toLoad),
+#         .x,
+#         ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+#       ) |>
+#       loo::loo_compare() |>
+#       as.data.frame() |>
+#       bind_cols(species_id = .x) |>
+#       rownames_to_column(var = 'sim')
+#   ) |>
+#   select(species_id, sim, elpd_diff, se_diff) |>
+#   pivot_longer(
+#     cols = contains('diff')
+#   ) |>
+#   ggplot(aes(y = sim, x = value)) +
+#     geom_boxplot() +
+#     facet_wrap(~name) +
+#     theme_bw()
+```
+
 
 # Sampling time
 
-```{r plot sampling time, echo = FALSE, fig.height = 6, fig.width = 12}
-p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
-      geom_boxplot() +
-      facet_grid(~sp) +
-      theme_classic() +
-      ylab('Time (h)')
-print(p)
-```
-```{r plot sampling time2, echo = FALSE, fig.height = 5, fig.width = 6}
-p <- ggplot(data = samplingDF, aes(x = sim, y = time)) +
-      geom_boxplot() +
-      theme_classic() +
-      ylab('Time (h)')
-print(p)
+```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['time']][['chains']] |>
+    bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = total/3600, y = species_id)) +
+  geom_boxplot() +
+  xlab('Fit time (hours)') +
+  theme_minimal()
 ```

@@ -149,26 +149,12 @@ toSub_plot <- data.table(
   plot_id_seq = 1:length(plot_id_uq)
 )
 
-## Do the same for tree_id
-tree_id_uq <- mort_dt[sampled == 'training', unique(tree_id)]
-toSub_tree <- data.table(
-  tree_id = tree_id_uq,
-  tree_id_seq = 1:length(tree_id_uq)
-)
-
 # merge
 mort_dt[
   toSub_plot,
   plot_id_seq := i.plot_id_seq,
   on = 'plot_id'
 ]
-
-mort_dt[
-  toSub_tree,
-  tree_id_seq := i.tree_id_seq,
-  on = 'tree_id'
-]
-
 
 ## run the model
 
@@ -180,8 +166,6 @@ mort_dt[
           N = mort_dt[sampled == 'training', .N],
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
-          Nt = mort_dt[sampled == 'training', length(unique(tree_id))],
-          tree_id = mort_dt[sampled == 'training', tree_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear]
       ),
@@ -220,18 +204,13 @@ mort_dt[
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] tree_id
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
 
-    # Add tree_id random effects
-    psiTree <- post[, paste0('psiTree[', dt[4], ']')]
-
     # fixed effects
     longev_log <- 1/(1 + exp(
         -post[, 'psi'] + 
-        psiPlot +
         psiPlot
       )
     )
@@ -283,7 +262,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, tree_id_seq)
+        .(mort, deltaYear, plot_id_seq)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -298,7 +277,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, tree_id_seq)
+        .(mort, deltaYear, plot_id_seq)
       ]
   )
 
@@ -328,16 +307,6 @@ mort_dt[
     )
   )
 
-  # posterior of tree_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiTree', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiTree_', sp, '.RDS')
-    )
-  )
-
   # save sampling diagnostics
   saveRDS(
     diag_out,
@@ -349,7 +318,7 @@ mort_dt[
 
   # save train and validate data
   saveRDS(
-    mort_dt[, .(tree_id, tree_id_seq, plot_id_seq, year0, sampled)],
+    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
