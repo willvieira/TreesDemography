@@ -17,7 +17,9 @@ sampleSize: 20000
 # The simulation and folder name
 simName: "mort_plotInd"
 # simulations to compare with
-simCompare: []
+simCompare: [
+        "mort_plot"
+]
 
 ##################################
 ########## DESCRIPTION  ##########
