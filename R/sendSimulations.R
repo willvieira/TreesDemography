@@ -42,7 +42,7 @@ cat('####### Sending simulations to the server #######\n')
 
   myPass <- serverInfo$myPass
   myUser <- serverInfo$myUser
-  myAddress <- serverInfo$myAddress
+  myAddress <- paste0(simInfo$cluster, '.', serverInfo$myAddress)
   
   # first create same folder on the server side
   sapply(

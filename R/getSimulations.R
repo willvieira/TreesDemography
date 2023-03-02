@@ -32,7 +32,7 @@ cat('####### Loading simulations from the server #######\n')
 
   myPass <- serverInfo$myPass
   myUser <- serverInfo$myUser
-  myAddress <- serverInfo$myAddress
+  myAddress <- paste0(simInfo$cluster, '.', serverInfo$myAddress)
 
 ##
 
