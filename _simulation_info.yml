@@ -18,6 +18,8 @@ sampleSize: 20000
 simName: "mort_plot"
 # simulations to compare with
 simCompare: []
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "mp2b"
 
 ##################################
 ########## DESCRIPTION  ##########
