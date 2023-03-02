@@ -149,13 +149,6 @@ toSub_plot <- data.table(
   plot_id_seq = 1:length(plot_id_uq)
 )
 
-## Do the same for year_id
-year0_uq <- mort_dt[sampled == 'training', unique(year0)]
-toSub_year <- data.table(
-  year0 = year0_uq,
-  year_id_seq = 1:length(year0_uq)
-)
-
 # merge
 mort_dt[
   toSub_plot,
@@ -163,10 +156,34 @@ mort_dt[
   on = 'plot_id'
 ]
 
+# get all possible time intervals
+time_interval <- unique(mort_dt[sampled == 'training', .(year0, year1)])
+time_interval[, time_int := 1:.N]
+
+# merge
 mort_dt[
+  time_interval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'year1', 'year1')
+]
+
+## get all possible years between year0 and year1
+all_years <- mort_dt[sampled == 'training', seq(min(year0), max(year1), 1)]
+toSub_year <- data.table(
+  all_years = all_years,
+  all_years_seq = 1:length(all_years)
+)
+
+# merge
+time_interval[
   toSub_year,
-  year_id_seq := i.year_id_seq,
-  on = 'year0'
+  year0_seq := i.all_years_seq,
+  on = c('year0' = 'all_years')
+]
+time_interval[
+  toSub_year,
+  year1_seq := i.all_years_seq,
+  on = c('year1' = 'all_years')
 ]
 
 
@@ -180,8 +197,11 @@ mort_dt[
           N = mort_dt[sampled == 'training', .N],
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
-          Ny = mort_dt[sampled == 'training', length(unique(year0))],
-          year_id = mort_dt[sampled == 'training', year_id_seq],
+          Ny = length(all_years),
+          Ni = time_interval[, .N],
+          year0_seq = time_interval[, year0_seq],
+          year1_seq = time_interval[, year1_seq],
+          year_int = mort_dt[sampled == 'training', time_int],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear]
       ),
@@ -220,19 +240,19 @@ mort_dt[
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] year_id
+    # [4] year_int
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
 
     # Add year_id random effects
-    psiYear <- post[, paste0('psiYear[', dt[4], ']')]
+    psiYear_interval <- post[, paste0('psiYear_interval[', dt[4], ']')]
 
     # fixed effects
     longev_log <- 1/(1 + exp(
         -post[, 'psi'] + 
         psiPlot +
-        psiYear
+        psiYear_interval
       )
     )
 
@@ -283,7 +303,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, year_id_seq)
+        .(mort, deltaYear, plot_id_seq, time_int)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -298,7 +318,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, year_id_seq)
+        .(mort, deltaYear, plot_id_seq, time_int)
       ]
   )
 
@@ -328,13 +348,21 @@ mort_dt[
     )
   )
 
-  # posterior of tree_id parameters
+  # posterior of years parameters
   saveRDS(
     post_dist |>
-      filter(grepl(pattern = 'psiTree', par)),
+      filter(grepl(pattern = 'psiYear_interval', par)),
     file = file.path(
       'output',
-      paste0('posteriorpsiTree_', sp, '.RDS')
+      paste0('posteriorpsiYearInt_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiYear\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiYear_', sp, '.RDS')
     )
   )
 
@@ -355,7 +383,14 @@ mort_dt[
       paste0('trainData_', sp, '.RDS')
     )
   )
-
+  saveRDS(
+    time_interval,
+      file = file.path(
+      'output',
+      paste0('timeInterval_', sp, '.RDS')
+    )
+  )
+  
   # save Loo
   saveRDS(
     loo_obj,
