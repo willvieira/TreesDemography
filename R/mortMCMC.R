@@ -149,11 +149,11 @@ toSub_plot <- data.table(
   plot_id_seq = 1:length(plot_id_uq)
 )
 
-## Do the same for tree_id
-tree_id_uq <- mort_dt[sampled == 'training', unique(tree_id)]
-toSub_tree <- data.table(
-  tree_id = tree_id_uq,
-  tree_id_seq = 1:length(tree_id_uq)
+## Do the same for year_id
+year0_uq <- mort_dt[sampled == 'training', unique(year0)]
+toSub_year <- data.table(
+  year0 = year0_uq,
+  year_id_seq = 1:length(year0_uq)
 )
 
 # merge
@@ -164,9 +164,9 @@ mort_dt[
 ]
 
 mort_dt[
-  toSub_tree,
-  tree_id_seq := i.tree_id_seq,
-  on = 'tree_id'
+  toSub_year,
+  year_id_seq := i.year_id_seq,
+  on = 'year0'
 ]
 
 
@@ -180,8 +180,8 @@ mort_dt[
           N = mort_dt[sampled == 'training', .N],
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
-          Nt = mort_dt[sampled == 'training', length(unique(tree_id))],
-          tree_id = mort_dt[sampled == 'training', tree_id_seq],
+          Ny = mort_dt[sampled == 'training', length(unique(year0))],
+          year_id = mort_dt[sampled == 'training', year_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear]
       ),
@@ -220,19 +220,19 @@ mort_dt[
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] tree_id
+    # [4] year_id
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
 
-    # Add tree_id random effects
-    psiTree <- post[, paste0('psiTree[', dt[4], ']')]
+    # Add year_id random effects
+    psiYear <- post[, paste0('psiYear[', dt[4], ']')]
 
     # fixed effects
     longev_log <- 1/(1 + exp(
         -post[, 'psi'] + 
         psiPlot +
-        psiPlot
+        psiYear
       )
     )
 
@@ -283,7 +283,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, tree_id_seq)
+        .(mort, deltaYear, plot_id_seq, year_id_seq)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -298,7 +298,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, tree_id_seq)
+        .(mort, deltaYear, plot_id_seq, year_id_seq)
       ]
   )
 

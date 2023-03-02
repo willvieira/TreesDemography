@@ -6,20 +6,23 @@ spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
         '183319PINBAN']
 # Which vital rates to run (growth, mort, fec)
 vitalRates: ["mort"]
-# Source of data (vector must much the same as `vitalRates`)
+# Source of data (vector must match the same order as in `vitalRates`)
 dataSources: ["data/mort_dt.RDS"]
-# number of iteration MCMC (inclusing warmup)
+# number of iteration MCMC (including warmup)
 maxIter: 4000
 # Number of cores and chains
 nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
-# The simulation and folder name
-simName: "mort_plotInd"
+# Simulation and folder name
+simName: "mort_plotYear"
 # simulations to compare with
 simCompare: [
-        "mort_plot"
+        "mort_plot",
+        "mort_plotInd"
 ]
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "cedar"
 
 ##################################
 ########## DESCRIPTION  ##########
@@ -31,3 +34,4 @@ simCompare: [
 
 # V11.0 - Add random effect on individual ID
 
+# V12.0 - Instead of individual random effects (no variation found), use year random effects along with plot.
