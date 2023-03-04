@@ -15,11 +15,14 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plot"
+simName: "mort_plot_size"
 # simulations to compare with
-simCompare: []
+simCompare: [
+        "mort_plot",
+        "mort_plotInd"
+]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "mp2b"
+cluster: "cedar"
 
 ##################################
 ########## DESCRIPTION  ##########
@@ -28,3 +31,9 @@ cluster: "mp2b"
 ## mort test 10.0 - new version using cmdstanr
 
 # V10.0 - Intercept only model with random effects on plotID
+
+# V11.0 - Add random effect on individual ID
+
+# V12.0 - Instead of individual random effects (no variation found), use year random effects along with plot.
+
+# V13.0 - building on v10.0, add the effect of size at time 0 using a inverse U-shape function where mortality is higher in the extreme sizes

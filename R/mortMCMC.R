@@ -167,7 +167,8 @@ mort_dt[
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
-          delta_time = mort_dt[sampled == 'training', deltaYear]
+          delta_time = mort_dt[sampled == 'training', deltaYear],
+          size_t0 = mort_dt[sampled == 'training', dbh0]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -204,6 +205,7 @@ mort_dt[
     # [1] status
     # [2] deltaTime
     # [3] plot_id
+    # [4] dbh0
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -211,7 +213,8 @@ mort_dt[
     # fixed effects
     longev_log <- 1/(1 + exp(
         -post[, 'psi'] + 
-        psiPlot
+        psiPlot -
+        (log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])^2
       )
     )
 
@@ -262,7 +265,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq)
+        .(mort, deltaYear, plot_id_seq, dbh0)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -277,7 +280,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq)
+        .(mort, deltaYear, plot_id_seq, dbh0)
       ]
   )
 
