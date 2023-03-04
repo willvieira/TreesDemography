@@ -436,12 +436,12 @@ mort_dt[, .(species_id, dbh0, deltaYear, BA_comp_sp, BA_comp_intra, bio_01_mean,
 
 ## Longevitity `exp(psi)`
 
-```{r sizePred,echo=FALSE,warning=FALSE, message=FALSE,fig.height = 6.5, fig.width = 7}
+```{r sizePred,echo=FALSE,warning=FALSE,warning=FALSE,message=FALSE,fig.height = 6.5, fig.width = 7}
 post |>
   filter(par == 'psi') |>
   mutate(long = exp(value)) |>
   ggplot(aes(x = long, y = species_id)) +
-    ggridges::geom_density_ridges2() +
+    ggridges::geom_density_ridges2(alpha = 0.8, color = NA) +
     theme_minimal() +
     xlab('Longevity (years)')
 ```
@@ -457,7 +457,7 @@ Using four different metrics:
 
 ```{r plot_accur, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
 # list accuracy db for each species
-accur_ls <- list()
+accur_ls <- mortProp_ls <- list()
 
 for(Sp in spIds)
 {
@@ -535,13 +535,13 @@ for(Sp in spIds)
   ]
 
   # Compute model accuracy
-  accur_sp <- train_sp |>
+  accur_ls[[Sp]] <- train_sp |>
     group_by(iter2) |>
     summarise(
       TP = sum(mort == 1 & mort_pred == 1),
       TN = sum(mort == 0 & mort_pred == 0),
-      FN = sum(mort == 0 & mort_pred == 1),
-      FP = sum(mort == 1 & mort_pred == 0)
+      FN = sum(mort == 1 & mort_pred == 0),
+      FP = sum(mort == 0 & mort_pred == 1)
     ) |>
     mutate(
       Acc = (TP + TN)/(TP + TN + FP + FN),
@@ -550,17 +550,24 @@ for(Sp in spIds)
       AccCorrected = (Sensitivity + Specificity)/2
     ) |>
     bind_cols(species_id = Sp)
-  
-  # save to list
-  accur_ls[[Sp]] <- accur_sp
 
+  # Compute proportion of mortality events (pred vs obs)
+  mortProp_ls[[Sp]] <- train_sp |>
+    group_by(iter2) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
 accur_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'accuracy.RDS'))
-
+mortProp_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortProp.RDS'))
 accur_ls |>
   bind_rows() |>
   select(species_id, iter2, Acc, Sensitivity, Specificity, AccCorrected) |>
@@ -577,10 +584,37 @@ accur_ls |>
     )
   ) |>
   ggplot(aes(x = value, y = species_id)) +
-    ggridges::geom_density_ridges2() +
+    ggridges::geom_density_ridges2(color = NA, alpha = 0.8) +
     facet_wrap(~ name, scales = 'free_x') +
     theme_classic() +
     xlab('') + ylab('')
+```
+
+
+## Proportion of mortality events in the population
+
+```{r plotMortProp,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
+propObs <- mortProp_ls |>
+  bind_rows() |>
+  group_by(species_id) |>
+  summarise(mprop = unique(mortProp_obs))
+
+mortProp_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_pred, y = species_id)) +
+    ggridges::geom_density_ridges2(color = NA, alpha = 0.8) +
+    geom_segment(
+      data = propObs,
+      aes(
+        x = mprop, xend = mprop,
+        y = 1:length(species_id),
+        yend = (1:length(species_id)) + .8
+      ),
+      color = "red", alpha = 0.6
+    ) +
+    theme_classic() +
+    xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
+    ylab('')
 ```
 
 ## Mortality in function of Basal area and climate variables
@@ -830,7 +864,7 @@ Not yet...
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
 # list accuracy db for each species
-accurOBB_ls <- list()
+accurOBB_ls <- mortPropOBB_ls <- list()
 
 # some species did not have enough data for spliting train and validation
 # run only for species with validation data
@@ -912,13 +946,13 @@ for(Sp in spIds_val)
   ]
 
   # Compute model accuracy
-  accurOOB_sp <- val_sp |>
+  accurOBB_ls[[Sp]] <- val_sp |>
     group_by(iter2) |>
     summarise(
       TP = sum(mort == 1 & mort_pred == 1),
       TN = sum(mort == 0 & mort_pred == 0),
-      FN = sum(mort == 0 & mort_pred == 1),
-      FP = sum(mort == 1 & mort_pred == 0)
+      FN = sum(mort == 1 & mort_pred == 0),
+      FP = sum(mort == 0 & mort_pred == 1)
     ) |>
     mutate(
       Acc = (TP + TN)/(TP + TN + FP + FN),
@@ -927,16 +961,24 @@ for(Sp in spIds_val)
       AccCorrected = (Sensitivity + Specificity)/2
     ) |>
     bind_cols(species_id = Sp)
-  
-  # save to list
-  accurOBB_ls[[Sp]] <- accurOOB_sp
 
+  # Compute proportion of mortality events (pred vs obs)
+  mortPropOBB_ls[[Sp]] <- val_sp |>
+    group_by(iter2) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
 accurOBB_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'accuracy_oob.RDS'))
+mortPropOBB_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortProp_oob.RDS'))
 ```
 
 ```{r plot_accurOOB, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
@@ -969,6 +1011,32 @@ map_dfr(
     theme(legend.position = 'bottom')
 ```
 
+
+## OOB proportion of mortality events in the population
+
+```{r plotMortPropOBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
+propObs <- mortPropOBB_ls |>
+  bind_rows() |>
+  group_by(species_id) |>
+  summarise(mprop = unique(mortProp_obs))
+
+mortPropOBB_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_pred, y = species_id)) +
+    ggridges::geom_density_ridges2(color = NA, alpha = 0.8) +
+    geom_segment(
+      data = propObs,
+      aes(
+        x = mprop, xend = mprop,
+        y = 1:length(species_id),
+        yend = (1:length(species_id)) + .8
+      ),
+      color = "red", alpha = 0.6
+    ) +
+    theme_classic() +
+    xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
+    ylab('')
+```
 
 # Leave-one-out cross-validation to compare models
 
