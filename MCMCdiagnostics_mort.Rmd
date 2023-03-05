@@ -379,6 +379,79 @@ yearEffect |>
   )
 ```
 
+# Correlation in plot random effects between species
+
+```{r corrPlotEffect, echo = FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width = 14}
+
+# load parameters
+post_mean <- post |>
+  filter(par == 'psi') |>
+  group_by(species_id) |>
+  summarise(psi = mean(value))
+
+psiPlot_mean <- readRDS('output/mort_plot/meanPlotEffect_psi.RDS') |>
+  left_join(
+    post_mean
+  ) |>
+  mutate(
+    psiPlot = log(psi_natural_mean) - psi
+  )
+
+# count number of plots per species pair
+uqSp_plot <- psiPlot_mean |>
+  group_by(plot_id) |>
+  summarise(
+        uqSp = unique(species_id),
+        nbSp = length(uqSp)
+    ) |>
+    filter(nbSp > 1)
+
+# number of plots per species pair
+nbPlot_sp <- spIds |>
+  combn(2) |>
+  array_branch(margin = 2) |>
+  map_dfr(
+    ~ tibble(
+        sp1 = .x[1],
+        sp2 = .x[2],
+        nbPlot = uqSp_plot |>
+            filter(uqSp %in% c(.x[1], .x[2])) |>
+            group_by(plot_id) |>
+            summarise(nbSp = length(unique(uqSp))) |>
+            filter(nbSp > 1) |>
+            summarise(nPlot = n()) |>
+            pull(nPlot)
+    )
+  )
+
+# Filter for a minimum of plots per sp pair to create plot code
+plot_code <- nbPlot_sp |>
+    filter(nbPlot > 500) |>
+    mutate(plot_code = paste(sp1, sp2, sep = ' vs ')) |>
+    pivot_longer(
+        cols = contains('sp'),
+        values_to = 'species_id',
+        names_to = 'axis'
+    ) |>
+    select(species_id, axis, plot_code)
+
+psiPlot_mean |>
+    filter(species_id %in% unique(plot_code$species_id)) |>
+    left_join(
+        plot_code
+    ) |>
+    select(plot_id, psiPlot, axis, plot_code) |>
+    pivot_wider(
+        names_from = 'axis',
+        values_from = psiPlot
+    ) |>
+    ggplot(aes(sp1, sp2)) +
+        geom_point(size = .4, alpha = 0.6) + 
+        geom_smooth() +
+        facet_wrap(~plot_code) +
+        theme_minimal() +
+        xlim(-1.5, 1.5) + ylim(-1.5, 1.5)
+```
 
 # Changes in plot random effect from past models
 
