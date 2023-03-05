@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v11.0 - plot and individual random effect"
+ subtitle: "Test v12.0 - plot and year random effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -46,12 +46,20 @@ posteriorpsiPlot_files <- grep(
 )
 names(posteriorpsiPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiPlot_files))))
 
-posteriorpsiTree_files <- grep(
-  'posteriorpsiTree',
+posteriorpsiYear_files <- grep(
+  'posteriorpsiYear_',
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
-names(posteriorpsiTree_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiTree_files))))
+names(posteriorpsiYear_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiYear_files))))
+
+posteriorpsiYearInt_files <- grep(
+  'posteriorpsiYearInt_',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorpsiYearInt_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiYearInt_files))))
+
 
 diag_files <- grep(
   'diagnostics',
@@ -66,6 +74,13 @@ trainData_files <- grep(
   value = TRUE
 )
 names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
+
+timeInterval_files <- grep(
+  'timeInterval',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(timeInterval_files) <- names(sort(sapply(spIds, function(x) grep(x, timeInterval_files))))
 ```
 
 ```{r load dataset,echo =FALSE}
@@ -73,6 +88,13 @@ trainData <- map2_dfr(
   trainData_files,
   names(trainData_files),
   ~ readRDS(.x)
+)
+
+timeInterval <- map2_dfr(
+  timeInterval_files,
+  names(timeInterval_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
 )
 
 mort_dt <- readRDS('data/mort_dt.RDS')
@@ -83,6 +105,11 @@ mort_dt[
   trainData,
   sampled := i.sampled,
   on = c('tree_id', 'year0')
+]
+mort_dt[
+  timeInterval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'year1' = 'year1', 'species_id' = 'species_id')
 ]
 
 # add species_id to trainData
@@ -101,6 +128,11 @@ trainData[
   ),
   on = c('tree_id', 'year0')
 ]
+trainData[
+  timeInterval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'species_id' = 'species_id')
+]
 
 # summary by plot_id and tree_id
 plot_id_summary <- mort_dt[, 
@@ -113,15 +145,6 @@ plot_id_summary <- mort_dt[,
     by = plot_id
   ]
 
-tree_id_summary <- mort_dt[, 
-    .(
-      plot_id = unique(plot_id),
-      dbh0 = mean(dbh0, na.rm = TRUE),
-      BA_comp = mean(BA_comp, na.rm = TRUE),
-      bio_01_mean = mean(bio_01_mean, na.rm = TRUE)
-    ), 
-    by = tree_id
-  ]
 ```
 
 # Rhat
@@ -212,139 +235,119 @@ for(i in 1:ncol(parComb))
 ```
 
 
-# Plot random effect
+# Random effect
 
 ```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
-plotEffect_ls <- treeEffect_ls <- list()
+plotEffect_ls <- yearEffect_ls <- list()
 for(Sp in spIds)
 {
     psi_pop <- post |>
-        filter(species_id == Sp & par == 'psi') |>
-        mutate(psi_pop = value) |>
-        select(psi_pop, iter)
+      filter(species_id == Sp & par == 'psi') |>
+      mutate(psi_pop = value) |>
+      select(psi_pop, iter)
 
     psi_mean <- psi_pop |>
-        summarise(psi_mean = mean(exp(psi_pop))) |>
-        pull(psi_mean)
+      summarise(psi_mean = mean(exp(psi_pop))) |>
+      pull(psi_mean)
 
     dt_toPlot <- readRDS(posteriorpsiPlot_files[Sp]) |>
-            mutate(plot_id_seq = parse_number(par)) |>
-            left_join(
-              psi_pop
-            ) |>
-            mutate(
-              psiPlot = value,
-              psi_natural = exp(psiPlot + psi_pop)
-            ) |>
-            select(!value) |>
-            left_join(
-              trainData[
-                species_id == Sp & !is.na(plot_id_seq),
-                .(plot_id = unique(plot_id)),
-                by = plot_id_seq
-              ]
-            ) |>
-            left_join(
-              plot_id_summary
-            )
+      mutate(plot_id_seq = parse_number(par)) |>
+      left_join(
+        psi_pop
+      ) |>
+      mutate(
+        psiPlot = value,
+        psi_natural = exp(psiPlot + psi_pop)
+      ) |>
+      select(!value) |>
+      left_join(
+        trainData[
+          species_id == Sp & !is.na(plot_id_seq),
+          .(plot_id = unique(plot_id)),
+          by = plot_id_seq
+        ]
+      ) |>
+      left_join(
+        plot_id_summary
+      )
     
-    dt_toTree <- readRDS(posteriorpsiTree_files[Sp]) |>
-            mutate(tree_id_seq = parse_number(par)) |>
-            left_join(
-              psi_pop
-            ) |>
-            mutate(psi_natural = exp(value + psi_pop)) |>
-            left_join(
-              trainData[
-                species_id == Sp & !is.na(tree_id_seq),
-                .(tree_id = unique(tree_id)),
-                by = tree_id_seq
-              ]
-            ) |>
-            left_join(
-              tree_id_summary
-            )
+    # prepare timeInterval info
+    yearRange <- timeInterval[species_id == Sp, range(c(year0, year1))]
+    yearSeq_id <- data.table(
+      year = seq(yearRange[1], yearRange[2]),
+      year_id = 1:length(seq(yearRange[1], yearRange[2])
+      )
+    )
+    
+    dt_toYear <- readRDS(posteriorpsiYear_files[Sp]) |>
+      mutate(year_id = parse_number(par)) |>
+      left_join(
+        psi_pop
+      ) |>
+      mutate(psi_natural = exp(value + psi_pop)) |>
+      left_join(
+        yearSeq_id
+      )
+    
+    # save plot effect mean to plot against other variables
+    # in the next code block
+    plotEffect_ls[[Sp]] <- dt_toPlot |>
+        group_by(par) |>
+        mutate(
+          psi_natural_mean = mean(psi_natural),
+          psi_pop = exp(psi_pop)
+        ) |>
+        ungroup() |>
+        filter(iter == 1) |>
+        select(
+          plot_id, plot_id_seq, psi_pop, psi_natural_mean, latitude,
+          BA_plot, bio_01_mean, bio_12_mean
+        )
 
-      # save plot effect mean to plot against other variables
-      # in the next code block
-      plotEffect_ls[[Sp]] <- dt_toPlot |>
-          group_by(par) |>
-          mutate(
-            psi_natural_mean = mean(psi_natural),
-            psi_pop = exp(psi_pop)
-          ) |>
-          ungroup() |>
-          filter(iter == 1) |>
-          select(
-            plot_id, plot_id_seq, psi_pop, psi_natural_mean, latitude,
-            BA_plot, bio_01_mean, bio_12_mean
-          )
-
-      treeEffect_ls[[Sp]] <- dt_toTree |>
-          group_by(par) |>
-          mutate(
-            psi_natural_mean = mean(psi_natural),
-            psi_pop = exp(psi_pop)
-          ) |>
-          ungroup() |>
-          filter(iter == 1) |>
-          select(
-            tree_id, tree_id_seq, psi_pop, psi_natural_mean, dbh0, BA_comp, bio_01_mean
-          )
-
-      # filter tree_ids within plots with higher number of individuals
-      plots_toKeep <- dt_toTree |>
-          filter(iter == 1) |>
-          group_by(plot_id) |>
-          summarise(nInd = n()) |>
-          arrange(desc(nInd)) |>
-          mutate(cumInd = cumsum(nInd)) |>
-          filter(cumInd < 500) |>
-          pull(plot_id)
-      
-      dt_toTree <- dt_toTree |>
-          filter(plot_id %in% plots_toKeep) |>
-          left_join(
-            dt_toPlot |>
-              select(plot_id, iter, plot_id_seq, psiPlot)
-          ) |>
-          arrange(plot_id_seq) |>
-          mutate(
-            psi_naturalPlotTree = exp(value + psi_pop + psiPlot)
-          )
+    yearEffect_ls[[Sp]] <- dt_toYear |>
+        group_by(par) |>
+        mutate(
+          psi_natural_mean = mean(psi_natural),
+          psi_pop = exp(psi_pop)
+        ) |>
+        ungroup() |>
+        filter(iter == 1) |>
+        select(
+          year, year_id, psi_pop, psi_natural_mean
+        )
 
     print(
-       ggarrange(
-          dt_toPlot |>
-              filter(plot_id_seq %in% sample(plot_id_seq, 800)) |>
-              mutate(plot_id = fct_reorder(plot_id, latitude)) |>
-              ggplot(aes(y = plot_id, x = psi_natural, color = bio_01_mean)) +
-                stat_pointinterval(alpha = .7, size = .1) +
-                geom_vline(
-                  xintercept = psi_mean, color = 'red', alpha = .8
-                ) +
-                xlab('Longevity (years)') +
-                ylab('plot_id (ordered by latitude)') +
-                theme(
-                  legend.position = 'top',
-                  axis.text.y = element_blank()
-                ) +
-                labs(subtitle = Sp),
-          dt_toTree |>
-              ggplot(aes(y = tree_id, x = psi_naturalPlotTree, color = plot_id)) +
-                stat_pointinterval(alpha = .7, size = .1) +
-                geom_vline(
-                  xintercept = psi_mean, color = 'red', alpha = .8
-                ) +
-                xlab('Longetivity') +
-                ylab('tree_id (color grouped by plot_id)') +
-                theme(
-                  legend.position = 'none',
-                  axis.text.y = element_blank()
-                ) +
-                labs(subtitle = ''),
-          ncol = 2
-      )
+      ggarrange(
+        dt_toPlot |>
+            filter(plot_id_seq %in% sample(plot_id_seq, 800)) |>
+            mutate(plot_id = fct_reorder(plot_id, latitude)) |>
+            ggplot(aes(y = plot_id, x = psi_natural, color = bio_01_mean)) +
+              stat_pointinterval(alpha = .7, size = .1) +
+              geom_vline(
+                xintercept = psi_mean, color = 'red', alpha = .8
+              ) +
+              xlab('Longevity (years)') +
+              ylab('plot_id (ordered by latitude)') +
+              theme(
+                legend.position = 'top',
+                axis.text.y = element_blank()
+              ) +
+              labs(subtitle = Sp),
+        dt_toYear |>
+            mutate(year = factor(year)) |>
+            ggplot(aes(y = year, x = log(psi_natural))) +
+              stat_pointinterval(alpha = .7, size = .1) +
+              geom_vline(
+                xintercept = log(psi_mean), color = 'red', alpha = .8
+              ) +
+              xlab('Longetivity (log scale)') +
+              ylab('Year') +
+              theme(
+                legend.position = 'none'
+              ) +
+              labs(subtitle = ''),
+        ncol = 2
+    )
     )
 }
 
@@ -362,16 +365,16 @@ plotEffect |>
     )
   )
 
-treeEffect <- treeEffect_ls |>
+yearEffect <- yearEffect_ls |>
   bind_rows(.id = 'species_id')
 
-treeEffect |>
-  select(species_id, tree_id, psi_pop, psi_natural_mean) |>
+yearEffect |>
+  select(species_id, year, year_id, psi_pop, psi_natural_mean) |>
   saveRDS(
     file.path(
         'output', 
         simName,
-        'meanTreeEffect_psi.RDS'
+        'meanYearEffect_psi.RDS'
     )
   )
 ```
@@ -456,8 +459,8 @@ Using four different metrics:
 - **Accuracy balanced** considers unbalanced accuracy predictions of positive and negative events (sensitivity and specificity)
 
 ```{r plot_accur, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
-# list accuracy db for each species
-accur_ls <- list()
+
+accur_ls <- mortProp_ls <- list()
 
 for(Sp in spIds)
 {
@@ -480,8 +483,8 @@ for(Sp in spIds)
         setDT(),
     `:=`(
       psi = i.psi,
-      sigma_plotTree = i.sigma_plotTree,
-      p_plotTree = i.p_plotTree
+      sigma_plotYear = i.sigma_plotYear,
+      p_plotYear = i.p_plotYear
     ),
     on = 'iter'
   ]
@@ -500,14 +503,14 @@ for(Sp in spIds)
   
   # merge plot_id parameters if plot is present in validation data
   train_sp[
-    readRDS(posteriorpsiTree_files[Sp]) |>
+    readRDS(posteriorpsiYearInt_files[Sp]) |>
       mutate(
-        tree_id_seq = parse_number(par)
+        time_int = parse_number(par)
       ) |>
       select(!par) |>
       setDT(),
-    psiTree := i.value,
-    on = c('iter', 'tree_id_seq')
+    psiYear := i.value,
+    on = c('iter', 'time_int')
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
@@ -519,7 +522,7 @@ for(Sp in spIds)
     longev_log := 1/(1 + exp(
         -psi + 
         psiPlot +
-        psiTree
+        psiYear
       )
     )
   ]
@@ -534,14 +537,14 @@ for(Sp in spIds)
     mort_pred := rbinom(.N, size = 1, mortality_prob)
   ]
 
-  # Compute model accuracy
-  accur_sp <- train_sp |>
+# Compute model accuracy
+  accur_ls[[Sp]] <- train_sp |>
     group_by(iter2) |>
     summarise(
       TP = sum(mort == 1 & mort_pred == 1),
       TN = sum(mort == 0 & mort_pred == 0),
-      FN = sum(mort == 0 & mort_pred == 1),
-      FP = sum(mort == 1 & mort_pred == 0)
+      FN = sum(mort == 1 & mort_pred == 0),
+      FP = sum(mort == 0 & mort_pred == 1)
     ) |>
     mutate(
       Acc = (TP + TN)/(TP + TN + FP + FN),
@@ -550,16 +553,24 @@ for(Sp in spIds)
       AccCorrected = (Sensitivity + Specificity)/2
     ) |>
     bind_cols(species_id = Sp)
-  
-  # save to list
-  accur_ls[[Sp]] <- accur_sp
 
+  # Compute proportion of mortality events (pred vs obs)
+  mortProp_ls[[Sp]] <- train_sp |>
+    group_by(iter2) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
 accur_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'accuracy.RDS'))
+mortProp_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortProp.RDS'))
 
 accur_ls |>
   bind_rows() |>
@@ -581,6 +592,31 @@ accur_ls |>
     facet_wrap(~ name, scales = 'free_x') +
     theme_classic() +
     xlab('') + ylab('')
+```
+
+## Proportion of mortality events in the population
+
+```{r plotMortProp,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
+propObs <- mortProp_ls |>
+  bind_rows() |>
+  group_by(species_id) |>
+  summarise(mprop = unique(mortProp_obs))
+mortProp_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_pred, y = species_id)) +
+    ggridges::geom_density_ridges2(color = NA) +
+    geom_segment(
+      data = propObs,
+      aes(
+        x = mprop, xend = mprop,
+        y = 1:length(species_id),
+        yend = (1:length(species_id)) + .8
+      ),
+      color = "red", alpha = 0.6
+    ) +
+    theme_classic() +
+    xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
+    ylab('')
 ```
 
 ## Mortality in function of Basal area and climate variables
@@ -830,7 +866,7 @@ Not yet...
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
 # list accuracy db for each species
-accurOBB_ls <- list()
+accurOBB_ls <- mortPropOBB_ls <- list()
 
 # some species did not have enough data for spliting train and validation
 # run only for species with validation data
@@ -856,8 +892,8 @@ for(Sp in spIds_val)
         setDT(),
     `:=`(
       psi = i.psi,
-      sigma_plotTree = i.sigma_plotTree,
-      p_plotTree = i.p_plotTree
+      sigma_plotYear = i.sigma_plotYear,
+      p_plotYear = i.p_plotYear
     ),
     on = 'iter'
   ]
@@ -878,15 +914,21 @@ for(Sp in spIds_val)
   # value from the population distribution
   val_sp[
     is.na(plot_id_seq),
-    psiPlot := rnorm(.N, 0, sigma_plotTree * p_plotTree)
+    psiPlot := rnorm(.N, 0, sigma_plotYear * p_plotYear)
   ]
 
-  # As the sample was based on the individual ID, there will not be any tree id present both in the training and validation db
-  # So simply simulate from the random variable
-  val_sp[,
-    psiTree := rnorm(.N, 0, sigma_plotTree * (1 - p_plotTree))
+  # merge plot_id parameters if plot is present in validation data
+  val_sp[
+    readRDS(posteriorpsiYearInt_files[Sp]) |>
+      mutate(
+        time_int = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiYear := i.value,
+    on = c('iter', 'time_int')
   ]
-  
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
@@ -896,7 +938,7 @@ for(Sp in spIds_val)
     longev_log := 1/(1 + exp(
         -psi + 
         psiPlot +
-        psiTree
+        psiYear
       )
     )
   ]
@@ -910,15 +952,14 @@ for(Sp in spIds_val)
   val_sp[,
     mort_pred := rbinom(.N, size = 1, mortality_prob)
   ]
-
-  # Compute model accuracy
-  accurOOB_sp <- val_sp |>
+# Compute model accuracy
+  accurOBB_ls[[Sp]] <- val_sp |>
     group_by(iter2) |>
     summarise(
       TP = sum(mort == 1 & mort_pred == 1),
       TN = sum(mort == 0 & mort_pred == 0),
-      FN = sum(mort == 0 & mort_pred == 1),
-      FP = sum(mort == 1 & mort_pred == 0)
+      FN = sum(mort == 1 & mort_pred == 0),
+      FP = sum(mort == 0 & mort_pred == 1)
     ) |>
     mutate(
       Acc = (TP + TN)/(TP + TN + FP + FN),
@@ -927,16 +968,24 @@ for(Sp in spIds_val)
       AccCorrected = (Sensitivity + Specificity)/2
     ) |>
     bind_cols(species_id = Sp)
-  
-  # save to list
-  accurOBB_ls[[Sp]] <- accurOOB_sp
 
+  # Compute proportion of mortality events (pred vs obs)
+  mortPropOBB_ls[[Sp]] <- val_sp |>
+    group_by(iter2) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
 accurOBB_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'accuracy_oob.RDS'))
+mortPropOBB_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortProp_oob.RDS'))
 ```
 
 ```{r plot_accurOOB, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 12, fig.width = 9}
@@ -967,6 +1016,32 @@ map_dfr(
     theme_classic() +
     xlab('') + ylab('') +
     theme(legend.position = 'bottom')
+```
+
+
+## OOB proportion of mortality events in the population
+
+```{r plotMortPropOBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
+propObs <- mortPropOBB_ls |>
+  bind_rows() |>
+  group_by(species_id) |>
+  summarise(mprop = unique(mortProp_obs))
+mortPropOBB_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_pred, y = species_id)) +
+    ggridges::geom_density_ridges2(color = NA) +
+    geom_segment(
+      data = propObs,
+      aes(
+        x = mprop, xend = mprop,
+        y = 1:length(species_id),
+        yend = (1:length(species_id)) + .8
+      ),
+      color = "red", alpha = 0.6
+    ) +
+    theme_classic() +
+    xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
+    ylab('')
 ```
 
 
