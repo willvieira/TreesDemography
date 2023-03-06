@@ -212,9 +212,11 @@ mort_dt[
 
     # fixed effects
     longev_log <- 1/(1 + exp(
-        -post[, 'psi'] + 
-        psiPlot +
-        dt[4] * post[, 'Beta']
+        -(
+          post[, 'psi'] + 
+          psiPlot +
+          dt[4] * post[, 'Beta']
+        )
       )
     )
 
