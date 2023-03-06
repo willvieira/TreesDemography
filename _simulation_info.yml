@@ -15,14 +15,15 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plot_size"
+simName: "mort_plot_BAplot"
 # simulations to compare with
 simCompare: [
         "mort_plot",
-        "mort_plotInd"
+        "mort_plotInd",
+        mort_plot_size,
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "cedar"
+cluster: "mp2b"
 
 ##################################
 ########## DESCRIPTION  ##########
@@ -37,3 +38,5 @@ cluster: "cedar"
 # V12.0 - Instead of individual random effects (no variation found), use year random effects along with plot.
 
 # V13.0 - building on v10.0, add the effect of size at time 0 using a inverse U-shape function where mortality is higher in the extreme sizes
+
+# V13.0 - building on v10.0, add the effect of total basal area of the plot (BA_plot)
