@@ -578,8 +578,10 @@ for(Sp in spIds)
   # compute longevity logit
   train_sp[,
     longev_log := 1/(1 + exp(
-        -psi + 
-        psiPlot
+        -(
+          psi + 
+          psiPlot
+        )
       )
     )
   ]
@@ -982,8 +984,10 @@ for(Sp in spIds_val)
   # compute longevity logit
   val_sp[,
     longev_log := 1/(1 + exp(
-        -psi + 
-        psiPlot
+        -(
+          psi + 
+          psiPlot
+        )
       )
     )
   ]
