@@ -20,6 +20,7 @@ simName: "mort_plot_BAplot"
 simCompare: [
         "mort_plot",
         "mort_plotInd",
+        "mort_plotYear",
         mort_plot_size,
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'

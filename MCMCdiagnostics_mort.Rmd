@@ -6,7 +6,7 @@
 ---
 
 
-## Diagnostics for the Von Bertalanffy model
+## Diagnostics mortality model
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(cache = TRUE)
@@ -889,12 +889,16 @@ map_dfr(
 propObs <- mortPropOBB_ls |>
   bind_rows() |>
   group_by(species_id) |>
-  summarise(mprop = unique(mortProp_obs))
+  summarise(mprop = unique(mortProp_obs)) |>
+  mutate(sim = NA)
 
-mortPropOBB_ls |>
-  bind_rows() |>
-  ggplot(aes(x = mortProp_pred, y = species_id)) +
-    ggridges::geom_density_ridges2(color = NA) +
+map_dfr(
+  sim_toLoad,
+  ~ readRDS(paste0('output/', .x, '/mortProp_oob.RDS')) |>
+    bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = mortProp_pred, y = species_id, fill = sim)) +
+    ggridges::geom_density_ridges2(alpha = 0.5, color = NA) +
     geom_segment(
       data = propObs,
       aes(
