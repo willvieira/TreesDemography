@@ -6,7 +6,7 @@
 ---
 
 
-## Diagnostics for the Von Bertalanffy model
+## Diagnostics for mortality model
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(cache = TRUE)
@@ -198,10 +198,29 @@ post <- map2_dfr(
     bind_cols(species_id = .y)
 )
 
+nIter = simInfo$maxIter * simInfo$nC/2
+post_prior <- post |>
+  bind_rows(
+    tibble(
+      par = unique(post$par),
+      species_id = 'prior'
+    ) |>
+    expand_grid(iter = 1:nIter) |>
+    group_by(par) |>
+    mutate(
+      value = case_when(
+        par == 'psi' ~ rnorm(nIter, 2, 1),
+        par == 'sigma_plot' ~ rexp(nIter, 2),
+        par == 'sigma_year' ~ rexp(nIter, 2)
+      )
+    )
+  )
+
+# add 
 for(Par in unique(post$par))
 {
   print(
-    post |>
+    post_prior |>
       filter(par == Par) |>
       ggplot(aes(x = value, y = species_id)) +
         stat_eye() +
@@ -565,8 +584,8 @@ for(Sp in spIds)
         setDT(),
     `:=`(
       psi = i.psi,
-      sigma_plotYear = i.sigma_plotYear,
-      p_plotYear = i.p_plotYear
+      sigma_plot = i.sigma_plot,
+      sigma_year = i.sigma_year
     ),
     on = 'iter'
   ]
@@ -976,8 +995,8 @@ for(Sp in spIds_val)
         setDT(),
     `:=`(
       psi = i.psi,
-      sigma_plotYear = i.sigma_plotYear,
-      p_plotYear = i.p_plotYear
+      sigma_plot = i.sigma_plot,
+      sigma_year = i.sigma_year
     ),
     on = 'iter'
   ]
@@ -998,7 +1017,7 @@ for(Sp in spIds_val)
   # value from the population distribution
   val_sp[
     is.na(plot_id_seq),
-    psiPlot := rnorm(.N, 0, sigma_plotYear * p_plotYear)
+    psiPlot := rnorm(.N, 0, sigma_plot)
   ]
 
   # merge plot_id parameters if plot is present in validation data

@@ -14,8 +14,8 @@ parameters {
 	real<lower=-2,upper=8> psi; // baseline longevity
 	vector[Np] psiPlot; // plot random effect
 	vector[Ny] psiYear; // year random effect
-	real<lower=0> sigma_plotYear; // total variance from plot and year
-	real<lower=0,upper=1> p_plotYear; // split variance between plot and year
+	real<lower=0> sigma_plot;
+	real<lower=0> sigma_year;
 }
 transformed parameters {
 	// average year random effect across all years within time interval t0 and t1
@@ -25,11 +25,11 @@ transformed parameters {
 }
 model {
 	// Priors
-	psi ~ normal(5, 1);
-	psiPlot ~ normal(0, sigma_plotYear * p_plotYear);
-	psiYear ~ normal(0, sigma_plotYear * (1 - p_plotYear));
-	sigma_plotYear ~ lognormal(2, 1);
-	p_plotYear ~ beta(2, 2);
+	psi ~ normal(2, 1);
+	psiPlot ~ normal(0, sigma_plot);
+	psiYear ~ normal(0, sigma_year);
+	sigma_plot ~ exponential(2);
+	sigma_year ~ exponential(2);
 
 	// mortality rate
 	vector[N] longev_log = inv_logit(
