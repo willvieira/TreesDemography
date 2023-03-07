@@ -250,9 +250,11 @@ time_interval[
 
     # fixed effects
     longev_log <- 1/(1 + exp(
-        -post[, 'psi'] + 
-        psiPlot +
-        psiYear_interval
+        -(
+          post[, 'psi'] + 
+          psiPlot +
+          psiYear_interval
+        )
       )
     )
 
@@ -377,7 +379,7 @@ time_interval[
 
   # save train and validate data
   saveRDS(
-    mort_dt[, .(tree_id, tree_id_seq, plot_id_seq, year0, sampled)],
+    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
