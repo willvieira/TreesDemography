@@ -523,6 +523,41 @@ post |>
     xlab('Longevity (years)')
 ```
 
+
+## Size area effect
+
+```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+post |>
+  filter(par %in% c('psi', 'size_opt', 'size_var')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(size = seq(10, 800, 20)) |>
+  mutate(
+    SizeEffect = -(log(size/size_opt)/size_var)^2,
+    psi_size = exp(psi + SizeEffect)
+  ) |>
+  select(iter, species_id, size, SizeEffect, psi_size) |>
+  pivot_longer(
+    cols = c('SizeEffect', 'psi_size'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('SizeEffect', 'psi_size'), labels = c('DBH effect (log linear)', 'DBH effect on longetivity'))
+  ) |>
+  ggplot(aes(x = size, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.95, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('DBH (mm)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
 ## Mortality in function of individual size
 
 ```{r plot_preds, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 5, fig.width = 8}
