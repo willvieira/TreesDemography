@@ -8,6 +8,10 @@
 
 ## Diagnostics for the Von Bertalanffy model
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+```
+
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(cmdstanr))
@@ -1015,6 +1019,7 @@ for(Sp in spIds_val)
           psi + 
           psiPlot +
           psiYear
+        )
       )
     )
   ]
