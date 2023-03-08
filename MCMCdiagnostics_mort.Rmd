@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v14.0 - plot random effect - Plot basal area fixed effect"
+ subtitle: "Test v14.1 - plot random effect - Basal area competition fixed effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -176,10 +176,30 @@ post <- map2_dfr(
     bind_cols(species_id = .y)
 )
 
+nIter = simInfo$maxIter * simInfo$nC/2
+
+post_prior <- post |>
+  bind_rows(
+    tibble(
+      par = unique(post$par),
+      species_id = 'prior'
+    ) |>
+    expand_grid(iter = 1:nIter) |>
+    group_by(par) |>
+    mutate(
+      value = case_when(
+        par == 'psi' ~ rnorm(nIter, 2, 1),
+        par == 'sigma_plot' ~ rexp(nIter, 2),
+        par == 'Beta' ~ rnorm(nIter, 0, 2),
+        par == 'theta' ~ rlnorm(rIter, 1, 3)
+      )
+    )
+  )
+
 for(Par in unique(post$par))
 {
   print(
-    post |>
+    post_prior |>
       filter(par == Par) |>
       ggplot(aes(x = value, y = species_id)) +
         stat_eye() +
@@ -497,26 +517,38 @@ post |>
 
 ```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
 post |>
-  filter(par %in% c('psi', 'Beta')) |>
+  filter(par %in% c('psi', 'Beta', 'theta')) |>
   pivot_wider(
     names_from = par,
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(BA_plot = seq(0, 120, 5)) |>
+  expand_grid(BA_comp = seq(0, 100, 5)) |>
   mutate(
-    BAeffect = BA_plot * Beta,
-    psi_BA = exp(psi + BAeffect)
+    BAeffect_sp = BA_comp * Beta,
+    BAeffect_intra = BA_comp * Beta * theta,
+    psiBA_sp = exp(psi + BAeffect_sp),
+    psiBA_intra = exp(psi + BAeffect_intra)
   ) |>
-  select(iter, species_id, BA_plot, BAeffect, psi_BA) |>
+  select(iter, species_id, BA_comp, contains('BAeffect'), contains('psiBA')) |>
   pivot_longer(
-    cols = c('BAeffect', 'psi_BA'),
-    names_to = 'sim'
+    cols = c('BAeffect', 'psiBA'),
+    names_to = c('log', 'sim'),
+    names_sep = '_'
   ) |>
   mutate(
-    sim = factor(sim, levels = c('BAeffect', 'psi_BA'), labels = c('Plot basal area effect (log linear)', 'Plot basal area effect on longetivity'))
+    sim = factor(
+      sim,
+      levels = c('BAeffect', 'psiBA'),
+      labels = c('Log linear effect of competition', 'longevity in function of competition')
+    ),
+    sim = factor(
+      sim,
+      levels = c('sp' ,'intra'),
+      labels = c('Conspecific interactions', 'Heterospecific interactions')
+    )
   ) |>
-  ggplot(aes(x = BA_plot, y = value, color = species_id)) +
+  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
     stat_lineribbon(.width = 0.95, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
@@ -553,7 +585,8 @@ for(Sp in spIds)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
-      Beta = i.Beta
+      Beta = i.Beta,
+      theta = i.theta
     ),
     on = 'iter'
   ]
@@ -580,7 +613,7 @@ for(Sp in spIds)
         -(
           psi + 
           psiPlot +
-          BA_plot * Beta
+          Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
       )
     )
@@ -767,7 +800,8 @@ for(Sp in spIds_val)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
-      Beta = i.Beta
+      Beta = i.Beta,
+      theta = i.theta
     ),
     on = 'iter'
   ]
@@ -801,7 +835,7 @@ for(Sp in spIds_val)
         -(
           psi + 
           psiPlot +
-          BA_plot * Beta
+          Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
       )
     )

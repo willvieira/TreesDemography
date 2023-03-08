@@ -168,7 +168,8 @@ mort_dt[
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear],
-          BA_plot = mort_dt[sampled == 'training', BA_plot]
+          BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
+          BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -198,14 +199,15 @@ mort_dt[
 
 ## Approximate LOO-CV using subsampling
 
-  # Fu nction to compute log-likelihood
+  # Function to compute log-likelihood
   mort_model <- function(dt, post, log)
   {
     # dt is a vector of:
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] BA_plot
+    # [4] BA_comp_sp
+    # [5] BA_comp_inter
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -215,7 +217,7 @@ mort_dt[
         -(
           post[, 'psi'] + 
           psiPlot +
-          dt[4] * post[, 'Beta']
+          post[, 'Beta'] * (dt[4] + post[, 'theta'] * dt[5])
         )
       )
     )
@@ -267,7 +269,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, BA_plot)
+        .(mort, deltaYear, plot_id_seq, BA_comp_sp, BA_comp_intra)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -282,7 +284,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, BA_plot)
+        .(mort, deltaYear, plot_id_seq, BA_comp_sp, BA_comp_intra)
       ]
   )
 

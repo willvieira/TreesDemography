@@ -15,13 +15,13 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plot_BAplot"
+simName: "mort_plot_BAcomp"
 # simulations to compare with
 simCompare: [
         "mort_plot",
-        "mort_plotInd",
         "mort_plotYear",
         mort_plot_size,
+        "mort_plot_BAplot"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
 cluster: "mp2b"
@@ -40,4 +40,6 @@ cluster: "mp2b"
 
 # V13.0 - building on v10.0, add the effect of size at time 0 using a inverse U-shape function where mortality is higher in the extreme sizes
 
-# V13.0 - building on v10.0, add the effect of total basal area of the plot (BA_plot)
+# V14.0 - building on v10.0, add the effect of total basal area of the plot (BA_plot)
+
+# V14.1 - Instead of plot BA, use individual level BA of neighbour individuals larger than the focal individual for intra and interspecific competition (BA_comp_sp and BA_comp_intra)
