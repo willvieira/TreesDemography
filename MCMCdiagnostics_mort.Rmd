@@ -191,7 +191,7 @@ post_prior <- post |>
         par == 'psi' ~ rnorm(nIter, 2, 1),
         par == 'sigma_plot' ~ rexp(nIter, 2),
         par == 'Beta' ~ rnorm(nIter, 0, 2),
-        par == 'theta' ~ rlnorm(rIter, 1, 3)
+        par == 'theta' ~ rlnorm(nIter, 1, 3)
       )
     )
   )
@@ -530,15 +530,16 @@ post |>
     psiBA_sp = exp(psi + BAeffect_sp),
     psiBA_intra = exp(psi + BAeffect_intra)
   ) |>
+  filter(theta < 2) |> 
   select(iter, species_id, BA_comp, contains('BAeffect'), contains('psiBA')) |>
   pivot_longer(
-    cols = c('BAeffect', 'psiBA'),
+    cols = c(contains('BAeffect'), contains('psiBA')),
     names_to = c('log', 'sim'),
     names_sep = '_'
   ) |>
   mutate(
-    sim = factor(
-      sim,
+    log = factor(
+      log,
       levels = c('BAeffect', 'psiBA'),
       labels = c('Log linear effect of competition', 'longevity in function of competition')
     ),
@@ -550,7 +551,7 @@ post |>
   ) |>
   ggplot(aes(x = BA_comp, y = value, color = species_id)) +
     stat_lineribbon(.width = 0.95, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
+    facet_wrap(~sim + log, scales = 'free') +
     scale_fill_brewer() +
     xlab('Basal area competition') +
     ylab('') +

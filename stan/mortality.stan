@@ -12,15 +12,15 @@ parameters {
 	vector[Np] psiPlot; // plot random effect
 	real<lower=0> sigma_plot;
 	real Beta; // BA_comp effect
-  real<lower=0> theta; // partition of the importance between BA_sp and BA_inter
+  real<lower=0,upper=2> theta; // partition of the importance between BA_sp and BA_inter
 }
 model {
 	// Priors
 	psi ~ normal(2, 1);
 	psiPlot ~ normal(0, sigma_plot);
 	sigma_plot ~ exponential(2);
-	Beta ~ normal(0, 2);
-	theta ~ lognormal(1, 3);
+	Beta ~ normal(0, .1);
+	theta ~ exponential(2.5);
 
 	// mortality rate
 	vector[N] longev_log = inv_logit(
