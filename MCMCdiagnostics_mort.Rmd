@@ -1,4 +1,4 @@
----
+--
  title: "MCMC diagnostics - Mortality"
  subtitle: "Test v17.0 - plot random effect - Size and basal area competition fixed effect"
  author: "Will Vieira"
@@ -551,7 +551,7 @@ post |>
 
 ## Plot competition effect
 
-```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=10}
 post |>
   filter(par %in% c('psi', 'Beta', 'theta')) |>
   pivot_wider(
@@ -598,7 +598,7 @@ post |>
 
 ## Mortality in function of fixed effects
 
-```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=6,fig.width=12}
+```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
 accur_ls <- mortProp_ls <- list()
 for(Sp in spIds)
 {
