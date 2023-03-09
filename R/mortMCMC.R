@@ -168,8 +168,9 @@ mort_dt[
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear],
-          BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra]
+          bio_01_mean = mort_dt[sampled == 'training', bio_01_mean],
+          maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
+          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -206,8 +207,7 @@ mort_dt[
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] BA_comp_sp
-    # [5] BA_comp_inter
+    # [4] bio_01_mean
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -217,7 +217,7 @@ mort_dt[
         -(
           post[, 'psi'] + 
           psiPlot +
-          post[, 'Beta'] * (dt[4] + post[, 'theta'] * dt[5])
+          -post[, 'tau_temp'] * (dt[4] - post[, 'optimal_temp'])^2
         )
       )
     )
@@ -269,7 +269,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, BA_comp_sp, BA_comp_intra)
+        .(mort, deltaYear, plot_id_seq, bio_01_mean)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -284,7 +284,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, BA_comp_sp, BA_comp_intra)
+        .(mort, deltaYear, plot_id_seq, bio_01_mean)
       ]
   )
 

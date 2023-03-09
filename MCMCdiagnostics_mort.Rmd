@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v14.1 - plot random effect - Basal area competition fixed effect"
+ subtitle: "Test v15.0 - plot random effect - mean annual temperature fixed effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -190,8 +190,8 @@ post_prior <- post |>
       value = case_when(
         par == 'psi' ~ rnorm(nIter, 2, 1),
         par == 'sigma_plot' ~ rexp(nIter, 2),
-        par == 'Beta' ~ rnorm(nIter, 0, .1),
-        par == 'theta' ~ rexp(nIter, 2.5)
+        par == 'optimal_temp' ~ rnorm(nIter, 5, 10),
+        par == 'tau_temp' ~ rnorm(nIter, 0, 1)
       )
     )
   )
@@ -513,56 +513,42 @@ post |>
 ```
 
 
-## Plot basal area effect
+## Mean annual temperature effect
 
-```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('psi', 'Beta', 'theta')) |>
+  filter(par %in% c('psi', 'optimal_temp', 'tau_temp')) |>
   pivot_wider(
     names_from = par,
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(BA_comp = seq(0, 100, 5)) |>
+  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
   mutate(
-    BAeffect_sp = BA_comp * Beta,
-    BAeffect_intra = BA_comp * Beta * theta,
-    psiBA_sp = exp(psi + BAeffect_sp),
-    psiBA_intra = exp(psi + BAeffect_intra)
+    tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
+    psi_T = exp(psi + tempEffect)
   ) |>
-  filter(theta < 2) |> 
-  select(iter, species_id, BA_comp, contains('BAeffect'), contains('psiBA')) |>
+  select(iter, species_id, bio_01_mean, tempEffect, psi_T) |>
   pivot_longer(
-    cols = c(contains('BAeffect'), contains('psiBA')),
-    names_to = c('log', 'sim'),
-    names_sep = '_'
+    cols = c('tempEffect', 'psi_T'),
+    names_to = 'sim'
   ) |>
   mutate(
-    log = factor(
-      log,
-      levels = c('BAeffect', 'psiBA'),
-      labels = c('Log linear effect of competition', 'longevity in function of competition')
-    ),
-    sim = factor(
-      sim,
-      levels = c('sp' ,'intra'),
-      labels = c('Conspecific interactions', 'Heterospecific interactions')
-    )
+    sim = factor(sim, levels = c('tempEffect', 'psi_T'), labels = c('Effect of MAT on the longevity parameter', 'Longevity in function of MAT'))
   ) |>
-  ggplot(aes(x = BA_comp, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.95, alpha = .8) +
-    facet_wrap(~sim + log, scales = 'free') +
+  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
-    xlab('Basal area competition') +
+    xlab('Mean annual temperature (MAT)') +
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
 ```
 
+## Mortality in function of fixed effects
 
-## Mortality in function of basal area competition
-
-```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=6,fig.width=12}
+```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=5,fig.width=10}
 accur_ls <- mortProp_ls <- list()
 for(Sp in spIds)
 {
@@ -586,8 +572,8 @@ for(Sp in spIds)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
-      Beta = i.Beta,
-      theta = i.theta
+      optimal_temp = i.optimal_temp,
+      tau_temp = i.tau_temp
     ),
     on = 'iter'
   ]
@@ -614,7 +600,7 @@ for(Sp in spIds)
         -(
           psi + 
           psiPlot +
-          Beta * (BA_comp_sp + theta * BA_comp_intra)
+          -tau_temp * (bio_01_mean - optimal_temp)^2
         )
       )
     )
@@ -663,85 +649,39 @@ for(Sp in spIds)
     deframe()
 
   # Prediction figures
-  dt_p1 <- train_sp |>
-    select(iter2, BA_comp_sp, mort, mort_pred) |>
+  p1 <- train_sp |>
+    select(iter2, bio_01_mean, mort, mort_pred) |>
     mutate(
-      BAc = cut(
-        BA_comp_sp,
-        seq(min(BA_comp_sp), max(BA_comp_sp), length.out = 10),
+      tempc = cut(
+        bio_01_mean,
+        seq(min(bio_01_mean), max(bio_01_mean), length.out = 10),
         include.lowest = TRUE
       )
     ) |>
-    group_by(BAc, iter2) |>
+    group_by(tempc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
       Pred = sum(mort_pred == 1)/n()
     ) |>
     pivot_longer(
       cols = c('Obs', 'Pred')
-    )
-
-  dt_p2 <- train_sp |>
-    select(iter2, BA_comp_intra, mort, mort_pred) |>
-    mutate(
-      BAc = cut(
-        BA_comp_intra,
-        seq(min(BA_comp_intra), max(BA_comp_intra), length.out = 10),
-        include.lowest = TRUE
-      )
-    ) |>
-    group_by(BAc, iter2) |>
-    summarise(
-      Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
-    ) |>
-    pivot_longer(
-      cols = c('Obs', 'Pred')
-    )
-
-  yLim = range(dt_p1$value, dt_p2$value)
-
-  p1 <- dt_p1 |> 
-    ggplot(aes(x = BAc, y = value, color = name)) +
+    ) |> 
+    ggplot(aes(x = tempc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
-      xlab('Conspecific basal area') +
+      xlab('Mean annual temperature') +
       ylab('Mortality proportion') +
       labs(subtitle = Sp) +
       theme_minimal() +
       geom_function(
         fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'])))^train_sp[, median(deltaYear)])),
+          1 - ((1/(1 + exp(-(post_sp['psi'] - post_sp['tau_temp'] * (x - post_sp['optimal_temp'])^2))^train_sp[, median(deltaYear)])),
         color = 1,
         linetype = 'dashed'
       ) +
       labs(color = '') +
       ylim(yLim)
 
-  p2 <- dt_p2 |>
-    ggplot(aes(x = BAc, y = value, color = name)) +
-      geom_boxplot(alpha = .4) +
-      xlab('Heterospecific basal area') +
-      ylab('') +
-      labs(subtitle = '') +
-      theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'] * post_sp['theta'])))^train_sp[, median(deltaYear)])),
-        color = 1,
-        linetype = 'dashed'
-      ) +
-      labs(color = '') +
-      ylim(yLim)
-
-  print(
-    ggarrange(
-      p1, p2,
-      ncol = 2,
-      nrow = 1,
-      common.legend = TRUE,
-      legend = 'bottom'
-    )
-  )
+  print(p1)
 }
 
 # save accuracy mortatality proportion to be used for model comparison
@@ -848,8 +788,8 @@ for(Sp in spIds_val)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
-      Beta = i.Beta,
-      theta = i.theta
+      optimal_temp = i.optimal_temp,
+      tau_temp = i.tau_temp
     ),
     on = 'iter'
   ]
@@ -883,7 +823,7 @@ for(Sp in spIds_val)
         -(
           psi + 
           psiPlot +
-          Beta * (BA_comp_sp + theta * BA_comp_intra)
+          -tau_temp * (bio_01_mean - optimal_temp)^2
         )
       )
     )
