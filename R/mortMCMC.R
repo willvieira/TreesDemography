@@ -156,6 +156,36 @@ mort_dt[
   on = 'plot_id'
 ]
 
+# get all possible time intervals
+time_interval <- unique(mort_dt[sampled == 'training', .(year0, year1)])
+time_interval[, time_int := 1:.N]
+
+# merge
+mort_dt[
+  time_interval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'year1', 'year1')
+]
+
+## get all possible years between year0 and year1
+all_years <- mort_dt[sampled == 'training', seq(min(year0), max(year1), 1)]
+toSub_year <- data.table(
+  all_years = all_years,
+  all_years_seq = 1:length(all_years)
+)
+
+# merge
+time_interval[
+  toSub_year,
+  year0_seq := i.all_years_seq,
+  on = c('year0' = 'all_years')
+]
+time_interval[
+  toSub_year,
+  year1_seq := i.all_years_seq,
+  on = c('year1' = 'all_years')
+]
+
 ## run the model
 
   stanModel <- cmdstan_model('stan/mortality.stan')
@@ -166,6 +196,11 @@ mort_dt[
           N = mort_dt[sampled == 'training', .N],
           Np = mort_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
+          Ny = length(all_years),
+          Ni = time_interval[, .N],
+          year0_seq = time_interval[, year0_seq],
+          year1_seq = time_interval[, year1_seq],
+          year_int = mort_dt[sampled == 'training', time_int],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear],
           size_t0 = mort_dt[sampled == 'training', dbh0],
@@ -210,15 +245,21 @@ mort_dt[
     # [4] dbh0
     # [5] BA_comp_sp
     # [6] BA_comp_inter
+    # [7] year_int
+
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
+
+    # Add year_id random effects
+    psiYear_interval <- post[, paste0('psiYear_interval[', dt[7], ']')]
 
     # fixed effects
     longev_log <- 1/(1 + exp(
         -(
           post[, 'psi'] + 
           psiPlot +
+          psiYear_interval + 
           -(log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])^2 +
           post[, 'Beta'] * (dt[5] + post[, 'theta'] * dt[6])
         )
@@ -272,7 +313,7 @@ mort_dt[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -287,7 +328,7 @@ mort_dt[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int)
       ]
   )
  
@@ -317,6 +358,24 @@ mort_dt[
     )
   )
 
+  # posterior of years parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiYear_interval', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiYearInt_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiYear\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiYear_', sp, '.RDS')
+    )
+  )
+
   # save sampling diagnostics
   saveRDS(
     diag_out,
@@ -332,6 +391,13 @@ mort_dt[
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    time_interval,
+      file = file.path(
+      'output',
+      paste0('timeInterval_', sp, '.RDS')
     )
   )
 

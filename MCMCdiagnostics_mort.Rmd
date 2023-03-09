@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v17.0 - plot random effect - Size and basal area competition fixed effect"
+ subtitle: "Test v18.0 - plot and year random effect - Size and basal area competition fixed effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -51,12 +51,18 @@ posteriorrPlot_files <- grep(
 )
 names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
 
-# posteriorrTree_files <- grep(
-#   'posteriorrTree',
-#   dir(file.path('output', simName), full.names = TRUE),
-#   value = TRUE
-# )
-# names(posteriorrTree_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrTree_files))))
+posteriorpsiYear_files <- grep(
+  'posteriorpsiYear_',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorpsiYear_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiYear_files))))
+posteriorpsiYearInt_files <- grep(
+  'posteriorpsiYearInt_',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriorpsiYearInt_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiYearInt_files))))
 
 diag_files <- grep(
   'diagnostics',
@@ -80,6 +86,13 @@ trainData <- map2_dfr(
   ~ readRDS(.x)
 )
 
+timeInterval <- map2_dfr(
+  timeInterval_files,
+  names(timeInterval_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
+)
+
 mort_dt <- readRDS('data/mort_dt.RDS')
 mort_dt <- mort_dt[species_id %in% spIds]
 
@@ -88,6 +101,11 @@ mort_dt[
   trainData,
   sampled := i.sampled,
   on = c('tree_id', 'year0')
+]
+mort_dt[
+  timeInterval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'year1' = 'year1', 'species_id' = 'species_id')
 ]
 
 # add species_id to trainData
@@ -107,7 +125,11 @@ trainData[
   ),
   on = c('tree_id', 'year0')
 ]
-
+trainData[
+  timeInterval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'species_id' = 'species_id')
+]
 # summary by plot_id and tree_id
 plot_id_summary <- mort_dt[, 
     .(
@@ -190,6 +212,7 @@ post_prior <- post |>
       value = case_when(
         par == 'psi' ~ rnorm(nIter, 3, 1),
         par == 'sigma_plot' ~ rexp(nIter, 2),
+        par == 'sigma_year' ~ rexp(nIter, 2),
         par == 'size_opt' ~ rnorm(nIter, 250, 100),
 	      par == 'size_var' ~ rlnorm(nIter, 1, 1),
         par == 'Beta' ~ rnorm(nIter, 0, .1),
@@ -240,147 +263,120 @@ for(i in 1:ncol(parComb))
 ```
 
 
-# Plot random effect
+# Random effect
 
 ```{r plot_randomEffect, eval = TRUE, warning=FALSE, message=FALSE,echo = F, fig.height = 8, fig.width = 8}
-plotEffect_ls <- list()
-# treeEffect_ls <- list()
+plotEffect_ls <- yearEffect_ls <- list()
 for(Sp in spIds)
 {
     psi_pop <- post |>
-        filter(species_id == Sp & par == 'psi') |>
-        mutate(psi_pop = value) |>
-        select(psi_pop, iter)
-
+      filter(species_id == Sp & par == 'psi') |>
+      mutate(psi_pop = value) |>
+      select(psi_pop, iter)
     psi_mean <- psi_pop |>
-        summarise(psi_mean = mean(exp(psi_pop))) |>
-        pull(psi_mean)
-
-    dt_toPlot <- readRDS(posteriorrPlot_files[Sp]) |>
-            mutate(plot_id_seq = parse_number(par)) |>
-            left_join(
-              psi_pop
-            ) |>
-            mutate(
-              psiPlot = value,
-              psi_natural = exp(psiPlot + psi_pop)
-            ) |>
-            select(!value) |>
-            left_join(
-              trainData[
-                species_id == Sp & !is.na(plot_id_seq),
-                .(plot_id = unique(plot_id)),
-                by = plot_id_seq
-              ]
-            ) |>
-            left_join(
-              plot_id_summary
-            )
+      summarise(psi_mean = mean(exp(psi_pop))) |>
+      pull(psi_mean)
+    dt_toPlot <- readRDS(posteriorpsiPlot_files[Sp]) |>
+      mutate(plot_id_seq = parse_number(par)) |>
+      left_join(
+        psi_pop
+      ) |>
+      mutate(
+        psiPlot = value,
+        psi_natural = exp(psiPlot + psi_pop)
+      ) |>
+      select(!value) |>
+      left_join(
+        trainData[
+          species_id == Sp & !is.na(plot_id_seq),
+          .(plot_id = unique(plot_id)),
+          by = plot_id_seq
+        ]
+      ) |>
+      left_join(
+        plot_id_summary
+      )
     
-    # dt_toTree <- readRDS(posteriorrTree_files[Sp]) |>
-    #         mutate(tree_id_seq = parse_number(par)) |>
-    #         left_join(
-    #           psi_pop
-    #         ) |>
-    #         mutate(psi_natural = exp(value + psi_pop)) |>
-    #         left_join(
-    #           trainData[
-    #             species_id == Sp & !is.na(tree_id_seq),
-    #             .(tree_id = unique(tree_id)),
-    #             by = tree_id_seq
-    #           ]
-    #         ) |>
-    #         left_join(
-    #           tree_id_summary
-    #         )
-
-      # save plot effect mean to plot against other variables
-      # in the next code block
-      plotEffect_ls[[Sp]] <- dt_toPlot |>
-          group_by(par) |>
-          mutate(
-            psi_natural_mean = mean(psi_natural),
-            psi_pop = exp(psi_pop)
-          ) |>
-          ungroup() |>
-          filter(iter == 1) |>
-          select(
-            plot_id, plot_id_seq, psi_pop, psi_natural_mean, latitude,
-            BA_plot, bio_01_mean, bio_12_mean
-          )
-
-      # treeEffect_ls[[Sp]] <- dt_toTree |>
-      #     group_by(par) |>
-      #     mutate(
-      #       psi_natural_mean = mean(psi_natural),
-      #       r_pop = exp(r_pop)
-      #     ) |>
-      #     ungroup() |>
-      #     filter(iter == 1) |>
-      #     select(
-      #       tree_id, tree_id_seq, r_pop, psi_natural_mean, dbh, BA_comp, bio_01_mean
-      #     )
-
-      # filter tree_ids within plots with higher number of individuals
-      # plots_toKeep <- dt_toTree |>
-      #     filter(iter == 1) |>
-      #     group_by(plot_id) |>
-      #     summarise(nInd = n()) |>
-      #     arrange(desc(nInd)) |>
-      #     mutate(cumInd = cumsum(nInd)) |>
-      #     filter(cumInd < 500) |>
-      #     pull(plot_id)
-      
-      # dt_toTree <- dt_toTree |>
-      #     filter(plot_id %in% plots_toKeep) |>
-      #     left_join(
-      #       dt_toPlot |>
-      #         select(plot_id, iter, plot_id_seq, rPlot_log)
-      #     ) |>
-      #     arrange(plot_id_seq) |>
-      #     mutate(
-      #       psi_naturalPlotTree = exp(value + r_pop + rPlot_log)
-      #     )
-
+    # prepare timeInterval info
+    yearRange <- timeInterval[species_id == Sp, range(c(year0, year1))]
+    yearSeq_id <- data.table(
+      year = seq(yearRange[1], yearRange[2]),
+      year_id = 1:length(seq(yearRange[1], yearRange[2])
+      )
+    )
+    
+    dt_toYear <- readRDS(posteriorpsiYear_files[Sp]) |>
+      mutate(year_id = parse_number(par)) |>
+      left_join(
+        psi_pop
+      ) |>
+      mutate(psi_natural = exp(value + psi_pop)) |>
+      left_join(
+        yearSeq_id
+      )
+    
+    # save plot effect mean to plot against other variables
+    # in the next code block
+    plotEffect_ls[[Sp]] <- dt_toPlot |>
+        group_by(par) |>
+        mutate(
+          psi_natural_mean = mean(psi_natural),
+          psi_pop = exp(psi_pop)
+        ) |>
+        ungroup() |>
+        filter(iter == 1) |>
+        select(
+          plot_id, plot_id_seq, psi_pop, psi_natural_mean, latitude,
+          BA_plot, bio_01_mean, bio_12_mean
+        )
+    yearEffect_ls[[Sp]] <- dt_toYear |>
+        group_by(par) |>
+        mutate(
+          psi_natural_mean = mean(psi_natural),
+          psi_pop = exp(psi_pop)
+        ) |>
+        ungroup() |>
+        filter(iter == 1) |>
+        select(
+          year, year_id, psi_pop, psi_natural_mean
+        )
     print(
-    #   ggarrange(
-          dt_toPlot |>
-              filter(plot_id_seq %in% sample(plot_id_seq, 800)) |>
-              mutate(plot_id = fct_reorder(plot_id, latitude)) |>
-              ggplot(aes(y = plot_id, x = psi_natural, color = bio_01_mean)) +
-                stat_pointinterval(alpha = .7, size = .1) +
-                geom_vline(
-                  xintercept = psi_mean, color = 'red', alpha = .8
-                ) +
-                xlab('Longevity (years)') +
-                ylab('plot_id (ordered by latitude)') +
-                theme(
-                  legend.position = 'top',
-                  axis.text.y = element_blank()
-                ) +
-                labs(subtitle = Sp)#,
-    #       dt_toTree |>
-    #           ggplot(aes(y = tree_id, x = psi_naturalPlotTree, color = plot_id)) +
-    #             stat_pointinterval(alpha = .7, size = .1) +
-    #             geom_vline(
-    #               xintercept = psi_mean, color = 'red', alpha = .8
-    #             ) +
-    #             xlab('Longetivity') +
-    #             ylab('tree_id (color grouped by plot_id)') +
-    #             theme(
-    #               legend.position = 'none',
-    #               axis.text.y = element_blank()
-    #             ) +
-    #             labs(subtitle = ''),
-    #       ncol = 2
-    #   )
+      ggarrange(
+        dt_toPlot |>
+            filter(plot_id_seq %in% sample(plot_id_seq, 800)) |>
+            mutate(plot_id = fct_reorder(plot_id, latitude)) |>
+            ggplot(aes(y = plot_id, x = psi_natural, color = bio_01_mean)) +
+              stat_pointinterval(alpha = .7, size = .1) +
+              geom_vline(
+                xintercept = psi_mean, color = 'red', alpha = .8
+              ) +
+              xlab('Longevity (years)') +
+              ylab('plot_id (ordered by latitude)') +
+              theme(
+                legend.position = 'top',
+                axis.text.y = element_blank()
+              ) +
+              labs(subtitle = Sp),
+        dt_toYear |>
+            mutate(year = factor(year)) |>
+            ggplot(aes(y = year, x = log(psi_natural))) +
+              stat_pointinterval(alpha = .7, size = .1) +
+              geom_vline(
+                xintercept = log(psi_mean), color = 'red', alpha = .8
+              ) +
+              xlab('Longetivity (log scale)') +
+              ylab('Year') +
+              theme(
+                legend.position = 'none'
+              ) +
+              labs(subtitle = ''),
+        ncol = 2
+    )
     )
 }
-
 # save plot effect ot be used against future models
 plotEffect <- plotEffect_ls |>
   bind_rows(.id = 'species_id')
-
 plotEffect |>
   select(species_id, plot_id, psi_natural_mean) |>
   saveRDS(
@@ -390,19 +386,17 @@ plotEffect |>
         'meanPlotEffect_psi.RDS'
     )
   )
-
-# treeEffect <- treeEffect_ls |>
-#   bind_rows(.id = 'species_id')
-
-# treeEffect |>
-#   select(species_id, tree_id, r_pop, psi_natural_mean) |>
-#   saveRDS(
-#     file.path(
-#         'output', 
-#         simName,
-#         'meanTreeEffect_rReal.RDS'
-#     )
-#   )
+yearEffect <- yearEffect_ls |>
+  bind_rows(.id = 'species_id')
+yearEffect |>
+  select(species_id, year, year_id, psi_pop, psi_natural_mean) |>
+  saveRDS(
+    file.path(
+        'output', 
+        simName,
+        'meanYearEffect_psi.RDS'
+    )
+  )
 ```
 
 
@@ -444,6 +438,41 @@ psiPlot_mean |>
   )
 ```
 
+
+# Correlation in year random effects between species
+
+```{r corrYearEffect, echo = FALSE, warning=FALSE, message=FALSE, fig.height=8, fig.width = 8}
+# load parameters
+post_mean <- post |>
+  filter(par == 'psi') |>
+  group_by(species_id) |>
+  summarise(psi = mean(value))
+psiYear_mean <- readRDS(
+  file.path('output', simName, 'meanYearEffect_psi.RDS')
+  ) |>
+  left_join(
+    post_mean
+  ) |>
+  mutate(
+    psiYear = log(psi_natural_mean) - psi
+  )
+psiYear_mean |>
+  mutate(species_id = gsub('[0-9]', '', species_id)) |>
+  select(species_id, year, psiYear) |>
+  pivot_wider(
+    names_from = species_id,
+    values_from = psiYear
+  ) |>
+  select(!year) |>
+  correlate(use = 'na.or.complete', quiet = TRUE) |>
+  rplot() +
+  scale_color_gradient2(limits = c(-1,1)) +
+  #labs(title = 'Correlation of year random effects between species') +
+  theme(
+    legend.position = 'bottom',
+    axis.text.x = element_text(angle = 45, vjust = 0.4),
+  )
+```
 
 # Changes in plot random effect from past models
 
@@ -642,6 +671,18 @@ for(Sp in spIds)
     on = c('iter', 'plot_id_seq')
   ]
 
+  # merge plot_id parameters if plot is present in validation data
+  train_sp[
+    readRDS(posteriorpsiYearInt_files[Sp]) |>
+      mutate(
+        time_int = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiYear := i.value,
+    on = c('iter', 'time_int')
+  ]
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   train_sp[, iter2 := 1:.N, by = obsID]
@@ -652,6 +693,7 @@ for(Sp in spIds)
         -(
           psi + 
           psiPlot +
+          psiYear +
           -(log(dbh0/size_opt)/size_var)^2 +
           Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
@@ -948,6 +990,18 @@ for(Sp in spIds_val)
     psiPlot := rnorm(.N, 0, sigma_plot)
   ]
 
+  # merge plot_id parameters if plot is present in validation data
+  val_sp[
+    readRDS(posteriorpsiYearInt_files[Sp]) |>
+      mutate(
+        time_int = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiYear := i.value,
+    on = c('iter', 'time_int')
+  ]
+  
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
@@ -958,6 +1012,7 @@ for(Sp in spIds_val)
         -(
           psi + 
           psiPlot +
+          psiYear +
           -(log(dbh0/size_opt)/size_var)^2 +
           Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
