@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v14.1 - plot random effect - Basal area competition fixed effect"
+ subtitle: "Test v17.0 - plot random effect - Size and basal area competition fixed effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -188,8 +188,10 @@ post_prior <- post |>
     group_by(par) |>
     mutate(
       value = case_when(
-        par == 'psi' ~ rnorm(nIter, 2, 1),
+        par == 'psi' ~ rnorm(nIter, 3, 1),
         par == 'sigma_plot' ~ rexp(nIter, 2),
+        par == 'size_opt' ~ rnorm(nIter, 250, 100),
+	      par == 'size_var' ~ rlnorm(nIter, 1, 1),
         par == 'Beta' ~ rnorm(nIter, 0, .1),
         par == 'theta' ~ rexp(nIter, 2.5)
       )
@@ -513,7 +515,41 @@ post |>
 ```
 
 
-## Plot basal area effect
+## Size effect
+
+```{r SizeEffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+post |>
+  filter(par %in% c('psi', 'size_opt', 'size_var')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(size = seq(10, 800, 20)) |>
+  mutate(
+    SizeEffect = -(log(size/size_opt)/size_var)^2,
+    psi_size = exp(psi + SizeEffect)
+  ) |>
+  select(iter, species_id, size, SizeEffect, psi_size) |>
+  pivot_longer(
+    cols = c('SizeEffect', 'psi_size'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('SizeEffect', 'psi_size'), labels = c('DBH effect (log linear)', 'DBH effect on longetivity'))
+  ) |>
+  ggplot(aes(x = size, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.95, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('DBH (mm)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
+## Plot competition effect
 
 ```{r BAeffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
 post |>
@@ -560,7 +596,7 @@ post |>
 ```
 
 
-## Mortality in function of basal area competition
+## Mortality in function of fixed effects
 
 ```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=6,fig.width=12}
 accur_ls <- mortProp_ls <- list()
@@ -586,6 +622,8 @@ for(Sp in spIds)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
+      size_opt = i.size_opt,
+      size_var = i.size_var,
       Beta = i.Beta,
       theta = i.theta
     ),
@@ -614,6 +652,7 @@ for(Sp in spIds)
         -(
           psi + 
           psiPlot +
+          -(log(dbh0/size_opt)/size_var)^2 +
           Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
       )
@@ -699,7 +738,26 @@ for(Sp in spIds)
       cols = c('Obs', 'Pred')
     )
 
-  yLim = range(dt_p1$value, dt_p2$value)
+# Prediction figures
+  dt_p3 <- train_sp |>
+    select(iter2, dbh0, mort, mort_pred) |>
+    mutate(
+      sizec = cut(
+        dbh0,
+        seq(min(dbh0, na.rm = TRUE), max(dbh0, na.rm = TRUE), length.out = 10),
+        include.lowest = TRUE
+      )
+    ) |>
+    group_by(sizec, iter2) |>
+    summarise(
+      Obs = sum(mort == 1)/n(),
+      Pred = sum(mort_pred == 1)/n()
+    ) |>
+    pivot_longer(
+      cols = c('Obs', 'Pred')
+    )
+    
+  yLim = range(c(dt_p1$value, dt_p2$value, dt_p3$value))
 
   p1 <- dt_p1 |> 
     ggplot(aes(x = BAc, y = value, color = name)) +
@@ -733,11 +791,26 @@ for(Sp in spIds)
       labs(color = '') +
       ylim(yLim)
 
+  p3 <- dt_p3 |>
+    ggplot(aes(x = sizec, y = value, color = name)) +
+      geom_boxplot(alpha = .4) +
+      xlab('DBH (mm)') +
+      ylab('Mortality proportion') +
+      labs(subtitle = Sp) +
+      theme_minimal() +
+      geom_function(
+        fun = function(x)
+          1 - ((1/(1 + exp(-(post_sp['psi'] - (log(dbh0/post_sp['size_opt'])/post_sp['size_var'])^2))))^train_sp[, median(deltaYear)]),
+        color = 1,
+        linetype = 'dashed'
+      ) +
+      labs(color = '')
+
   print(
     ggarrange(
-      p1, p2,
+      p1, p2, p3,
       ncol = 2,
-      nrow = 1,
+      nrow = 2,
       common.legend = TRUE,
       legend = 'bottom'
     )
@@ -848,6 +921,8 @@ for(Sp in spIds_val)
     `:=`(
       psi = i.psi,
       sigma_plot = i.sigma_plot,
+      size_opt = i.size_opt,
+      size_var = i.size_var,
       Beta = i.Beta,
       theta = i.theta
     ),
@@ -883,6 +958,7 @@ for(Sp in spIds_val)
         -(
           psi + 
           psiPlot +
+          -(log(dbh0/size_opt)/size_var)^2 +
           Beta * (BA_comp_sp + theta * BA_comp_intra)
         )
       )
