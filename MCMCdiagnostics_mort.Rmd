@@ -83,6 +83,19 @@ trainData <- map2_dfr(
 mort_dt <- readRDS('data/mort_dt.RDS')
 mort_dt <- mort_dt[species_id %in% spIds]
 
+# scale temperature
+mort_dt[, nbMeasure := .N, by = tree_id]
+mort_dt[
+  nbMeasure > 1,
+  temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bio_01_mean)),
+  by = species_id
+]
+# fill scaled temperature NAs for tree_ids with nbMeasure == 1
+mort_dt[,
+  temp_sc := nafill(nafill(temp_sc, "locf"), "nocb"),
+  by = .(species_id, plot_id, year0)
+]
+
 # merge with train data
 mort_dt[
   trainData,
@@ -103,7 +116,8 @@ trainData[
     'BA_comp_intra' = i.BA_comp_intra,
     'BA_plot' = i.BA_plot,
     'bio_01_mean' = i.bio_01_mean,
-    'bio_12_mean' = i.bio_12_mean
+    'bio_12_mean' = i.bio_12_mean,
+    'temp_sc' = i.temp_sc
   ),
   on = c('tree_id', 'year0')
 ]
@@ -190,8 +204,8 @@ post_prior <- post |>
       value = case_when(
         par == 'psi' ~ rnorm(nIter, 2, 1),
         par == 'sigma_plot' ~ rexp(nIter, 2),
-        par == 'optimal_temp' ~ rnorm(nIter, 5, 10),
-        par == 'tau_temp' ~ rnorm(nIter, 0, 1)
+        par == 'optimal_temp' ~ rbeta(nIter, 2, 2),
+        par == 'tau_temp' ~ rnorm(nIter, 0, 2)
       )
     )
   )
@@ -523,12 +537,12 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
+  expand_grid(temp_sc = seq(0, 1, .05)) |>
   mutate(
-    tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
+    tempEffect = -tau_temp * (temp_sc - optimal_temp)^2,
     psi_T = exp(psi + tempEffect)
   ) |>
-  select(iter, species_id, bio_01_mean, tempEffect, psi_T) |>
+  select(iter, species_id, temp_sc, tempEffect, psi_T) |>
   pivot_longer(
     cols = c('tempEffect', 'psi_T'),
     names_to = 'sim'
@@ -536,11 +550,11 @@ post |>
   mutate(
     sim = factor(sim, levels = c('tempEffect', 'psi_T'), labels = c('Effect of MAT on the longevity parameter', 'Longevity in function of MAT'))
   ) |>
-  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
+  ggplot(aes(x = temp_sc, y = value, color = species_id)) +
     stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
-    xlab('Mean annual temperature (MAT)') +
+    xlab('Scaled mean annual temperature (MAT)') +
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
@@ -549,7 +563,7 @@ post |>
 ## Mortality in function of fixed effects
 
 ```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=5,fig.width=10}
-accur_ls <- mortProp_ls <- list()
+accur_ls <- mortProp_ls <- mortPropPlot_ls <- list()
 for(Sp in spIds)
 {
   train_sp <- trainData[species_id == Sp & sampled == 'training']
@@ -600,7 +614,7 @@ for(Sp in spIds)
         -(
           psi + 
           psiPlot +
-          -tau_temp * (bio_01_mean - optimal_temp)^2
+          -tau_temp * (temp_sc - optimal_temp)^2
         )
       )
     )
@@ -642,6 +656,15 @@ for(Sp in spIds)
     ) |>
     bind_cols(species_id = Sp)
 
+  mortPropPlot_ls[[Sp]] <- train_sp |>
+    group_by(plot_id) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
+
+
   post_sp <- post |>
     filter(species_id == Sp) |>
     group_by(par) |>
@@ -652,11 +675,11 @@ for(Sp in spIds)
 
   # Prediction figures
   p1 <- train_sp |>
-    select(iter2, bio_01_mean, mort, mort_pred) |>
+    select(iter2, temp_sc, mort, mort_pred) |>
     mutate(
       tempc = cut(
-        bio_01_mean,
-        seq(min(bio_01_mean), max(bio_01_mean), length.out = 10),
+        temp_sc,
+        seq(min(temp_sc), max(temp_sc), length.out = 10),
         include.lowest = TRUE
       )
     ) |>
@@ -670,16 +693,16 @@ for(Sp in spIds)
     ) |> 
     ggplot(aes(x = tempc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
-      xlab('Mean annual temperature') +
+      xlab('Scaled mean annual temperature') +
       ylab('Mortality proportion') +
       labs(subtitle = Sp) +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          mort_prob(post_sp['tau_temp'] * (x - post_sp['optimal_temp'])^2),
-        color = 1,
-        linetype = 'dashed'
-      ) +
+      # geom_function(
+      #   fun = function(x)
+      #     mort_prob(post_sp['tau_temp'] * (x - post_sp['optimal_temp'])^2),
+      #   color = 1,
+      #   linetype = 'dashed'
+      # ) +
       labs(color = '')
   
   print(p1)
@@ -692,7 +715,9 @@ accur_ls |>
 mortProp_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'mortProp.RDS'))
-
+mortPropPlot_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortPropPlot.RDS'))
 ```
 
 
@@ -729,7 +754,7 @@ accur_ls |>
 ```
 
 
-## Proportion of mortality events in the population
+## Population level mortality rate
 
 ```{r plotMortProp,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
 propObs <- mortProp_ls |>
@@ -755,6 +780,20 @@ mortProp_ls |>
     ylab('')
 ```
 
+```{r plotMortProp2,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+mortPropPlot_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_obs, y = mortProp_pred)) +
+    geom_point(size = .7, alpha = 0.6) +
+    facet_wrap(~species_id) +
+    geom_smooth(method = 'gam') +
+    geom_abline(slope = 1, intercept = 0) +
+    theme_classic() +
+    xlab('Observerd mortality rate') +
+    ylab('Predicted mortality rate')
+```
+
+
 # Out-of-bag cross-validation
 
 ```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
@@ -762,7 +801,7 @@ mortProp_ls |>
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
 # list accuracy db for each species
-accurOBB_ls <- mortPropOBB_ls <- list()
+accurOBB_ls <- mortPropOBB_ls <- mortPropPlotOBB_ls <- list()
 
 # some species did not have enough data for spliting train and validation
 # run only for species with validation data
@@ -824,7 +863,7 @@ for(Sp in spIds_val)
         -(
           psi + 
           psiPlot +
-          -tau_temp * (bio_01_mean - optimal_temp)^2
+          -tau_temp * (temp_sc - optimal_temp)^2
         )
       )
     )
@@ -865,6 +904,14 @@ for(Sp in spIds_val)
       mortProp_pred = sum(mort_pred == 1)/n()
     ) |>
     bind_cols(species_id = Sp)
+
+  mortPropPlotOBB_ls[[Sp]] <- val_sp |>
+    group_by(plot_id) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
@@ -874,6 +921,9 @@ accurOBB_ls |>
 mortPropOBB_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'mortProp_oob.RDS'))
+mortPropPlotOBB_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortPropPlot_oob.RDS'))
 ```
 
 ```{r plot_accurOOB, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 13, fig.width = 9}
@@ -906,7 +956,7 @@ map_dfr(
 ```
 
 
-## OOB proportion of mortality events in the population
+## OOB population level mortality rate
 
 ```{r plotMortPropOBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
 propObs <- mortPropOBB_ls |>
@@ -933,7 +983,21 @@ map_dfr(
     ) +
     theme_classic() +
     xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
-    ylab('')
+    ylab('') +
+    theme(legend.position = 'bottom')
+```
+
+```{r plotMortProp2OBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+mortPropPlotOBB_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_obs, y = mortProp_pred)) +
+    geom_point(size = 0.7, alpha = 0.6) +
+    facet_wrap(~species_id, scales = 'free') +
+    geom_smooth(method = 'gam') +
+    geom_abline(slope = 1, intercept = 0) +
+    theme_classic() +
+    xlab('Observerd mortality rate') +
+    ylab('Predicted mortality rate')
 ```
 
 
