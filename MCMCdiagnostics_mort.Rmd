@@ -599,7 +599,7 @@ post |>
 ## Mortality in function of fixed effects
 
 ```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
-accur_ls <- mortProp_ls <- list()
+accur_ls <- mortProp_ls <- mortPropPlot_ls <- list()
 for(Sp in spIds)
 {
   train_sp <- trainData[species_id == Sp & sampled == 'training']
@@ -695,13 +695,21 @@ for(Sp in spIds)
     ) |>
     bind_cols(species_id = Sp)
 
+  mortPropPlot_ls[[Sp]] <- train_sp |>
+    group_by(plot_id) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
+  
+  # Prediction figures
   post_sp <- post |>
     filter(species_id == Sp) |>
     group_by(par) |>
     summarise(value = mean(value)) |>
     deframe()
 
-  # Prediction figures
   dt_p1 <- train_sp |>
     select(iter2, BA_comp_sp, mort, mort_pred) |>
     mutate(
@@ -824,7 +832,9 @@ accur_ls |>
 mortProp_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'mortProp.RDS'))
-
+mortPropPlot_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortPropPlot.RDS'))
 ```
 
 
@@ -861,7 +871,7 @@ accur_ls |>
 ```
 
 
-## Proportion of mortality events in the population
+## Population level mortality rate
 
 ```{r plotMortProp,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
 propObs <- mortProp_ls |>
@@ -887,6 +897,20 @@ mortProp_ls |>
     ylab('')
 ```
 
+```{r plotMortProp2,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+mortPropPlot_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_obs, y = mortProp_pred)) +
+    geom_point(size = .7, alpha = 0.6) +
+    facet_wrap(~species_id) +
+    geom_smooth(method = 'gam') +
+    geom_abline(slope = 1, intercept = 0) +
+    theme_classic() +
+    xlab('Observerd mortality rate') +
+    ylab('Predicted mortality rate')
+```
+
+
 # Out-of-bag cross-validation
 
 ```{r obbCrossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height = 9, fig.width = 9}
@@ -894,7 +918,7 @@ mortProp_ls |>
 # So I will loop over each species to (i) load dataset, (ii) predict for validation, (iii) compute prediction metrics and (iv) generate the plots
 
 # list accuracy db for each species
-accurOBB_ls <- mortPropOBB_ls <- list()
+accurOBB_ls <- mortPropOBB_ls <- mortPropPlotOBB_ls <- list()
 
 # some species did not have enough data for spliting train and validation
 # run only for species with validation data
@@ -1000,6 +1024,14 @@ for(Sp in spIds_val)
       mortProp_pred = sum(mort_pred == 1)/n()
     ) |>
     bind_cols(species_id = Sp)
+
+  mortPropPlotOBB_ls[[Sp]] <- val_sp |>
+    group_by(plot_id) |>
+    summarise(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_pred == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
 }
 
 # save accuracy to be used for model comparison
@@ -1009,6 +1041,9 @@ accurOBB_ls |>
 mortPropOBB_ls |>
   bind_rows() |>
   saveRDS(file.path('output', simName, 'mortProp_oob.RDS'))
+mortPropPlotOBB_ls |>
+  bind_rows() |>
+  saveRDS(file.path('output', simName, 'mortPropPlot_oob.RDS'))
 ```
 
 ```{r plot_accurOOB, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 13, fig.width = 9}
@@ -1041,7 +1076,7 @@ map_dfr(
 ```
 
 
-## OOB proportion of mortality events in the population
+## OOB population level mortality rate
 
 ```{r plotMortPropOBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
 propObs <- mortPropOBB_ls |>
@@ -1068,7 +1103,21 @@ map_dfr(
     ) +
     theme_classic() +
     xlab('Proportion of mortality events (obs in red vs predicted in grey)') +
-    ylab('')
+    ylab('') +
+    theme(legend.position = 'bottom')
+```
+
+```{r plotMortProp2OBB,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=10}
+mortPropPlotOBB_ls |>
+  bind_rows() |>
+  ggplot(aes(x = mortProp_obs, y = mortProp_pred)) +
+    geom_point(size = 0.7, alpha = 0.6) +
+    facet_wrap(~species_id, scales = 'free') +
+    geom_smooth(method = 'gam') +
+    geom_abline(slope = 1, intercept = 0) +
+    theme_classic() +
+    xlab('Observerd mortality rate') +
+    ylab('Predicted mortality rate')
 ```
 
 
