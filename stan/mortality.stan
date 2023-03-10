@@ -14,7 +14,7 @@ parameters {
 	real<lower=-2,upper=8> psi; // baseline longevity
 	vector[Np] psiPlot; // plot random effect
 	real<lower=0> sigma_plot;
-	real<lower=minTemp,upper=maxTemp> optimal_temp;
+	real<lower=0,upper=1> optimal_temp;
   real<lower=0> tau_temp;
 }
 model {
@@ -22,16 +22,17 @@ model {
 	psi ~ normal(2, 1);
 	psiPlot ~ normal(0, sigma_plot);
 	sigma_plot ~ exponential(2);
-  optimal_temp ~ normal(5, 10);
-  tau_temp ~ normal(0, 1);
+  optimal_temp ~ beta(2, 2);
+  tau_temp ~ normal(0, 2);
 
 	// mortality rate
 	vector[N] longev_log = 
 		psi + // intercept
-		psiPlot[plot_id]; // plot random effect
+		psiPlot[plot_id] + // plot random effect
+		-tau_temp .* square(bio_01_mean - optimal_temp); //temp effect
 
 	// accounting for the time interval between sensus
-	vector[N] mortality_time = 1 - delta_time .* log1p_exp(-longev_log);
+	vector[N] mortality_time = 1 - exp(-delta_time .* log1p_exp(-longev_log));
 
-	state_t1 ~ bernoulli_logit(mortality_time);
+	state_t1 ~ bernoulli(mortality_time);
 }

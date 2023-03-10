@@ -648,6 +648,8 @@ for(Sp in spIds)
     summarise(value = mean(value)) |>
     deframe()
 
+  mort_prob = function(psi) return( 1 - ( (1/(1 + exp(-(psi))))^2  ) )
+
   # Prediction figures
   p1 <- train_sp |>
     select(iter2, bio_01_mean, mort, mort_pred) |>
@@ -674,13 +676,12 @@ for(Sp in spIds)
       theme_minimal() +
       geom_function(
         fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] - post_sp['tau_temp'] * (x - post_sp['optimal_temp'])^2))^train_sp[, median(deltaYear)])),
+          mort_prob(post_sp['tau_temp'] * (x - post_sp['optimal_temp'])^2),
         color = 1,
         linetype = 'dashed'
       ) +
-      labs(color = '') +
-      ylim(yLim)
-
+      labs(color = '')
+  
   print(p1)
 }
 
