@@ -157,7 +157,7 @@ mort_dt[
 ]
 
 # scale temperature
-mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bio_01_mean))]
+mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bio_12_mean))]
 
 
 ## run the model
@@ -172,9 +172,7 @@ mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bi
           plot_id = mort_dt[sampled == 'training', plot_id_seq],
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear],
-          bio_01_mean = mort_dt[sampled == 'training', temp_sc],
-          maxTemp = dataSource[species_id == sp, max(bio_01_mean, na.rm = T)],
-          minTemp = dataSource[species_id == sp, min(bio_01_mean, na.rm = T)]
+          bio_12_mean = mort_dt[sampled == 'training', prec_sc]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -211,7 +209,7 @@ mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bi
     # [1] status
     # [2] deltaTime
     # [3] plot_id
-    # [4] bio_01_mean
+    # [4] bio_12_mean
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -221,7 +219,7 @@ mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bi
         -(
           post[, 'psi'] + 
           psiPlot +
-          -post[, 'tau_temp'] * (dt[4] - post[, 'optimal_temp'])^2
+          -post[, 'tau_prec'] * (dt[4] - post[, 'optimal_prec'])^2
         )
       )
     )
@@ -273,7 +271,7 @@ mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bi
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, temp_sc)
+        .(mort, deltaYear, plot_id_seq, prec_sc)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -288,7 +286,7 @@ mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bi
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, temp_sc)
+        .(mort, deltaYear, plot_id_seq, prec_sc)
       ]
   )
 

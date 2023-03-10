@@ -15,13 +15,14 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plot_temp"
+simName: "mort_plot_prec"
 # simulations to compare with
 simCompare: [
         "mort_plot",
         "mort_plotYear",
-        mort_plot_size,
-        "mort_plot_BAcomp"
+        "mort_plot_size",
+        "mort_plot_BAcomp",
+        "mort_plot_temp"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
 cluster: "mp2b"
@@ -45,3 +46,5 @@ cluster: "mp2b"
 # V14.1 - Instead of plot BA, use individual level BA of neighbour individuals larger than the focal individual for intra and interspecific competition (BA_comp_sp and BA_comp_intra)
 
 # V15.0 - building on v10.0, add the effect of bio_01_mean using the bell shape function with optimal and breadth parameters
+
+# V16.0 - building on v10.0, add the effect of bio_12_mean using the bell shape function with optimal and breadth parameters
