@@ -808,6 +808,9 @@ for(Sp in spIds)
     
   yLim = range(c(dt_p1$value, dt_p2$value, dt_p3$value))
 
+  mort_prob = function(psi)
+    return( 1 - ( (1/(1 + exp(-(psi))))^train_sp[, median(deltaYear)] ) )
+  
   p1 <- dt_p1 |> 
     ggplot(aes(x = BAc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
@@ -815,12 +818,12 @@ for(Sp in spIds)
       ylab('Mortality proportion') +
       labs(subtitle = Sp) +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'])))^train_sp[, median(deltaYear)])),
-        color = 1,
-        linetype = 'dashed'
-      ) +
+      # geom_function(
+      #   fun = function(x)
+      #     mort_prob(post_sp['psi'] + x * post_sp['Beta']),
+      #   color = 1,
+      #   linetype = 'dashed'
+      # ) +
       labs(color = '') +
       ylim(yLim)
 
@@ -831,12 +834,12 @@ for(Sp in spIds)
       ylab('') +
       labs(subtitle = '') +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'] * post_sp['theta'])))^train_sp[, median(deltaYear)])),
-        color = 1,
-        linetype = 'dashed'
-      ) +
+      # geom_function(
+      #   fun = function(x)
+      #     mort_prob(post_sp['psi'] + x * post_sp['Beta'] * post_sp['theta']),
+      #   color = 1,
+      #   linetype = 'dashed'
+      # ) +
       labs(color = '') +
       ylim(yLim)
 
@@ -845,15 +848,16 @@ for(Sp in spIds)
       geom_boxplot(alpha = .4) +
       xlab('DBH (mm)') +
       ylab('Mortality proportion') +
-      labs(subtitle = Sp) +
+      labs(subtitle = '') +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] - (log(dbh0/post_sp['size_opt'])/post_sp['size_var'])^2))))^train_sp[, median(deltaYear)]),
-        color = 1,
-        linetype = 'dashed'
-      ) +
-      labs(color = '')
+      # geom_function(
+      #   fun = function(x)
+      #     mort_prob(post_sp['psi'] - (log(x/post_sp['size_opt'])/post_sp['size_var'])^2),
+      #   color = 1,
+      #   linetype = 'dashed'
+      # ) +
+      labs(color = '') +
+      ylim(yLim)
 
   print(
     ggarrange(
