@@ -37,19 +37,19 @@ simName <- simInfo$simName
 simulations <- simInfo$simulations
 
 # List output files and set vector names to species_id
-posteriorPop_files <- grep(
+posteriopsiPop_files <- grep(
   'posteriorPop',
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
-names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+names(posteriopsiPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriopsiPop_files))))
 
-posteriorrPlot_files <- grep(
+posteriorpsiPlot_files <- grep(
   'posteriorpsiPlot',
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
-names(posteriorrPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorrPlot_files))))
+names(posteriorpsiPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorpsiPlot_files))))
 
 posteriorpsiYear_files <- grep(
   'posteriorpsiYear_',
@@ -77,6 +77,13 @@ trainData_files <- grep(
   value = TRUE
 )
 names(trainData_files) <- names(sort(sapply(spIds, function(x) grep(x, trainData_files))))
+
+timeInterval_files <- grep(
+  'timeInterval',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(timeInterval_files) <- names(sort(sapply(spIds, function(x) grep(x, timeInterval_files))))
 ```
 
 ```{r load dataset,echo =FALSE}
@@ -192,8 +199,8 @@ DT::datatable()
 
 ```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
 post <- map2_dfr(
-  posteriorPop_files,
-  names(posteriorPop_files),
+  posteriopsiPop_files,
+  names(posteriopsiPop_files),
   ~ readRDS(.x) |>
     bind_cols(species_id = .y)
 )
@@ -661,7 +668,7 @@ for(Sp in spIds)
   
   # merge plot_id parameters if plot is present in validation data
   train_sp[
-    readRDS(posteriorrPlot_files[Sp]) |>
+    readRDS(posteriorpsiPlot_files[Sp]) |>
       mutate(
         plot_id_seq = parse_number(par)
       ) |>
@@ -973,7 +980,7 @@ for(Sp in spIds_val)
   
   # merge plot_id parameters if plot is present in validation data
   val_sp[
-    readRDS(posteriorrPlot_files[Sp]) |>
+    readRDS(posteriorpsiPlot_files[Sp]) |>
       mutate(
         plot_id_seq = parse_number(par)
       ) |>
