@@ -12,6 +12,8 @@ data {
 	vector[N] size_t0; // DBH at time 0
 	vector[N] BA_comp_sp; // BA of larger ind from same species
 	vector[N] BA_comp_inter; // BA of larger ind from other species
+	vector[N] bio_01_mean; // mean total annual temperature (scaled)
+	vector[N] bio_12_mean; // mean total annual precipitation (scaled)
 }
 parameters {
 	real<lower=-2,upper=8> psi; // baseline longevity
@@ -22,7 +24,11 @@ parameters {
 	real<lower=90,upper=600> size_opt; // optimal size for survival
 	real<lower=0,upper=10> size_var;
 	real Beta; // BA_comp effect
-  real<lower=0,upper=2> theta; // partition of the importance between BA_sp and BA_inter
+	real<lower=0,upper=2> theta; // partition the effect between BAsp and BAinter
+	real<lower=0,upper=1> optimal_temp; // optimal temperature
+	real<lower=0> tau_temp; // inverse of temperature breadth
+	real<lower=0,upper=1> optimal_prec; // optimal precipitation
+	real<lower=0> tau_prec; // inverse of precipitation breadth
 }
 transformed parameters {
 	// average year random effect across all years within time interval t0 and t1
@@ -41,6 +47,10 @@ model {
 	size_var ~ lognormal(1, 1);
 	Beta ~ normal(0, .1);
 	theta ~ exponential(2.5);
+	optimal_temp ~ beta(2, 2);
+	tau_temp ~ normal(0, 2);
+	optimal_prec ~ beta(2, 2);
+	tau_prec ~ normal(0, 2);
 
 	// mortality rate
 	vector[N] longev_log = inv_logit(
@@ -48,7 +58,9 @@ model {
 		psiPlot[plot_id] + // plot random effect
 		psiYear_interval[year_int] + // year random effect
 		-square(log(size_t0/size_opt)/size_var) +// size effect
-		Beta * (BA_comp_sp + theta * BA_comp_inter) // Competition effect
+		Beta * (BA_comp_sp + theta * BA_comp_inter) +// Competition effect
+		-tau_temp .* square(bio_01_mean - optimal_temp) + //temp effect
+		-tau_prec .* square(bio_12_mean - optimal_prec) //temp effect
 	);
 
 	// account for the time interval between sensus

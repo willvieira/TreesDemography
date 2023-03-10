@@ -186,6 +186,11 @@ time_interval[
   on = c('year1' = 'all_years')
 ]
 
+# scale climate variables
+mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bio_01_mean))]
+mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bio_12_mean))]
+
+
 ## run the model
 
   stanModel <- cmdstan_model('stan/mortality.stan')
@@ -205,7 +210,9 @@ time_interval[
           delta_time = mort_dt[sampled == 'training', deltaYear],
           size_t0 = mort_dt[sampled == 'training', dbh0],
           BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra]
+          BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra],
+          bio_01_mean = mort_dt[sampled == 'training', temp_sc],
+          bio_12_mean = mort_dt[sampled == 'training', prec_sc]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -246,7 +253,8 @@ time_interval[
     # [5] BA_comp_sp
     # [6] BA_comp_inter
     # [7] year_int
-
+    # [8] bio_01_mean
+    # [9] bio_01_mean
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -261,7 +269,9 @@ time_interval[
           psiPlot +
           psiYear_interval + 
           -(log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])^2 +
-          post[, 'Beta'] * (dt[5] + post[, 'theta'] * dt[6])
+          post[, 'Beta'] * (dt[5] + post[, 'theta'] * dt[6]) +
+          -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
+          -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
         )
       )
     )
@@ -313,7 +323,7 @@ time_interval[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, temp_sc, prec_sc)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -328,7 +338,7 @@ time_interval[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, temp_sc, prec_sc)
       ]
   )
  
