@@ -83,6 +83,33 @@ trainData <- map2_dfr(
 mort_dt <- readRDS('data/mort_dt.RDS')
 mort_dt <- mort_dt[species_id %in% spIds]
 
+# scale temperature
+mort_dt[, nbMeasure := .N, by = tree_id]
+
+mort_dt[
+  nbMeasure > 1,
+  temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bio_01_mean)),
+  by = species_id
+]
+# fill scaled temperature NAs for tree_ids with nbMeasure == 1
+mort_dt[,
+  temp_sc := nafill(nafill(temp_sc, "locf"), "nocb"),
+  by = .(species_id, plot_id, year0)
+]
+
+# scale temperature
+mort_dt[
+  nbMeasure > 1,
+  prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bio_12_mean)),
+  by = species_id
+]
+# fill scaled temperature NAs for tree_ids with nbMeasure == 1
+mort_dt[,
+  prec_sc := nafill(nafill(prec_sc, "locf"), "nocb"),
+  by = .(species_id, plot_id, year0)
+]
+
+
 # merge with train data
 mort_dt[
   trainData,
@@ -103,7 +130,9 @@ trainData[
     'BA_comp_intra' = i.BA_comp_intra,
     'BA_plot' = i.BA_plot,
     'bio_01_mean' = i.bio_01_mean,
-    'bio_12_mean' = i.bio_12_mean
+    'bio_12_mean' = i.bio_12_mean,
+    'temp_sc' = i.temp_sc,
+    'prec_sc' = i.prec_sc
   ),
   on = c('tree_id', 'year0')
 ]
@@ -193,7 +222,11 @@ post_prior <- post |>
         par == 'size_opt' ~ rnorm(nIter, 250, 100),
 	      par == 'size_var' ~ rlnorm(nIter, 1, 1),
         par == 'Beta' ~ rnorm(nIter, 0, .1),
-        par == 'theta' ~ rexp(nIter, 2.5)
+        par == 'theta' ~ rexp(nIter, 2.5),
+        par == 'optimal_temp' ~ rbeta(nIter, 2, 2),
+        par == 'tau_temp' ~ rnorm(nIter, 0, 2)
+        par == 'optimal_prec' ~ rbeta(nIter, 2, 2),
+        par == 'tau_prec' ~ rnorm(nIter, 0, 2)
       )
     )
   )
@@ -596,6 +629,108 @@ post |>
 ```
 
 
+## Mean annual temperature effect
+
+```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('psi', 'optimal_prec', 'tau_prec')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(prec_sc = seq(0, 1, .05)) |>
+  mutate(
+    precEffect = -tau_prec * (prec_sc - optimal_prec)^2,
+    psi_P = exp(psi + precEffect)
+  ) |>
+  select(iter, species_id, prec_sc, precEffect, psi_P) |>
+  pivot_longer(
+    cols = c('precEffect', 'psi_P'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('precEffect', 'psi_P'), labels = c('Effect of MAP on the longevity parameter', 'Longevity in function of MAP'))
+  ) |>
+  ggplot(aes(x = prec_sc, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Scaled mean annual precipitation (MAP)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
+## Mean annual temperature effect
+
+```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('psi', 'optimal_temp', 'tau_temp')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
+  mutate(
+    tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
+    psi_T = exp(psi + tempEffect)
+  ) |>
+  select(iter, species_id, bio_01_mean, tempEffect, psi_T) |>
+  pivot_longer(
+    cols = c('tempEffect', 'psi_T'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('tempEffect', 'psi_T'), labels = c('Effect of MAT on the longevity parameter', 'Longevity in function of MAT'))
+  ) |>
+  ggplot(aes(x = bio_01_mean, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Mean annual temperature (MAT)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
+## Mean annual precipitation effect
+
+```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+post |>
+  filter(par %in% c('psi', 'optimal_prec', 'tau_prec')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(prec_sc = seq(0, 1, .05)) |>
+  mutate(
+    precEffect = -tau_prec * (prec_sc - optimal_prec)^2,
+    psi_P = exp(psi + precEffect)
+  ) |>
+  select(iter, species_id, prec_sc, precEffect, psi_P) |>
+  pivot_longer(
+    cols = c('precEffect', 'psi_P'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('precEffect', 'psi_P'), labels = c('Effect of MAP on the longevity parameter', 'Longevity in function of MAP'))
+  ) |>
+  ggplot(aes(x = prec_sc, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Scaled mean annual precipitation (MAP)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
 ## Mortality in function of fixed effects
 
 ```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
@@ -625,7 +760,11 @@ for(Sp in spIds)
       size_opt = i.size_opt,
       size_var = i.size_var,
       Beta = i.Beta,
-      theta = i.theta
+      theta = i.theta,
+      optimal_temp = i.optimal_temp,
+      tau_temp = i.tau_temp,
+      optimal_prec = i.optimal_prec,
+      tau_prec = i.tau_prec
     ),
     on = 'iter'
   ]
@@ -653,7 +792,9 @@ for(Sp in spIds)
           psi + 
           psiPlot +
           -(log(dbh0/size_opt)/size_var)^2 +
-          Beta * (BA_comp_sp + theta * BA_comp_intra)
+          Beta * (BA_comp_sp + theta * BA_comp_intra) +
+          -tau_temp * (temp_sc - optimal_temp)^2 +
+          -tau_prec * (prec_sc - optimal_prec)^2
         )
       )
     )
@@ -764,8 +905,44 @@ for(Sp in spIds)
     pivot_longer(
       cols = c('Obs', 'Pred')
     )
+
+  dt_p4 <- train_sp |>
+    select(iter2, bio_01_mean, mort, mort_pred) |>
+    mutate(
+      tempc = cut(
+        bio_01_mean,
+        seq(min(bio_01_mean), max(bio_01_mean), length.out = 10),
+        include.lowest = TRUE
+      )
+    ) |>
+    group_by(tempc, iter2) |>
+    summarise(
+      Obs = sum(mort == 1)/n(),
+      Pred = sum(mort_pred == 1)/n()
+    ) |>
+    pivot_longer(
+      cols = c('Obs', 'Pred')
+    )
     
-  yLim = range(c(dt_p1$value, dt_p2$value, dt_p3$value))
+  dt_p5 <- train_sp |>
+    select(iter2, prec_sc, mort, mort_pred) |>
+    mutate(
+      tempc = cut(
+        prec_sc,
+        seq(min(prec_sc), max(prec_sc), length.out = 10),
+        include.lowest = TRUE
+      )
+    ) |>
+    group_by(tempc, iter2) |>
+    summarise(
+      Obs = sum(mort == 1)/n(),
+      Pred = sum(mort_pred == 1)/n()
+    ) |>
+    pivot_longer(
+      cols = c('Obs', 'Pred')
+    )
+  
+  yLim = range(c(dt_p1$value, dt_p2$value, dt_p3$value, dt_p4$value, dt_p5$value))
 
   p1 <- dt_p1 |> 
     ggplot(aes(x = BAc, y = value, color = name)) +
@@ -774,12 +951,6 @@ for(Sp in spIds)
       ylab('Mortality proportion') +
       labs(subtitle = Sp) +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'])))^train_sp[, median(deltaYear)])),
-        color = 1,
-        linetype = 'dashed'
-      ) +
       labs(color = '') +
       ylim(yLim)
 
@@ -790,12 +961,6 @@ for(Sp in spIds)
       ylab('') +
       labs(subtitle = '') +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] + x * post_sp['Beta'] * post_sp['theta'])))^train_sp[, median(deltaYear)])),
-        color = 1,
-        linetype = 'dashed'
-      ) +
       labs(color = '') +
       ylim(yLim)
 
@@ -804,21 +969,35 @@ for(Sp in spIds)
       geom_boxplot(alpha = .4) +
       xlab('DBH (mm)') +
       ylab('Mortality proportion') +
-      labs(subtitle = Sp) +
+      labs(subtitle = '') +
       theme_minimal() +
-      geom_function(
-        fun = function(x)
-          1 - ((1/(1 + exp(-(post_sp['psi'] - (log(dbh0/post_sp['size_opt'])/post_sp['size_var'])^2))))^train_sp[, median(deltaYear)]),
-        color = 1,
-        linetype = 'dashed'
-      ) +
+      labs(color = '') + 
+      ylim(yLim)
+
+  p4 <- dt_p4 |>
+    ggplot(aes(x = tempc, y = value, color = name)) +
+      geom_boxplot(alpha = .4) +
+      xlab('Mean annual temperature') +
+      ylab('Mortality proportion') +
+      labs(subtitle = '') +
+      theme_minimal() +
       labs(color = '')
+  
+  p5 <- dt_p5 |> 
+    ggplot(aes(x = tempc, y = value, color = name)) +
+      geom_boxplot(alpha = .4) +
+      xlab('Scaled mean annual precipitation') +
+      ylab('Mortality proportion') +
+      labs(subtitle = '') +
+      theme_minimal() +
+      labs(color = '') + 
+      ylim(yLim)
 
   print(
     ggarrange(
-      p1, p2, p3,
+      p1, p2, p3, p4, p5,
       ncol = 2,
-      nrow = 2,
+      nrow = 3,
       common.legend = TRUE,
       legend = 'bottom'
     )
@@ -948,7 +1127,11 @@ for(Sp in spIds_val)
       size_opt = i.size_opt,
       size_var = i.size_var,
       Beta = i.Beta,
-      theta = i.theta
+      theta = i.theta,
+      optimal_temp = i.optimal_temp,
+      tau_temp = i.tau_temp,
+      optimal_prec = i.optimal_prec,
+      tau_prec = i.tau_prec
     ),
     on = 'iter'
   ]
@@ -983,7 +1166,9 @@ for(Sp in spIds_val)
           psi + 
           psiPlot +
           -(log(dbh0/size_opt)/size_var)^2 +
-          Beta * (BA_comp_sp + theta * BA_comp_intra)
+          Beta * (BA_comp_sp + theta * BA_comp_intra) +
+          -tau_temp * (temp_sc - optimal_temp)^2 +
+          -tau_prec * (prec_sc - optimal_prec)^2
         )
       )
     )
