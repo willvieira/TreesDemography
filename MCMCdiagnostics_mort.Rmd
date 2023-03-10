@@ -633,40 +633,6 @@ post |>
 
 ```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
-  filter(par %in% c('psi', 'optimal_prec', 'tau_prec')) |>
-  pivot_wider(
-    names_from = par,
-    values_from = value
-  ) |>
-  group_by(species_id) |>
-  expand_grid(prec_sc = seq(0, 1, .05)) |>
-  mutate(
-    precEffect = -tau_prec * (prec_sc - optimal_prec)^2,
-    psi_P = exp(psi + precEffect)
-  ) |>
-  select(iter, species_id, prec_sc, precEffect, psi_P) |>
-  pivot_longer(
-    cols = c('precEffect', 'psi_P'),
-    names_to = 'sim'
-  ) |>
-  mutate(
-    sim = factor(sim, levels = c('precEffect', 'psi_P'), labels = c('Effect of MAP on the longevity parameter', 'Longevity in function of MAP'))
-  ) |>
-  ggplot(aes(x = prec_sc, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.9, alpha = .8) +
-    facet_wrap(~sim, scales = 'free') +
-    scale_fill_brewer() +
-    xlab('Scaled mean annual precipitation (MAP)') +
-    ylab('') +
-    theme_minimal() +
-    theme(legend.position = 'bottom')
-```
-
-
-## Mean annual temperature effect
-
-```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
-post |>
   filter(par %in% c('psi', 'optimal_temp', 'tau_temp')) |>
   pivot_wider(
     names_from = par,
@@ -925,11 +891,11 @@ for(Sp in spIds)
     )
     
   dt_p5 <- train_sp |>
-    select(iter2, prec_sc, mort, mort_pred) |>
+    select(iter2, bio_12_mean, mort, mort_pred) |>
     mutate(
       tempc = cut(
-        prec_sc,
-        seq(min(prec_sc), max(prec_sc), length.out = 10),
+        precc,
+        seq(min(bio_12_mean), max(bio_12_mean), length.out = 10),
         include.lowest = TRUE
       )
     ) |>
@@ -981,10 +947,11 @@ for(Sp in spIds)
       ylab('Mortality proportion') +
       labs(subtitle = '') +
       theme_minimal() +
-      labs(color = '')
+      labs(color = '') +
+      ylim(yLim)
   
   p5 <- dt_p5 |> 
-    ggplot(aes(x = tempc, y = value, color = name)) +
+    ggplot(aes(x = precc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
       xlab('Scaled mean annual precipitation') +
       ylab('Mortality proportion') +
