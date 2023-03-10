@@ -941,7 +941,7 @@ for(Sp in spIds)
   dt_p5 <- train_sp |>
     select(iter2, bio_12_mean, mort, mort_pred) |>
     mutate(
-      tempc = cut(
+      precc = cut(
         prec_sc,
         seq(min(bio_12_mean), max(bio_12_mean), length.out = 10),
         include.lowest = TRUE
