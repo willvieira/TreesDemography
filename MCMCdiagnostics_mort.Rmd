@@ -1,6 +1,6 @@
---
+---
  title: "MCMC diagnostics - Mortality"
- subtitle: "Test v17.0 - plot random effect - Size and basal area competition fixed effect"
+ subtitle: "Test v17.1 - plot random effect - Size, basal area competition, temperature and precipitation  fixed effect"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
