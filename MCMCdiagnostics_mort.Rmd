@@ -224,7 +224,7 @@ post_prior <- post |>
         par == 'Beta' ~ rnorm(nIter, 0, .1),
         par == 'theta' ~ rexp(nIter, 2.5),
         par == 'optimal_temp' ~ rbeta(nIter, 2, 2),
-        par == 'tau_temp' ~ rnorm(nIter, 0, 2)
+        par == 'tau_temp' ~ rnorm(nIter, 0, 2),
         par == 'optimal_prec' ~ rbeta(nIter, 2, 2),
         par == 'tau_prec' ~ rnorm(nIter, 0, 2)
       )
@@ -665,7 +665,7 @@ post |>
 
 ## Mean annual precipitation effect
 
-```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+```{r prec_pred,echo=FALSE,fig.height = 8, fig.width = 10}
 post |>
   filter(par %in% c('psi', 'optimal_prec', 'tau_prec')) |>
   pivot_wider(
@@ -893,13 +893,13 @@ for(Sp in spIds)
   dt_p5 <- train_sp |>
     select(iter2, bio_12_mean, mort, mort_pred) |>
     mutate(
-      tempc = cut(
-        precc,
+      precc = cut(
+        bio_12_mean,
         seq(min(bio_12_mean), max(bio_12_mean), length.out = 10),
         include.lowest = TRUE
       )
     ) |>
-    group_by(tempc, iter2) |>
+    group_by(precc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
       Pred = sum(mort_pred == 1)/n()
