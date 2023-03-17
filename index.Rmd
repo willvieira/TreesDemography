@@ -27,6 +27,30 @@
 
 - Year random effects on baseline longevity (psi) - ([link v8.0](https://willvieira.github.io/TreesDemography/mort/randomEffect_year.html))
 
+- Mortality with plot random effects. This is the new version for mortality model in cmdstanr ([link v10.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot.html))
+
+- Plot and individual random effect ([link v11.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plotInd.html))
+
+- Plot and year random effect ([link v12.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plotYear.html))
+
+- Plot random effect - size fixed effect ([link v13.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_size.html))
+
+- Plot random effect - plot total basal area fixed effect ([link v14.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_BAplot.html))
+
+- Plot random effect - basal area competition (BA of individuals larger than the focus ind, splited between conspecific and heterospecific species) fixed effect ([link v14.1](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_BAcomp.html))
+
+- Plot random effect - mean annual temperature fixed effect ([link v15.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_temp.html))
+
+- Plot random effect - mean annual precipitation fixed effect ([link v16.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_prec.html))
+
+- Plot random effect - Size and basal area competition fixed effects ([link v17.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_sizeBAcomp.html))
+
+- plot random effect - Size, basal area competition, temperature and precipitation fixed effects ([link v17.1](https://willvieira.github.io/TreesDemography_reports/mort/mort_plot_sizeBAcompTempPrec.html))
+
+- Plot and year random effects - Size and basal area competition fixed effects ([link v18.0](https://willvieira.github.io/TreesDemography_reports/mort/mort_plotYear_sizeBAcomp.html))
+
+- plot and year random effects - Size, basal area competition, temperature, and precipitation fixed effects ([link v18.1](https://willvieira.github.io/TreesDemography_reports/mort/mort_plotYear_sizeBAcompTempPrec.html))
+
 ## Growth
 
 - Competition (canopy distance vs basal area - ([link v1.0](https://willvieira.github.io/TreesDemography/growth/competition.html))
