@@ -8,6 +8,10 @@
 
 ## Diagnostics for the Von Bertalanffy model
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+```
+
 ```{r, echo = F, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(cmdstanr))
@@ -20,6 +24,7 @@ suppressPackageStartupMessages(library(bayesplot))
 suppressPackageStartupMessages(library(ggridges))
 suppressPackageStartupMessages(require(RColorBrewer))
 suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(corrr))
 ```
 
 
@@ -392,6 +397,43 @@ treeEffect |>
   )
 ```
 
+# Correlation in plot random effects between species
+
+```{r corrPlotEffect, echo = FALSE, warning=FALSE, message=FALSE,fig.height=8, fig.width = 8}
+# load parameters
+post_mean <- post |>
+  filter(par == 'r') |>
+  group_by(species_id) |>
+  summarise(r_log = mean(value))
+
+rPlot_mean <- readRDS(
+  file.path('output', simName, 'meanPlotEffect_rReal.RDS')
+  ) |>
+  left_join(
+    post_mean
+  ) |>
+  mutate(
+    rPlot = log(m_rReal) - r_log
+  )
+
+rPlot_mean |>
+  mutate(species_id = gsub('[0-9]', '', species_id)) |>
+  select(species_id, plot_id, rPlot) |>
+  pivot_wider(
+    names_from = species_id,
+    values_from = rPlot
+  ) |>
+  select(!plot_id) |>
+  correlate(quiet = TRUE) |>
+  shave() |> # Remove the upper triangle
+  rplot() +
+  scale_color_gradient2(limits = c(-1,1)) +
+  #labs(title = 'Correlation of plot random effects between species')
+  theme(
+    legend.position = 'bottom',
+    axis.text.x = element_text(angle = 45, vjust = 0.4),
+  )
+```
 
 # Changes in plot random effect from past models
 
