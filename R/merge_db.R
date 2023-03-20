@@ -17,6 +17,7 @@
 #   - Delta size and status for Quebec
 #   - Merge both Quebec and FIA
 #   - Filter NAs
+#   - scale enviroment variables to the range [0 - 1]
 #------------------------------------------------------
 
 
@@ -235,6 +236,30 @@ mort <- mort[!is.na(species_id)]
 fec <-  fec[!is.na(species_id)]
 
 
+
+# Scale enviroment variables to the range [0 - 1]
+#------------------------------------------------------
+
+bio_01_rg <- treeData[, range(bio_01_mean, na.rm = TRUE)]
+bio_12_rg <- treeData[, range(bio_12_mean, na.rm = TRUE)]
+
+# save climate range to back transform
+saveRDS(
+    list(
+        'bio_01_mean' = bio_01_rg,
+        'bio_12_mean' = bio_12_rg
+    ),
+    file.path('data', 'climate_range.RDS')
+)
+
+treeData[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
+treeData[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
+growth[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
+growth[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
+mort[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
+mort[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
+fec[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
+fec[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
 
 # Save
 #------------------------------------------------------
