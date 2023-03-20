@@ -186,10 +186,6 @@ time_interval[
   on = c('year1' = 'all_years')
 ]
 
-# scale climate variables
-mort_dt[, temp_sc := (bio_01_mean - min(bio_01_mean))/(max(bio_01_mean) - min(bio_01_mean))]
-mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bio_12_mean))]
-
 
 ## run the model
 
@@ -211,8 +207,8 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
           size_t0 = mort_dt[sampled == 'training', dbh0],
           BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
           BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra],
-          bio_01_mean = mort_dt[sampled == 'training', temp_sc],
-          bio_12_mean = mort_dt[sampled == 'training', prec_sc]
+          bio_01_mean = mort_dt[sampled == 'training', bio_01_mean_scl],
+          bio_12_mean = mort_dt[sampled == 'training', bio_12_mean_scl]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -323,7 +319,7 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, temp_sc, prec_sc)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -338,7 +334,7 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, temp_sc, prec_sc)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
       ]
   )
  
