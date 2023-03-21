@@ -109,9 +109,6 @@ cat('####### Sending simulations to the server #######\n')
   for(VT in vitalRates) {
   
     bash_file <- paste0('#!/bin/bash
-## Create bash submission script
-
-bash_file <- paste0('#!/bin/bash
 #SBATCH --account=def-dgravel
 #SBATCH -t 1-23:40:00
 #SBATCH --mem-per-cpu=5000M
