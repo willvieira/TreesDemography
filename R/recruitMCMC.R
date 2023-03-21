@@ -237,7 +237,8 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     # Add plot_id random effect 
     mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
     mPlot <- exp(
-      post[, 'mPop_log'] + mPlot_log + dt[5] * post[, 'beta_m']
+      post[, 'mPop_log'] + mPlot_log +
+      dt[5]^2 * 1/2 * post[, 'beta_m']^2
     )
     
     p <- exp(

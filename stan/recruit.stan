@@ -31,7 +31,7 @@ model {
   // Species basal area effect with plot random effects
   m = exp(
     mPop_log + mPlot_log[plot_id] +
-    BA_adult_sp * beta_m
+    square(BA_adult_sp) * 1/2 * square(beta_m)
   );
 
   // Total basal area effect on p

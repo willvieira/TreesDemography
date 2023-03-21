@@ -15,11 +15,12 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: NA
 # The simulation and folder name
-simName: "rec_m_p_BA"
+simName: "rec_m_p_BAsquared"
 # simulations to compare with
 simCompare: [
         "rec_m_randomPlot",
-        "rec_m_randomPlot_BA"
+        "rec_m_randomPlot_BA",
+        "rec_m_p_BA"
 ]
 
 # Name of cluster to run simulations 'cedar' or 'mp2b'
@@ -29,10 +30,12 @@ cluster: "mp2b"
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v6.0
+## Recruitmenet test - v12.0
 
 ## Instead of using the following model:
 # recruit ~ poisson(lambda)
 # lambda = annualIngrowthRatePerArea  * (1 - p^deltaTime)/(1 - p)
 
 ## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
+
+## Building on V6.0, make the effect of BA_sp on the ingrowth rate parameter quadratic to avoid explosing the values of ingrowth
