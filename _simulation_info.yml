@@ -15,7 +15,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "bertalanffy_plotInd_BAspcTempPrec"
+simName: "bertalanffy_plotInd_BAtotTempPrec"
 # simulations to compare with
 simCompare: [
         "bertalanffy_plotInd_BATempPrec"
@@ -27,7 +27,7 @@ cluster: "mp2b"
 ########## DESCRIPTION  ##########
 ##################################
 
-## Growth test - v23.0 - r parameter with plot and individual random effects, and Basal area, temperature, and precipitation fixed effects
+## Growth test - v24.0 - r parameter with plot and individual random effects, and Basal area, temperature, and precipitation fixed effects
 # Competition accounts for inter and intra BA_comp
 
 # Using data start_size from V11.0 and plot random effect on the r parameter, let's make r also vary as a function of plot basal area
@@ -41,3 +41,5 @@ cluster: "mp2b"
 # Version 21.0 adds random effects at the individual level. Now the predictions will have another source of variation called `sigma_plotTree` that accounts for both plot and individual random effects. The total effect is split between them using the parameter `p_plotTree`, so `p_plotTree` is the variation derived from plot, while `1 - p_plotTree` the variation from individuals.
 
 # Version 23.0 adds a theta parameter saying how much the inter specific competition matters. If close to 0, means only intra specific BA matters, the closer to 1 means both intra and inter have the same weight. Let's not constrant the upper boundery of the theta parameter in case inter is more important than intra competition.
+
+# Version 24.0 uses total plot BA (inter and intra) instead of of using BA_comp

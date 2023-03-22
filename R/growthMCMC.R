@@ -197,8 +197,8 @@ growth_dt[
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
           Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
           tree_id = growth_dt[sampled == 'training', tree_id_seq],
-          BA_comp_sp = growth_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra],
+          BA_sp = growth_dt[sampled == 'training', BA_sp],
+          BA_inter = growth_dt[sampled == 'training', BA_inter],
           bio_01_mean = growth_dt[sampled == 'training', bio_01_mean_scl],
           bio_12_mean = growth_dt[sampled == 'training', bio_12_mean_scl]
       ),
@@ -239,8 +239,8 @@ growth_dt[
     # [3] dbh0,
     # [4] plot_id_seq,
     # [5] tree_id_seq,
-    # [6] BA_comp_sp,
-    # [7] BA_comp_intra,
+    # [6] BA_sp,
+    # [7] BA_inter,
     # [8] bio_01_mean,
     # [9] bio_12_mean
     
@@ -308,7 +308,7 @@ growth_dt[
         chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
         data = growth_dt[
           sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl)
+          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_sp, BA_inter, bio_01_mean_scl, bio_12_mean_scl)
         ],
         draws = post_dist_lg,
         cores = sim_info$nC
@@ -331,7 +331,7 @@ growth_dt[
       draws = post_dist_lg,
       data = growth_dt[
         sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl)
+        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_sp, BA_inter, bio_01_mean_scl, bio_12_mean_scl)
       ]
   )
 

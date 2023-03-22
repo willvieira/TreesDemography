@@ -7,8 +7,8 @@ data {
   array[N] int<lower=1,upper=Np> plot_id;
   int<lower=1> Nt; // number of unique plot_id
   array[N] int<lower=1,upper=Nt> tree_id;
-  vector[N] BA_comp_sp;
-  vector[N] BA_comp_intra;
+  vector[N] BA_sp;
+  vector[N] BA_inter;
   vector[N] bio_01_mean;
   vector[N] bio_12_mean;
 }
@@ -52,7 +52,7 @@ model {
     r + // intercept
     rPlot_log[plot_id] + // plot random effect
     rTree_log[tree_id] + // tree random effect
-    Beta * (BA_comp_sp + theta * BA_comp_intra) + // Intra and inter competition
+    Beta * (BA_sp + theta * BA_inter) + // Intra and inter competition
     -tau_temp .* square(bio_01_mean - optimal_temp) +//temp effect
     -tau_prec .* square(bio_12_mean - optimal_prec) //prec effect
   );
