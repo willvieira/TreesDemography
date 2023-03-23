@@ -10,8 +10,8 @@ data {
 	array[N] int<lower=0,upper=1> state_t1; // alive [0] or dead [1]
 	vector[N] delta_time; // time interval between t0 and t1
 	vector[N] size_t0; // DBH at time 0
-	vector[N] BA_comp_sp; // BA of larger ind from same species
-	vector[N] BA_comp_inter; // BA of larger ind from other species
+	vector[N] BA_sp; // plot basal area of conspecific species
+	vector[N] BA_inter; // plot basal area of heterospecific species
 	vector[N] bio_01_mean; // mean total annual temperature (scaled)
 	vector[N] bio_12_mean; // mean total annual precipitation (scaled)
 }
@@ -58,7 +58,7 @@ model {
 		psiPlot[plot_id] + // plot random effect
 		psiYear_interval[year_int] + // year random effect
 		-square(log(size_t0/size_opt)/size_var) +// size effect
-		Beta * (BA_comp_sp + theta * BA_comp_inter) +// Competition effect
+		Beta * (BA_sp + theta * BA_inter) +// Competition effect
 		-tau_temp .* square(bio_01_mean - optimal_temp) + //temp effect
 		-tau_prec .* square(bio_12_mean - optimal_prec) //temp effect
 	);

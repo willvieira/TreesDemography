@@ -205,8 +205,8 @@ time_interval[
           state_t1 = mort_dt[sampled == 'training', mort],
           delta_time = mort_dt[sampled == 'training', deltaYear],
           size_t0 = mort_dt[sampled == 'training', dbh0],
-          BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
-          BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra],
+          BA_sp = mort_dt[sampled == 'training', BA_sp],
+          BA_inter = mort_dt[sampled == 'training', BA_inter],
           bio_01_mean = mort_dt[sampled == 'training', bio_01_mean_scl],
           bio_12_mean = mort_dt[sampled == 'training', bio_12_mean_scl]
       ),
@@ -246,8 +246,8 @@ time_interval[
     # [2] deltaTime
     # [3] plot_id
     # [4] dbh0
-    # [5] BA_comp_sp
-    # [6] BA_comp_inter
+    # [5] BA_sp
+    # [6] BA_inter
     # [7] year_int
     # [8] bio_01_mean
     # [9] bio_01_mean
@@ -319,7 +319,7 @@ time_interval[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_sp, BA_inter, time_int, bio_01_mean_scl, bio_12_mean_scl)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -334,7 +334,7 @@ time_interval[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_sp, BA_inter, time_int, bio_01_mean_scl, bio_12_mean_scl)
       ]
   )
  
