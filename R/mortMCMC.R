@@ -53,7 +53,84 @@ set.seed(0.0)
 
   # filter for tree_id with at least two measures
   mort_dt <- mort_dt[nbMeasure > 1]
- 
+
+  # add predicted growth
+  sim_output <- 'output'
+  trainData <- readRDS(paste0(sim_output, '/trainData_', sp, '.RDS'))
+  trainData[
+    dataSource,
+    plot_id := i.plot_id,
+    on = 'tree_id'
+  ]
+
+  pars_pop <- readRDS(paste0(sim_output, '/posteriorPop_', sp, '.RDS')) |>
+    pivot_wider(names_from = 'par', values_from = 'value') |>
+    as.data.frame()
+
+  pars_plot <- readRDS(paste0(sim_output, '/posteriorrPlot_', sp, '.RDS')) |>
+    mutate(plot_id_seq = parse_number(par)) |>
+    left_join(
+      trainData[, .(plot_id_seq = head(plot_id_seq, 1)), by = plot_id]
+    ) |>
+    select(plot_id, value, iter) |>
+    pivot_wider(names_from = 'plot_id', values_from = 'value') |>
+    as.data.frame()
+
+  pars_tree <- readRDS(paste0(sim_output, '/posteriorrTree_', sp, '.RDS')) |>
+    mutate(tree_id_seq = parse_number(par)) |>
+    left_join(
+      trainData[, .(tree_id_seq = head(tree_id_seq, 1)), by = tree_id]
+    ) |>
+    select(tree_id, value, iter) |>
+    pivot_wider(names_from = 'tree_id', values_from = 'value') |>
+    as.data.frame()
+
+  growth_f <- function(
+    pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaTime,
+    dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
+  ){
+    if(plot_id %in% names(pars_plot)) {
+      plot_re = pars_plot[, plot_id]
+    }else{
+      plot_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * pars_pop[, 'p_plotTree'])
+    }
+    if(tree_id %in% names(pars_tree)) {
+      tree_re = pars_tree[, tree_id]
+    }else{
+      tree_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * (1 - pars_pop[, 'p_plotTree']))
+    }
+
+    rPlot = exp(
+      pars_pop[, 'r'] +
+      plot_re +
+      tree_re +
+      pars_pop[, 'Beta'] * (BA_comp_sp + pars_pop[, 'theta'] * BA_comp_intra) +
+      -pars_pop[, 'tau_temp'] * (bio_01_mean_scl - pars_pop[, 'optimal_temp'])^2 +
+      -pars_pop[, 'tau_prec'] * (bio_12_mean_scl - pars_pop[, 'optimal_prec'])^2
+    )
+
+    rPlotTime = exp(-rPlot * deltaTime)
+
+    size_t1 = rnorm(
+      nrow(pars_pop),
+      mean = dbh0 * rPlotTime + pars_pop[, 'Lmax'] * (1 - rPlotTime),
+      sd = pars_pop[, 'sigma_obs']
+    )
+
+    growth_pred <- (size_t1 - dbh0)/deltaTime
+    
+    # get mean and sd of predicted growth rate
+    list(growth_mean = mean(growth_pred), growth_sd = sd(growth_pred))    
+  }
+
+  mort_dt[, rowID := .I]
+  mort_dt[,
+    c('growth_mean', 'growth_sd') := growth_f(
+      pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaYear, dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
+    ),
+    by = rowID
+  ]
+
   if(mort_dt[, .N] > sampleSize)
   { 
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
@@ -208,7 +285,9 @@ time_interval[
           BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
           BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra],
           bio_01_mean = mort_dt[sampled == 'training', bio_01_mean_scl],
-          bio_12_mean = mort_dt[sampled == 'training', bio_12_mean_scl]
+          bio_12_mean = mort_dt[sampled == 'training', bio_12_mean_scl],
+          growth_mean = mort_dt[sampled == 'training', growth_mean],
+          growth_sd = mort_dt[sampled == 'training', growth_sd]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -251,6 +330,7 @@ time_interval[
     # [7] year_int
     # [8] bio_01_mean
     # [9] bio_01_mean
+    # [10] rowID
     
     # Add plot_id random effects
     psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
@@ -267,7 +347,8 @@ time_interval[
           -(log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])^2 +
           post[, 'Beta'] * (dt[5] + post[, 'theta'] * dt[6]) +
           -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
-          -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
+          -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2 +
+          post[, 'gamma'] * post[, paste0('growth_rate[', dt[10], ']')]
         )
       )
     )
@@ -310,6 +391,9 @@ time_interval[
     select(-iter) |>
     as.matrix()
 
+  # Add row ID  for growth_rate parameter
+  mort_dt[sampled == 'training', rowID := .I]
+      
   # compute relative efficiency
   # this is slow and optional but is recommended to allow for adjusting PSIS
   # effective sample size based on MCMC effective sample size)
@@ -319,7 +403,7 @@ time_interval[
       chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl, rowID)
       ],
       draws = post_dist_lg,
       cores = sim_info$nC
@@ -334,7 +418,7 @@ time_interval[
       draws = post_dist_lg,
       data = mort_dt[
         sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
+        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl, rowID)
       ]
   )
  
@@ -379,6 +463,16 @@ time_interval[
     file = file.path(
       'output',
       paste0('posteriorpsiYear_', sp, '.RDS')
+    )
+  )
+
+  # posterior of growth_rate
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'growth_rate', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorGrowthRate_', sp, '.RDS')
     )
   )
 

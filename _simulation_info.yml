@@ -15,16 +15,13 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plotYear_sizeBAcompTempPrec"
+simName: "mort_plotYear_sizeBAcompTempPrecGrowth"
 # simulations to compare with
 simCompare: [
-        "mort_plotYear",
-        "mort_plot_sizeBAcomp",
-        "mort_plotYear_sizeBAcomp",
-        "mort_plot_sizeBAcompTempPrec"
+        "mort_plotYear_sizeBAcompTempPrec"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "mp2b"
+cluster: "cedar"
 
 ##################################
 ########## DESCRIPTION  ##########
@@ -49,3 +46,5 @@ cluster: "mp2b"
 # V18.0 - Building on v17.0, add year random effects along with plot random effect. Keep size and BA competition fixed effects
 
 # V18.1 - Add bio_01_mean and bio_12_mean fixed effects on version v18.0
+
+# V19.0 Buiding on V18.1, add growth rate effect

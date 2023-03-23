@@ -14,6 +14,8 @@ data {
 	vector[N] BA_comp_inter; // BA of larger ind from other species
 	vector[N] bio_01_mean; // mean total annual temperature (scaled)
 	vector[N] bio_12_mean; // mean total annual precipitation (scaled)
+	vector[N] growth_mean;
+	vector[N] growth_sd;
 }
 parameters {
 	real<lower=-2,upper=8> psi; // baseline longevity
@@ -29,6 +31,8 @@ parameters {
 	real<lower=0> tau_temp; // inverse of temperature breadth
 	real<lower=0,upper=1> optimal_prec; // optimal precipitation
 	real<lower=0> tau_prec; // inverse of precipitation breadth
+	real gamma; // growth rate effect
+	vector[N] growth_rate;
 }
 transformed parameters {
 	// average year random effect across all years within time interval t0 and t1
@@ -51,6 +55,9 @@ model {
 	tau_temp ~ normal(0, 2);
 	optimal_prec ~ beta(2, 2);
 	tau_prec ~ normal(0, 2);
+	gamma ~ normal(0, .1);
+
+	growth_rate ~ normal(growth_mean, growth_sd);
 
 	// mortality rate
 	vector[N] longev_log = inv_logit(
@@ -60,7 +67,8 @@ model {
 		-square(log(size_t0/size_opt)/size_var) +// size effect
 		Beta * (BA_comp_sp + theta * BA_comp_inter) +// Competition effect
 		-tau_temp .* square(bio_01_mean - optimal_temp) + //temp effect
-		-tau_prec .* square(bio_12_mean - optimal_prec) //temp effect
+		-tau_prec .* square(bio_12_mean - optimal_prec) + //temp effect
+		gamma * growth_rate // growth rate effect
 	);
 
 	// account for the time interval between sensus
