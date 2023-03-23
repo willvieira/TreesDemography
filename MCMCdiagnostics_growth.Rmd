@@ -921,6 +921,11 @@ for(Sp in spIds)
     rPlot_log := rnorm(.N, 0, sigma_PlotTree * p_plotTree)
   ]
 
+  # tree random effects
+  val_sp[,
+    rTree_log := rnorm(.N, 0, sigma_PlotTree * (1 - p_plotTree))
+  ]
+
   # random iter were selected, create a new iter vetor to a proprer sequence
   # from 1 to nSample of iteration
   val_sp[, iter2 := 1:.N, by = obsID]
@@ -930,6 +935,7 @@ for(Sp in spIds)
     r_plot := exp(
       r +
       rPlot_log +
+      rTree_log +
       Beta * (BA_comp_sp + theta * BA_comp_intra) +
       -tau_temp * (bio_01_mean - optimal_temp)^2 +
       -tau_prec * (bio_12_mean - optimal_prec)^2
