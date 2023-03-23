@@ -11,6 +11,12 @@ data {
   vector[N] BA_comp_intra;
   vector[N] bio_01_mean;
   vector[N] bio_12_mean;
+  // range limit to optimal_temp and prec parameters area species specific
+  // And must be within the observed distribution of the species
+  real maxTemp;
+  real minTemp;
+  real maxPrec;
+  real minPrec;
 }
 transformed data {
   // to add minimum range to Lmax parameter
@@ -26,9 +32,9 @@ parameters {
   real<lower=maxSize> Lmax;
   real Beta;
   real<lower=0> theta;
-  real<lower=0,upper=1> optimal_temp;
+  real<lower=minTemp,upper=maxTemp> optimal_temp;
   real<lower=0> tau_temp;
-  real<lower=0,upper=1> optimal_prec;
+  real<lower=minPrec,upper=maxPrec> optimal_prec;
   real<lower=0> tau_prec;
 }
 model {
