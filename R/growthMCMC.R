@@ -232,6 +232,60 @@ growth_dt[
 ##
 
 
+## save output
+
+  # posterior of population level parameters
+  saveRDS(
+    post_dist |>
+      filter(!grepl(pattern = '\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorPop_', sp, '.RDS')
+    )
+  )
+
+  # posterior of plot_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'rPlot_log', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorrPlot_', sp, '.RDS')
+    )
+  )
+
+  # posterior of tree_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'rTree_log', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorrTree_', sp, '.RDS')
+    )
+  )
+
+  # save sampling diagnostics
+  saveRDS(
+    diag_out,
+    file = file.path(
+      'output',
+      paste0('diagnostics_', sp, '.RDS')
+    )
+  )
+
+  # save train and validate data
+  saveRDS(
+    growth_dt[, .(tree_id, tree_id_seq, plot_id_seq, year_measured, sampled)],
+      file = file.path(
+      'output',
+      paste0('trainData_', sp, '.RDS')
+    )
+  )
+
+##
+
+
+
 ## Approximate LOO-CV using subsampling
 
   # Function to compute log-likelihood
@@ -339,61 +393,6 @@ growth_dt[
       ]
   )
 
-##
-
-
-
-## save output
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'rPlot_log', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorrPlot_', sp, '.RDS')
-    )
-  )
-
-  # posterior of tree_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'rTree_log', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorrTree_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
-  # save train and validate data
-  saveRDS(
-    growth_dt[, .(tree_id, tree_id_seq, plot_id_seq, year_measured, sampled)],
-      file = file.path(
-      'output',
-      paste0('trainData_', sp, '.RDS')
-    )
-  )
-
-  # save Loo
   saveRDS(
     loo_obj,
       file = file.path(
