@@ -118,8 +118,8 @@ trainData[
     'dbh0' = i.dbh0,
     'BA_comp_sp' = i.BA_comp_sp,
     'BA_comp_intra' = i.BA_comp_intra,
-    'bio_01_mean' = i.bio_01_mean,
-    'bio_12_mean' = i.bio_12_mean
+    'bio_01_mean_scl' = i.bio_01_mean_scl,
+    'bio_12_mean_scl' = i.bio_12_mean_scl
   ),
   on = c('tree_id', 'year_measured')
 ]
@@ -559,7 +559,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
+  expand_grid(bio_01_mean = seq(0, 1, 0.03)) |>
   mutate(
     tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
     r_T = exp(r + tempEffect)
@@ -576,7 +576,7 @@ post |>
     stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
-    xlab('Mean annual temperature (MAT)') +
+    xlab('Scaled mean annual temperature (MAT)') +
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
@@ -593,7 +593,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(bio_12_mean = seq(300, 2700, 80)) |>
+  expand_grid(bio_12_mean = seq(0, 1, 0.03)) |>
   mutate(
     precEffect = -tau_prec * (bio_12_mean - optimal_prec)^2,
     r_P = exp(r + precEffect)
@@ -610,7 +610,7 @@ post |>
     stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
-    xlab('Mean annual precipitation (MAP)') +
+    xlab('Scaled mean annual precipitation (MAP)') +
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
@@ -687,8 +687,8 @@ for(Sp in spIds)
       log(r_tree) -
       log(r_pop) +
       Beta * (BA_comp_sp + theta * BA_comp_intra) +
-      -tau_temp * (bio_01_mean - optimal_temp)^2 +
-      -tau_prec * (bio_12_mean - optimal_prec)^2
+      -tau_temp * (bio_01_mean_scl - optimal_temp)^2 +
+      -tau_prec * (bio_12_mean_scl - optimal_prec)^2
     )
   ]
   
@@ -799,12 +799,12 @@ for(Sp in spIds)
   p4 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
-      select(bio_01_mean, obs_growth, pred_growth) |>
+      select(bio_01_mean_scl, obs_growth, pred_growth) |>
       pivot_longer(
         cols = contains('growth'),
         names_to = 'sim'
       ) |>
-      ggplot(aes(x = bio_01_mean, y = value, color = sim)) +
+      ggplot(aes(x = bio_01_mean_scl, y = value, color = sim)) +
         geom_point(alpha = .5, size = .5) +
         geom_smooth(method = 'gam') +
         xlab('Mean annual temperature') +
@@ -824,12 +824,12 @@ for(Sp in spIds)
   p5 <- train_sp |>
       filter(!is.na(pred_growth)) |>
       mutate(obs_growth = growth) |>
-      select(bio_12_mean, obs_growth, pred_growth) |>
+      select(bio_12_mean_scl, obs_growth, pred_growth) |>
       pivot_longer(
         cols = contains('growth'),
         names_to = 'sim'
       ) |>
-      ggplot(aes(x = bio_12_mean, y = value, color = sim)) +
+      ggplot(aes(x = bio_12_mean_scl, y = value, color = sim)) +
         geom_point(alpha = .5, size = .5) +
         geom_smooth(method = 'gam') +
         xlab('Mean annual precipitation') +
@@ -937,8 +937,8 @@ for(Sp in spIds)
       rPlot_log +
       rTree_log +
       Beta * (BA_comp_sp + theta * BA_comp_intra) +
-      -tau_temp * (bio_01_mean - optimal_temp)^2 +
-      -tau_prec * (bio_12_mean - optimal_prec)^2
+      -tau_temp * (bio_01_mean_scl - optimal_temp)^2 +
+      -tau_prec * (bio_12_mean_scl - optimal_prec)^2
     )
   ]
 
