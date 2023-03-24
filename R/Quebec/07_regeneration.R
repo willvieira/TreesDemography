@@ -580,5 +580,6 @@ for(plot_id in fec_dt[, unique(ID_PE)])
     saveRDS(growth_dt, "data/quebec/growth_transition_dt.RDS")
     saveRDS(mort_dt, "data/quebec/mort_transition_dt.RDS")
     saveRDS(fec_dt, "data/quebec/fec_dt.RDS")
+    saveRDS(final_dt[isRecruit_127 == TRUE], "data/quebec/sizeIngrowth_dt.RDS")
 
 #

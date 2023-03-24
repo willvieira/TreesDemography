@@ -560,3 +560,19 @@ fec_dt[, nbSapling := nafill(nbSapling, fill = 0)]
 
 # save
 saveRDS(fec_dt, file.path('data', 'FIA', 'fec_dt.RDS'))
+
+
+
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+# Create db for size distribution of ingrowth
+
+#------------------------------------------------------
+#------------------------------------------------------
+
+
+ingrowth_dt = treeData[isRecruit == TRUE]
+
+saveRDS(ingrowth_dt, file.path('data', 'fia', 'sizeIngrowth_dt.RDS'))

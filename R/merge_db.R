@@ -38,6 +38,9 @@ mort_quebec <- readRDS(file.path('data', 'quebec', 'mort_transition_dt.RDS'))
 fec_fia <- readRDS(file.path('data', 'FIA', 'fec_dt.RDS'))
 fec_quebec <- readRDS(file.path('data','quebec', 'fec_dt.RDS'))
 
+sizeIngrow_fia <- readRDS(file.path('data', 'FIA', 'sizeIngrowth_dt.RDS'))
+sizeIngrow_quebec <- readRDS(file.path('data','quebec', 'sizeIngrowth_dt.RDS'))
+
 
 
 # Plot level information
@@ -48,16 +51,19 @@ treeData_quebec[, plot_id := ID_PE]
 growth_quebec[, plot_id := ID_PE]
 mort_quebec[, plot_id := ID_PE]
 fec_quebec[, plot_id := ID_PE]
+sizeIngrow_quebec[, plot_id := ID_PE]
 
 # plot size
 treeData_quebec[, plot_size := 399.7312]
 growth_quebec[, plot_size := 399.7312]
 mort_quebec[, plot_size := 399.7312]
 fec_quebec[, plot_size := 399.7312]
+sizeIngrow_quebec[, plot_size := 399.7312]
 
 treeData_fia[, plot_size := subPlot_size]
 growth_fia[, plot_size := subPlot_size]
 mort_fia[, plot_size := subPlot_size]
+sizeIngrow_fia[, plot_size := subPlot_size]
 
 # Plot geo location
 plot_xy <- treeData_quebec[, sf::st_coordinates(sf::st_transform(SHAPE, 4326))]
@@ -81,11 +87,21 @@ fec_quebec[
     on = 'plot_id'
 ]
 
+sizeIngrow_quebec[
+    treeData_quebec,
+    `:=`(
+        'longitude' = i.longitude,
+        'latitude' = i.latitude
+    ),
+    on = 'plot_id'
+]
+
 # Climate variables and cell ID
 treeData_quebec[, climate_cellID := cellID]
 growth_quebec[, climate_cellID := cellID]
 mort_quebec[, climate_cellID := cellID]
 fec_quebec[, climate_cellID := cellID]
+sizeIngrow_quebec[, climate_cellID := cellID]
 
 
 # Individual level information
@@ -124,24 +140,29 @@ treeData_quebec[, species_id := sp_ref$sp_us[match(sp_code2, sp_ref$sp_qc)]]
 growth_quebec[, species_id := sp_ref$sp_us[match(sp_code2, sp_ref$sp_qc)]]
 mort_quebec[, species_id := sp_ref$sp_us[match(sp_code2, sp_ref$sp_qc)]]
 fec_quebec[, species_id := sp_ref$sp_us[match(sp_code2, sp_ref$sp_qc)]]
+sizeIngrow_quebec[, species_id := sp_ref$sp_us[match(sp_code2, sp_ref$sp_qc)]]
 
 # Use estimated height when no measure of height is available
 treeData_fia[, height := actual_height]
 growth_fia[, height := actual_height]
 mort_fia[, height := actual_height]
+sizeIngrow_fia[, height := actual_height]
 
 treeData_fia[is.na(height), height := total_height]
 growth_fia[is.na(height), height := total_height]
 mort_fia[is.na(height), height := total_height]
+sizeIngrow_fia[is.na(height), height := total_height]
 
 treeData_fia[is.na(height), height := est_height]
 growth_fia[is.na(height), height := est_height]
 mort_fia[is.na(height), height := est_height]
+sizeIngrow_fia[is.na(height), height := total_height]
 
 # Delta size for quebec
 treeData_quebec[, dbh := DHP]
 growth_quebec[, deltaDbh := dbh1 - dbh0]
 mort_quebec[, deltaDbh := dbh1 - dbh0]
+sizeIngrow_quebec[, dbh := DHP]
 
 # status (remove harvested for quebec)
 treeData_quebec <- treeData_quebec[state != 'harvested']
@@ -175,11 +196,13 @@ treeData_fia[, db_origin := 'fia']
 growth_fia[, db_origin := 'fia']
 mort_fia[, db_origin := 'fia']
 fec_fia[, db_origin := 'fia']
+sizeIngrow_fia[, db_origin := 'fia']
 
 treeData_quebec[, db_origin := 'qc']
 growth_quebec[, db_origin := 'qc']
 mort_quebec[, db_origin := 'qc']
 fec_quebec[, db_origin := 'qc']
+sizeIngrow_quebec[, db_origin := 'qc']
 
 # Name of columns to keep
 colsToKeep_treeData <- c(
@@ -225,6 +248,15 @@ fec <- rbind(
     fec_quebec[, colsToKeep_fec, with = FALSE]
 )
 
+colsToKeep_sizeIngrow <- c(
+    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'year_measured', 'dbh', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
+)
+
+
+sizeIngrow <- rbind(
+    sizeIngrow_fia[, colsToKeep_sizeIngrow, with = FALSE],
+    sizeIngrow_quebec[, colsToKeep_sizeIngrow, with = FALSE]
+)
 
 
 # Remove NAs
@@ -233,8 +265,8 @@ fec <- rbind(
 treeData <- treeData[!is.na(species_id)]
 growth <- growth[!is.na(species_id)]
 mort <- mort[!is.na(species_id)]
-fec <-  fec[!is.na(species_id)]
-
+fec <- fec[!is.na(species_id)]
+sizeIngrow <- sizeIngrow[!is.na(species_id)]
 
 
 # Scale enviroment variables to the range [0 - 1]
@@ -260,6 +292,8 @@ mort[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg
 mort[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
 fec[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
 fec[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
+sizeIngrow[, bio_01_mean_scl := (bio_01_mean - bio_01_rg[1])/(bio_01_rg[2] - bio_01_rg[1])]
+sizeIngrow[, bio_12_mean_scl := (bio_12_mean - bio_12_rg[1])/(bio_12_rg[2] - bio_12_rg[1])]
 
 # Save
 #------------------------------------------------------
@@ -268,3 +302,4 @@ saveRDS(treeData, file.path('data', 'treeData.RDS'))
 saveRDS(growth, file.path('data', 'growth_dt.RDS'))
 saveRDS(mort, file.path('data', 'mort_dt.RDS'))
 saveRDS(fec, file.path('data', 'fec_dt.RDS'))
+saveRDS(sizeIngrow, file.path('data', 'sizeIngrowth_dt.RDS'))

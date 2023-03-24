@@ -72,4 +72,5 @@ Each of the following steps is a `R` script :
     - Recalculate all BA indices considering only adults (dbh > 127 mm) and no recruits (ingrowth)
     - Group data by plot/subplot/year/species and transform db in a transition
     - Adjust individual and plot variables for year0 reference
+    - save info for ingrowth individuals
   - Merge seedlings and saplings db to the ingrowth
