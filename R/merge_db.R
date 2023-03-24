@@ -249,7 +249,7 @@ fec <- rbind(
 )
 
 colsToKeep_sizeIngrow <- c(
-    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'tree_id', 'species_id', 'year_measured', 'dbh', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
+    'plot_id', 'longitude', 'latitude', 'plot_size', 'BA_plot', 'BA_comp', 'relativeBA_comp', 's_star', 'db_origin', 'bio_01_mean', 'bio_12_mean', 'bio_01_sd', 'bio_12_sd', 'climate_cellID', 'deltaYear_plot', 'tree_id', 'species_id', 'year_measured', 'dbh', 'height', 'canopyDistance', 'BA_sp', 'BA_inter', 'BA_comp_sp', 'BA_comp_intra', 'relativeBA_sp'
 )
 
 
