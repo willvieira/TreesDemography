@@ -4,10 +4,10 @@ spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
         '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
         '18037PINTAE', '183385PINSTR', '18034PICRUB', '183295PICGLA',
         '183319PINBAN']
-# Which vital rates to run (growth, mort, fec)
-vitalRates: ["mort"]
+# Which vital rates to run
+vitalRates: ["sizeIngrowth"]
 # Source of data (vector must much the same as `vitalRates`)
-dataSources: ["data/mort_dt.RDS"]
+dataSources: ["data/sizeIngrowth_dt.RDS"]
 # number of iteration MCMC (inclusing warmup)
 maxIter: 4000
 # Number of cores and chains
@@ -15,37 +15,20 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "mort_plotYear_sizeBAcompTempPrec"
+simName: "sizeIng_time"
 # simulations to compare with
 simCompare: [
-        "mort_plotYear",
-        "mort_plot_sizeBAcomp",
-        "mort_plotYear_sizeBAcomp",
-        "mort_plot_sizeBAcompTempPrec"
+        "rec_m_randomPlot",
+        "rec_m_randomPlot_BA"
 ]
-# Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "mp2b"
+
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## mort test 10.0 - new version using cmdstanr
+## Size ingrowth v1.0
 
-# V10.0 - Intercept only model with random effects on plotID
+# Model the size distribution of ingrowth individuals folloing:
 
-# V11.0 - Add random effect on individual ID
-
-# V12.0 - Instead of individual random effects (no variation found), use year random effects along with plot.
-
-# V13.0 - building on v10.0, add the effect of size at time 0 using a inverse U-shape function where mortality is higher in the extreme sizes
-
-# V14.0 - building on v10.0, add the effect of total basal area of the plot (BA_plot)
-
-# V14.1 - Instead of plot BA, use individual level BA of neighbour individuals larger than the focal individual for intra and interspecific competition (BA_comp_sp and BA_comp_intra)
-
-# V17.0 - Building on v14.1, add the fixed effect of individual size along with BA competition. Only plot random effects.
-
-# V18.0 - Building on v17.0, add year random effects along with plot random effect. Keep size and BA competition fixed effects
-
-# V18.1 - Add bio_01_mean and bio_12_mean fixed effects on version v18.0
+## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
