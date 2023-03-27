@@ -94,13 +94,12 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
 
   # extract sample diagnostics
   diag_out <- list(
-    diag_summary = md_out$diagnostic_summary(),
     rhat = md_out$summary() |> select(variable, rhat),
     time = md_out$time()
   )
 
   # loo 
-  loo_obj <- loo(md_out$draws("log_lik"))
+  loo_obj <- md_out$loo(cores = 12)
 
 ##
 
@@ -120,30 +119,30 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
     )
   )
 
-  # generated predictions
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'y_rep', par)),
-    file = file.path(
-      'output', sim_info$simName,
-      paste0('y_rep', sp, '.RDS')
-    )
-  )
+  # # generated predictions
+  # saveRDS(
+  #   post_dist |>
+  #     filter(grepl(pattern = 'y_rep', par)),
+  #   file = file.path(
+  #     'output', sim_info$simName,
+  #     paste0('y_rep', sp, '.RDS')
+  #   )
+  # )
 
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
+  # # save sampling diagnostics
+  # saveRDS(
+  #   diag_out,
+  #   file = file.path(
+  #     'output',
+  #     paste0('diagnostics_', sp, '.RDS')
+  #   )
+  # )
 
   # save Loo
   saveRDS(
     loo_obj,
       file = file.path(
-      'output',
+      'output', sim_info$simName,
       paste0('loo_', sp, '.RDS')
     )
   )

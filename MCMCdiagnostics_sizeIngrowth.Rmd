@@ -1,0 +1,447 @@
+---
+ title: "MCMC diagnostics - size ingrowth"
+ subtitle: "Test v1.0 - size ingrowth in function of delta time"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+
+## Diagnostics size ingrowth model
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+```{r, echo = F, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(corrr))
+```
+
+
+```{r load simulations, echo = F}
+# Load simulation variables
+simInfo <- yaml::read_yaml('_simulation_info.yml')
+
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+simulations <- simInfo$simulations
+
+# List output files and set vector names to species_id
+posteriopsiPop_files <- grep(
+  'posteriorPop',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(posteriopsiPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriopsiPop_files))))
+```
+
+```{r load dataset,echo =FALSE}
+sizeIngrowth_dt <- readRDS('data/sizeIngrowth_dt.RDS')
+sizeIngrowth_dt <- sizeIngrowth_dt[species_id %in% spIds]
+```
+
+
+# Posterior distribution of parameters
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
+post <- map2_dfr(
+  posteriopsiPop_files,
+  names(posteriopsiPop_files),
+  ~ readRDS(.x) |>
+    bind_cols(species_id = .y)
+)
+
+nIter = simInfo$maxIter * simInfo$nC/2
+
+post_prior <- post |>
+  bind_rows(
+    tibble(
+      par = unique(post$par),
+      species_id = 'prior'
+    ) |>
+    expand_grid(iter = 1:nIter) |>
+    group_by(par) |>
+    mutate(
+      value = case_when(
+        par == 'size_int' ~ rnorm(nIter, 127, 20),
+        par == 'phi_time' ~ rnorm(nIter, 5, 2.5),
+        par == 'sigma_size' ~ rnorm(nIter, 50, 20)
+      )
+    )
+  )
+
+for(Par in unique(post$par))
+{
+  print(
+    post_prior |>
+      filter(par == Par) |>
+      ggplot(aes(x = value, y = species_id)) +
+        stat_eye() +
+        ggtitle(Par) +
+        xlab('') +
+        theme_minimal()
+  )
+}
+```
+
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8}
+parComb <- post |>
+  reframe(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_id) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot(aes_string(x = parComb[1, i], y = parComb[2, i])) + 
+          geom_point() +
+          facet_wrap(~ species_id) +
+          xlab(parComb[1, i]) +
+          ylab(parComb[2, i]) +
+          theme_minimal()
+  )
+}
+```
+
+# Data distribution
+
+```{r organize data, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+# split between train and everything else (merge validate with rest of data)
+sizeIngrowth_dt[, .(species_id, dbh, deltaYear_plot)] |>
+  mutate(dbhIngrowth = dbh) |>
+  pivot_longer(
+    cols = c(dbhIngrowth, deltaYear_plot),
+    names_to = 'var'
+  ) |>
+  ggplot(aes(x = value, y = species_id)) +
+    geom_density_ridges(alpha = 0.7, color = NA) +
+    facet_wrap(~var, scales = 'free_x') +
+    xlab('') +
+    theme_minimal() +
+    theme(legend.position = 'top')
+```
+
+
+
+# Predictions
+
+## Delta time effect
+
+```{r deltaTimeEffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=7,fig.width=10}
+post |>
+  filter(par %in% c('size_int', 'phi_time')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(delta_time = seq(0, 50, 1.5)) |>
+  mutate(
+    timeEffect = delta_time * phi_time,
+    ingrow = size_int + timeEffect
+  ) |>
+  select(iter, species_id, delta_time, timeEffect, ingrow) |>
+  pivot_longer(
+    cols = c('timeEffect', 'ingrow'),
+    names_to = 'sim'
+  ) |>
+  mutate(
+    sim = factor(sim, levels = c('timeEffect', 'ingrow'), labels = c('Delta time effect', 'Ingrowth size'))
+  ) |>
+  ggplot(aes(x = delta_time, y = value, color = species_id)) +
+    stat_lineribbon(.width = 0.95, alpha = .8) +
+    facet_wrap(~sim, scales = 'free') +
+    scale_fill_brewer() +
+    xlab('Delta time (years)') +
+    ylab('') +
+    theme_minimal() +
+    theme(legend.position = 'bottom')
+```
+
+
+## Ingrowth size in function of fixed effects
+
+```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
+MSE_list <- R2gel_list <- R2_list <- list()
+for(Sp in spIds)
+{
+  train_sp <- sizeIngrowth_dt[species_id == Sp]
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 300 iterations of the 8000 to speed calculation as the final
+  # result is quite similar to use the 8000 iteractions
+  train_sp[, obsID := .I]
+  train_sp <- train_sp[rep(obsID, each = 300)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 300)
+  train_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  train_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        setDT(),
+    `:=`(
+      size_int = i.size_int,
+      phi_time = i.phi_time,
+      sigma_size = i.sigma_size
+    ),
+    on = 'iter'
+  ]
+
+  # compute mean ingrowth size
+  train_sp[,
+    ingrow_mean := size_int + phi_time * deltaYear_plot
+  ]
+
+  # predict ingrowth size
+  train_sp[,
+    ingrow_size := rnorm(.N, ingrow_mean, sigma_size)
+  ]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  train_sp[, iter2 := 1:.N, by = obsID]
+
+
+  # calculate MSE
+  train_sp[, SE_size := (dbh - ingrow_size)^2]
+  
+  # mean SE over all observations for each iteration and save to list
+  MSE_list[[Sp]] <- train_sp[, 
+    .(
+      MSE_size = mean(SE_size, na.rm = TRUE),
+      species_id = Sp
+    ),
+    by = iter2
+  ]
+
+  # Calculate R2 (Gelman et al 2018)
+  R2gel_list[[Sp]] <- train_sp |>
+    group_by(iter2) |>
+    summarise(var_size = var(ingrow_mean, na.rm = TRUE)) |>
+    bind_cols(iter = sampledIter) |>
+    left_join(
+      post |>
+        filter(species_id == Sp & par == 'sigma_size') |>
+        mutate(sigma_size = value) |>
+        select(iter, sigma_size, species_id)
+    ) |>
+    mutate(R2gelman_size = var_size/(var_size + sigma_size^2)) |>
+    select(iter, iter2, species_id, R2gelman_size) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- train_sp[,
+      .(
+        R2reg_size = get_r2(dbh, ingrow_size),
+        R2reg_size_mean = get_r2(dbh, ingrow_mean),
+        species_id = unique(species_id)
+      ), 
+      by = iter2
+    ]
+
+
+  # Predictive figures
+  #########################################################
+
+  p1 <- train_sp |>
+    select(iter2, obsID, deltaYear_plot, dbh, ingrow_size) |>
+    group_by(obsID) |>
+    summarise(
+      deltaYear_plot = mean(deltaYear_plot),
+      size_obs = mean(dbh),
+      size_pred = mean(ingrow_size)
+    ) |>
+    pivot_longer(
+      cols = contains('size')
+    ) |>
+    ggplot(aes(as.factor(deltaYear_plot), value, fill = name, color = name)) +
+      geom_boxplot(alpha = 0.8) +
+      xlab('Delta time (years)') +
+      ylab('Ingrowth size (mm)') +
+      theme_minimal() +
+      labs(subtitle = Sp)
+
+
+  p2 <- train_sp |>
+    select(iter2, obsID, deltaYear_plot, dbh, ingrow_size) |>
+    ggplot() +
+      geom_line(aes(ingrow_size, group = iter2), stat = "density", alpha= 0.1) +
+      geom_density(
+        data = train_sp[iter2 == 1],
+        aes(dbh),
+        color = 'blue'
+      ) +
+      xlab('Distribution of obs (blue line) and pred (black lines) ingrowth size (mm)') +
+      ylab('') +
+      theme_minimal()
+
+  p3 <- train_sp |>
+    select(iter2, obsID, dbh, ingrow_size) |>
+    group_by(obsID) |>
+    summarise(
+      size_obs = mean(dbh),
+      size_pred = mean(ingrow_size)
+    ) |>
+    ggplot(aes(size_obs, size_pred)) +
+      geom_point(alpha = 0.2) +
+      tune::coord_obs_pred() +
+      geom_abline(slope = 1, intercept = 0) + 
+      xlab('Observed ingrowth size (mm)') +
+      ylab('Predicted ingrowth size (mm)') +
+      theme_minimal()
+
+  print(
+    ggarrange(
+      p1,
+      ggarrange(
+        p2, p3,
+        ncol = 2,
+        legend = 'bottom'
+      ),
+      nrow = 2
+    )
+  )
+}
+
+# save MSE and R2 to be used for model comparison
+invisible(
+    map_dfr(
+    c('MSE', 'R2gel', 'R2'),
+    ~ get(paste0(.x, '_list')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          'output', 
+          simName,
+          paste0(.x, '.RDS')
+      )
+    )
+  )
+)
+```
+
+
+# Mean squared error (MSE)
+
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7.5, fig.width = 8}
+sim_toLoad <- c(simInfo$simCompare, simName)
+  map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'MSE.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = MSE_size, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    xlab('Mean Squared error (MSE)') + ylab('') +
+    theme_minimal() + 
+    xlab('Predicted ingrowth size')
+```
+
+
+# Rsquared
+
+The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
+
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2gel.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = R2gelman_size, y = species_id, fill = sim)) +
+      geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+      xlab('Rsquared (Gelman 2018)') +
+      theme_minimal()
+```
+
+We also calculated the $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values. This approach was used for the size predictions from the model, and the growth predictions derived from the size predictions.
+
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 7.5, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output', .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  ggplot(aes(x = R2reg_size_mean, y = species_id, fill = sim)) +
+    geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+    xlab('Rsquared (linear regression)') +
+    theme_minimal()
+```
+
+
+# Leave-one-out cross-validation to compare models
+
+Not yet...
+
+```{r loo, eval=FALSE,echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  ggplot(aes(x = value, y = species_id, color = sim)) +
+    geom_point() +
+    facet_wrap(~ variable, scales = 'free_x') +
+    xlab('') + ylab('') +
+    theme_bw() +
+    theme(legend.position = 'bottom')
+```
+
+```{r loo2, eval=FALSE, echo = FALSE, warning=FALSE,fig.height = 4, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = contains('diff')
+  ) |>
+  ggplot(aes(y = sim, x = value)) +
+    geom_boxplot() +
+    facet_wrap(~name) +
+    theme_bw()
+```

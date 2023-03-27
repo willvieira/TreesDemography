@@ -17,10 +17,7 @@ sampleSize: 20000
 # The simulation and folder name
 simName: "sizeIng_time"
 # simulations to compare with
-simCompare: [
-        "rec_m_randomPlot",
-        "rec_m_randomPlot_BA"
-]
+simCompare: [ ]
 
 
 ##################################
@@ -31,4 +28,5 @@ simCompare: [
 
 # Model the size distribution of ingrowth individuals folloing:
 
-## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
+# size_ingrowth ~ N(m, var_size)
+# m = int_sp + phi_time * delta_time
