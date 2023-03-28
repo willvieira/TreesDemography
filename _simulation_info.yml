@@ -15,18 +15,22 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "sizeIng_time"
+simName: "sizeIng_lognormTrunc_time"
 # simulations to compare with
-simCompare: [ ]
+simCompare: [
+        "sizeIng_time"
+]
 
 
 ##################################
 ########## DESCRIPTION  ##########
 ##################################
 
-## Size ingrowth v1.0
+## Size ingrowth v2.0
 
 # Model the size distribution of ingrowth individuals folloing:
 
 # size_ingrowth ~ N(m, var_size)
 # m = int_sp + phi_time * delta_time
+
+# Version v2.0 makes size_ingrowth follows a log normal distribution truncated at minimum size of 127 (homemade truncated, donc even know if it's correctly) 

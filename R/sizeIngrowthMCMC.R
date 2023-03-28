@@ -71,7 +71,7 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
   md_out <- stanModel$sample(
       data = list(
           N = sizeIngrowth_dt[, .N],
-          Lo = 126,
+          Lo = 126.99,
           size_ingrowth = sizeIngrowth_dt[, dbh],
           delta_time = sizeIngrowth_dt[, deltaYear_plot]
       ),
@@ -92,11 +92,11 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
     mutate(iter = row_number()) |>
     ungroup()
 
-  # extract sample diagnostics
-  diag_out <- list(
-    rhat = md_out$summary() |> select(variable, rhat),
-    time = md_out$time()
-  )
+  # # extract sample diagnostics
+  # diag_out <- list(
+  #   rhat = md_out$summary() |> select(variable, rhat),
+  #   time = md_out$time()
+  # )
 
   # loo 
   loo_obj <- md_out$loo(cores = 12)
