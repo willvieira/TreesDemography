@@ -21,7 +21,7 @@ simCompare: [
         "mort_plotYear_sizeBAcompTempPrec"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "cedar"
+cluster: "mp2b"
 
 ##################################
 ########## DESCRIPTION  ##########

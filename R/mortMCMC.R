@@ -55,7 +55,7 @@ set.seed(0.0)
   mort_dt <- mort_dt[nbMeasure > 1]
 
   # add predicted growth
-  sim_output <- 'output'
+  sim_output <- '../bertalanffy_plotInd_BAspcTempPrecscl/output'
   trainData <- readRDS(paste0(sim_output, '/trainData_', sp, '.RDS'))
   trainData[
     dataSource,
@@ -315,6 +315,85 @@ time_interval[
 ##
 
 
+## save output
+
+  # posterior of population level parameters
+  saveRDS(
+    post_dist |>
+      filter(!grepl(pattern = '\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorPop_', sp, '.RDS')
+    )
+  )
+
+  # posterior of plot_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiPlot', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiPlot_', sp, '.RDS')
+    )
+  )
+
+  # posterior of years parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiYear_interval', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiYearInt_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiYear\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiYear_', sp, '.RDS')
+    )
+  )
+
+  # posterior of growth_rate
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'growth_rate', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorGrowthRate_', sp, '.RDS')
+    )
+  )
+
+  # save sampling diagnostics
+  saveRDS(
+    diag_out,
+    file = file.path(
+      'output',
+      paste0('diagnostics_', sp, '.RDS')
+    )
+  )
+
+  # save train and validate data
+  saveRDS(
+    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
+      file = file.path(
+      'output',
+      paste0('trainData_', sp, '.RDS')
+    )
+  )
+  saveRDS(
+    time_interval,
+      file = file.path(
+      'output',
+      paste0('timeInterval_', sp, '.RDS')
+    )
+  )
+
+##
+
+
+
 ## Approximate LOO-CV using subsampling
 
   # Function to compute log-likelihood
@@ -423,83 +502,6 @@ time_interval[
   )
  
 ##
-
-
-
-## save output
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiPlot', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiPlot_', sp, '.RDS')
-    )
-  )
-
-  # posterior of years parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiYear_interval', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiYearInt_', sp, '.RDS')
-    )
-  )
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiYear\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiYear_', sp, '.RDS')
-    )
-  )
-
-  # posterior of growth_rate
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'growth_rate', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorGrowthRate_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
-  # save train and validate data
-  saveRDS(
-    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
-      file = file.path(
-      'output',
-      paste0('trainData_', sp, '.RDS')
-    )
-  )
-  saveRDS(
-    time_interval,
-      file = file.path(
-      'output',
-      paste0('timeInterval_', sp, '.RDS')
-    )
-  )
 
   # save Loo
   saveRDS(
