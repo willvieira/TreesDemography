@@ -502,7 +502,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(time = seq(0, 2000, 100)) |>
+  expand_grid(time = seq(0, 1000, 50)) |>
   mutate(Lt = Lmax * (1 - exp(-exp(r) * time))) |>
   ggplot(aes(x = time, y = Lt, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
