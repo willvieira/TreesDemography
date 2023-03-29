@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - Growth"
- subtitle: "Test v23.0 - Von Bertalanffy model - r in function of `BA_comp_sp`, `BA_comp_intra`, `bio_01_mean`, and `bio_12_mean`."
+ subtitle: "Test v23.1 - Von Bertalanffy model - r in function of `BA_comp_sp`, `BA_comp_intra`, `bio_01_mean`, and `bio_12_mean`."
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -502,7 +502,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(time = seq(0, 2000, 100)) |>
+  expand_grid(time = seq(0, 1000, 50)) |>
   mutate(Lt = Lmax * (1 - exp(-exp(r) * time))) |>
   ggplot(aes(x = time, y = Lt, color = species_id)) +
         stat_lineribbon(.width = 0.95, alpha = .8) +
