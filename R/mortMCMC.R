@@ -54,83 +54,6 @@ set.seed(0.0)
   # filter for tree_id with at least two measures
   mort_dt <- mort_dt[nbMeasure > 1]
 
-  # add predicted growth
-  sim_output <- '../bertalanffy_plotInd_BAspcTempPrecscl/output'
-  trainData <- readRDS(paste0(sim_output, '/trainData_', sp, '.RDS'))
-  trainData[
-    dataSource,
-    plot_id := i.plot_id,
-    on = 'tree_id'
-  ]
-
-  pars_pop <- readRDS(paste0(sim_output, '/posteriorPop_', sp, '.RDS')) |>
-    pivot_wider(names_from = 'par', values_from = 'value') |>
-    as.data.frame()
-
-  pars_plot <- readRDS(paste0(sim_output, '/posteriorrPlot_', sp, '.RDS')) |>
-    mutate(plot_id_seq = parse_number(par)) |>
-    left_join(
-      trainData[, .(plot_id_seq = head(plot_id_seq, 1)), by = plot_id]
-    ) |>
-    select(plot_id, value, iter) |>
-    pivot_wider(names_from = 'plot_id', values_from = 'value') |>
-    as.data.frame()
-
-  pars_tree <- readRDS(paste0(sim_output, '/posteriorrTree_', sp, '.RDS')) |>
-    mutate(tree_id_seq = parse_number(par)) |>
-    left_join(
-      trainData[, .(tree_id_seq = head(tree_id_seq, 1)), by = tree_id]
-    ) |>
-    select(tree_id, value, iter) |>
-    pivot_wider(names_from = 'tree_id', values_from = 'value') |>
-    as.data.frame()
-
-  growth_f <- function(
-    pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaTime,
-    dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
-  ){
-    if(plot_id %in% names(pars_plot)) {
-      plot_re = pars_plot[, plot_id]
-    }else{
-      plot_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * pars_pop[, 'p_plotTree'])
-    }
-    if(tree_id %in% names(pars_tree)) {
-      tree_re = pars_tree[, tree_id]
-    }else{
-      tree_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * (1 - pars_pop[, 'p_plotTree']))
-    }
-
-    rPlot = exp(
-      pars_pop[, 'r'] +
-      plot_re +
-      tree_re +
-      pars_pop[, 'Beta'] * (BA_comp_sp + pars_pop[, 'theta'] * BA_comp_intra) +
-      -pars_pop[, 'tau_temp'] * (bio_01_mean_scl - pars_pop[, 'optimal_temp'])^2 +
-      -pars_pop[, 'tau_prec'] * (bio_12_mean_scl - pars_pop[, 'optimal_prec'])^2
-    )
-
-    rPlotTime = exp(-rPlot * deltaTime)
-
-    size_t1 = rnorm(
-      nrow(pars_pop),
-      mean = dbh0 * rPlotTime + pars_pop[, 'Lmax'] * (1 - rPlotTime),
-      sd = pars_pop[, 'sigma_obs']
-    )
-
-    growth_pred <- (size_t1 - dbh0)/deltaTime
-    
-    # get mean and sd of predicted growth rate
-    list(growth_mean = mean(growth_pred), growth_sd = sd(growth_pred))    
-  }
-
-  mort_dt[, rowID := .I]
-  mort_dt[,
-    c('growth_mean', 'growth_sd') := growth_f(
-      pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaYear, dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
-    ),
-    by = rowID
-  ]
-
   if(mort_dt[, .N] > sampleSize)
   { 
     # define the size of (i) size, (ii) longitute and (iii) latitude classes to stratify sampling
@@ -218,6 +141,88 @@ set.seed(0.0)
   }
 
 ##
+
+  
+## add predicted growth
+ 
+  sim_output <- '../bertalanffy_plotInd_BAspcTempPrecscl/output'
+  trainData <- readRDS(paste0(sim_output, '/trainData_', sp, '.RDS'))
+  trainData[
+    dataSource,
+    plot_id := i.plot_id,
+    on = 'tree_id'
+  ]
+
+  pars_pop <- readRDS(paste0(sim_output, '/posteriorPop_', sp, '.RDS')) |>
+    pivot_wider(names_from = 'par', values_from = 'value') |>
+    as.data.frame()
+
+  pars_plot <- readRDS(paste0(sim_output, '/posteriorrPlot_', sp, '.RDS')) |>
+    mutate(plot_id_seq = parse_number(par)) |>
+    left_join(
+      trainData[, .(plot_id_seq = head(plot_id_seq, 1)), by = plot_id]
+    ) |>
+    select(plot_id, value, iter) |>
+    pivot_wider(names_from = 'plot_id', values_from = 'value') |>
+    as.data.frame()
+
+  pars_tree <- readRDS(paste0(sim_output, '/posteriorrTree_', sp, '.RDS')) |>
+    mutate(tree_id_seq = parse_number(par)) |>
+    left_join(
+      trainData[, .(tree_id_seq = head(tree_id_seq, 1)), by = tree_id]
+    ) |>
+    select(tree_id, value, iter) |>
+    pivot_wider(names_from = 'tree_id', values_from = 'value') |>
+    as.data.frame()
+
+  growth_f <- function(
+    pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaTime,
+    dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
+  ){
+    if(plot_id %in% names(pars_plot)) {
+      plot_re = pars_plot[, plot_id]
+    }else{
+      plot_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * pars_pop[, 'p_plotTree'])
+    }
+    if(tree_id %in% names(pars_tree)) {
+      tree_re = pars_tree[, tree_id]
+    }else{
+      tree_re = rnorm(nrow(pars_pop), 0, pars_pop[, 'sigma_PlotTree'] * (1 - pars_pop[, 'p_plotTree']))
+    }
+
+    rPlot = exp(
+      pars_pop[, 'r'] +
+      plot_re +
+      tree_re +
+      pars_pop[, 'Beta'] * (BA_comp_sp + pars_pop[, 'theta'] * BA_comp_intra) +
+      -pars_pop[, 'tau_temp'] * (bio_01_mean_scl - pars_pop[, 'optimal_temp'])^2 +
+      -pars_pop[, 'tau_prec'] * (bio_12_mean_scl - pars_pop[, 'optimal_prec'])^2
+    )
+
+    rPlotTime = exp(-rPlot * deltaTime)
+
+    size_t1 = rnorm(
+      nrow(pars_pop),
+      mean = dbh0 * rPlotTime + pars_pop[, 'Lmax'] * (1 - rPlotTime),
+      sd = pars_pop[, 'sigma_obs']
+    )
+
+    growth_pred <- (size_t1 - dbh0)/deltaTime
+    
+    # get mean and sd of predicted growth rate
+    list(growth_mean = mean(growth_pred), growth_sd = sd(growth_pred))    
+  }
+
+  mort_dt[, rowID := .I]
+  mort_dt[,
+    c('growth_mean', 'growth_sd') := growth_f(
+      pars_pop, pars_plot, pars_tree, plot_id, tree_id, deltaYear, dbh0, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl
+    ),
+    by = rowID
+  ]
+
+##
+
 
 ## define plot_id in sequence to be used in stan
 plot_id_uq <- mort_dt[sampled == 'training', unique(plot_id)]
