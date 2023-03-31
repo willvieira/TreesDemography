@@ -547,6 +547,24 @@ post |>
     xlab('Longevity (years)')
 ```
 
+## Longevity in function of time
+
+```{r deltaYearPred,echo=FALSE,warning=FALSE, message=FALSE,fig.height = 6.5, fig.width = 7}
+post |>
+  filter(par == 'psi') |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_id) |>
+  expand_grid(deltaYear = seq(0, 1000, 25)) |>
+  mutate(long = 1/(1 + exp(-psi))^deltaYear) |>
+  ggplot(aes(x = deltaYear,  y = long, color = species_id)) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
+    scale_fill_brewer() +
+    theme_minimal() +
+    xlab('Time interval (years)')
+```
 
 ## Size effect
 
@@ -572,7 +590,7 @@ post |>
     sim = factor(sim, levels = c('SizeEffect', 'psi_size'), labels = c('DBH effect (log linear)', 'DBH effect on longetivity'))
   ) |>
   ggplot(aes(x = size, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.95, alpha = .8) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
     xlab('DBH (mm)') +
@@ -619,7 +637,7 @@ post |>
     )
   ) |>
   ggplot(aes(x = BA_comp, y = value, color = species_id)) +
-    stat_lineribbon(.width = 0.95, alpha = .8) +
+    stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim + log, scales = 'free') +
     scale_fill_brewer() +
     xlab('Basal area competition') +
