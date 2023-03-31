@@ -649,7 +649,7 @@ post |>
 
 ## Mean annual temperature effect
 
-```{r temp_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+```{r temp_pred,echo=FALSE,fig.height = 7, fig.width = 10}
 post |>
   filter(par %in% c('psi', 'optimal_temp', 'tau_temp')) |>
   pivot_wider(
@@ -657,7 +657,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(bio_01_mean = seq(-6, 25, 1)) |>
+  expand_grid(bio_01_mean = seq(0, 1, 1)) |>
   mutate(
     tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
     psi_T = exp(psi + tempEffect)
@@ -674,7 +674,7 @@ post |>
     stat_lineribbon(.width = 0.9, alpha = .8) +
     facet_wrap(~sim, scales = 'free') +
     scale_fill_brewer() +
-    xlab('Mean annual temperature (MAT)') +
+    xlab('Scaled mean annual temperature (MAT)') +
     ylab('') +
     theme_minimal() +
     theme(legend.position = 'bottom')
@@ -683,7 +683,7 @@ post |>
 
 ## Mean annual precipitation effect
 
-```{r prec_pred,echo=FALSE,fig.height = 8, fig.width = 10}
+```{r prec_pred,echo=FALSE,fig.height = 7, fig.width = 10}
 post |>
   filter(par %in% c('psi', 'optimal_prec', 'tau_prec')) |>
   pivot_wider(
@@ -691,7 +691,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(prec_sc = seq(0, 1, .05)) |>
+  expand_grid(prec_sc = seq(0, 1, 0.05)) |>
   mutate(
     precEffect = -tau_prec * (prec_sc - optimal_prec)^2,
     psi_P = exp(psi + precEffect)
@@ -717,7 +717,7 @@ post |>
 
 ## Mortality in function of fixed effects
 
-```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
+```{r plot_preds,echo=FALSE,warning=FALSE,message=FALSE,fig.height=12,fig.width=12}
 accur_ls <- mortProp_ls <- mortPropPlot_ls <- list()
 for(Sp in spIds)
 {
@@ -828,15 +828,45 @@ for(Sp in spIds)
     ) |>
     bind_cols(species_id = Sp)
   
-  # Prediction figures
-  post_sp <- post |>
-    filter(species_id == Sp) |>
-    group_by(par) |>
-    summarise(value = mean(value)) |>
-    deframe()
+
+  # predict for random effects only model (mort_plotYear)
+  # to compare predictions with and without fixed effects
+  ##########################################################
+    # merge global parameters
+  train_sp[
+    readRDS(paste0('output/mort_plot/posteriorPop_', Sp, '.RDS')) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      setDT(),
+    psi_re := i.psi,
+    on = 'iter'
+  ]
+  
+  # merge plot_id parameters if plot is present in validation data
+  train_sp[
+    readRDS(paste0('output/mort_plot/posteriorpsiPlot_', Sp, '.RDS')) |>
+      mutate(
+        plot_id_seq = parse_number(par)
+      ) |>
+      select(!par) |>
+      setDT(),
+    psiPlot_re := i.value,
+    on = c('iter', 'plot_id_seq')
+  ]
+
+  # compute longevity logit
+  train_sp[, longev_log_re := 1/(1 + exp(-(psi_re + psiPlot_re)))]
+  # compute mortality rate in function of time
+  train_sp[, mortality_prob_re := 1 - (longev_log_re^deltaYear)]
+  # predict mortality event
+  train_sp[,
+    mort_pred_re := rbinom(.N, size = 1, mortality_prob_re)
+  ]
+
+  # Predictive figures
+  #########################################################
 
   dt_p1 <- train_sp |>
-    select(iter2, BA_comp_sp, mort, mort_pred) |>
+    select(iter2, BA_comp_sp, mort, mort_pred, mort_pred_re) |>
     mutate(
       BAc = cut(
         BA_comp_sp,
@@ -847,14 +877,14 @@ for(Sp in spIds)
     group_by(BAc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
+      Pred = sum(mort_pred == 1)/n(),
+      Pred_re = sum(mort_pred_re == 1)/n()
     ) |>
     pivot_longer(
-      cols = c('Obs', 'Pred')
+      cols = c('Obs', 'Pred', 'Pred_re')
     )
-
   dt_p2 <- train_sp |>
-    select(iter2, BA_comp_intra, mort, mort_pred) |>
+    select(iter2, BA_comp_intra, mort, mort_pred, mort_pred_re) |>
     mutate(
       BAc = cut(
         BA_comp_intra,
@@ -865,15 +895,15 @@ for(Sp in spIds)
     group_by(BAc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
+      Pred = sum(mort_pred == 1)/n(),
+      Pred_re = sum(mort_pred_re == 1)/n()
     ) |>
     pivot_longer(
-      cols = c('Obs', 'Pred')
+      cols = c('Obs', 'Pred', 'Pred_re')
     )
-
 # Prediction figures
   dt_p3 <- train_sp |>
-    select(iter2, dbh0, mort, mort_pred) |>
+    select(iter2, dbh0, mort, mort_pred, mort_pred_re) |>
     mutate(
       sizec = cut(
         dbh0,
@@ -884,14 +914,15 @@ for(Sp in spIds)
     group_by(sizec, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
+      Pred = sum(mort_pred == 1)/n(),
+      Pred_re = sum(mort_pred_re == 1)/n()
     ) |>
     pivot_longer(
-      cols = c('Obs', 'Pred')
+      cols = c('Obs', 'Pred', 'Pred_re')
     )
-
+    
   dt_p4 <- train_sp |>
-    select(iter2, bio_01_mean, mort, mort_pred) |>
+    select(iter2, bio_01_mean, mort, mort_pred, mort_pred_re) |>
     mutate(
       tempc = cut(
         bio_01_mean,
@@ -902,14 +933,15 @@ for(Sp in spIds)
     group_by(tempc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
+      Pred = sum(mort_pred == 1)/n(),
+      Pred_re = sum(mort_pred_re == 1)/n()
     ) |>
     pivot_longer(
-      cols = c('Obs', 'Pred')
+      cols = c('Obs', 'Pred', 'Pred_re')
     )
     
   dt_p5 <- train_sp |>
-    select(iter2, bio_12_mean, mort, mort_pred) |>
+    select(iter2, bio_12_mean, mort, mort_pred, mort_pred_re) |>
     mutate(
       precc = cut(
         bio_12_mean,
@@ -920,14 +952,17 @@ for(Sp in spIds)
     group_by(precc, iter2) |>
     summarise(
       Obs = sum(mort == 1)/n(),
-      Pred = sum(mort_pred == 1)/n()
+      Pred = sum(mort_pred == 1)/n(),
+      Pred_re = sum(mort_pred_re == 1)/n()
     ) |>
     pivot_longer(
-      cols = c('Obs', 'Pred')
+      cols = c('Obs', 'Pred', 'Pred_re')
     )
   
   yLim = range(c(dt_p1$value, dt_p2$value, dt_p3$value, dt_p4$value, dt_p5$value))
-
+  mort_prob = function(psi)
+    return( 1 - ( (1/(1 + exp(-(psi))))^train_sp[, median(deltaYear)] ) )
+  
   p1 <- dt_p1 |> 
     ggplot(aes(x = BAc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
@@ -937,7 +972,6 @@ for(Sp in spIds)
       theme_minimal() +
       labs(color = '') +
       ylim(yLim)
-
   p2 <- dt_p2 |>
     ggplot(aes(x = BAc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
@@ -947,7 +981,6 @@ for(Sp in spIds)
       theme_minimal() +
       labs(color = '') +
       ylim(yLim)
-
   p3 <- dt_p3 |>
     ggplot(aes(x = sizec, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
@@ -955,9 +988,8 @@ for(Sp in spIds)
       ylab('Mortality proportion') +
       labs(subtitle = '') +
       theme_minimal() +
-      labs(color = '') + 
+      labs(color = '') +
       ylim(yLim)
-
   p4 <- dt_p4 |>
     ggplot(aes(x = tempc, y = value, color = name)) +
       geom_boxplot(alpha = .4) +
@@ -977,7 +1009,6 @@ for(Sp in spIds)
       theme_minimal() +
       labs(color = '') + 
       ylim(yLim)
-
   print(
     ggarrange(
       p1, p2, p3, p4, p5,
