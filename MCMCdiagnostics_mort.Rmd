@@ -657,7 +657,7 @@ post |>
     values_from = value
   ) |>
   group_by(species_id) |>
-  expand_grid(bio_01_mean = seq(0, 1, 1)) |>
+  expand_grid(bio_01_mean = seq(0, 1, 0.05)) |>
   mutate(
     tempEffect = -tau_temp * (bio_01_mean - optimal_temp)^2,
     psi_T = exp(psi + tempEffect)
