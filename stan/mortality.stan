@@ -9,6 +9,12 @@ data {
 	vector[N] BA_comp_inter; // BA of larger ind from other species
 	vector[N] bio_01_mean; // mean total annual temperature (scaled)
 	vector[N] bio_12_mean; // mean total annual precipitation (scaled)
+	// range limit to optimal_temp and prec parameters area species specific
+	// And must be within the observed distribution of the species
+	real maxTemp;
+	real minTemp;
+	real maxPrec;
+	real minPrec;
 }
 parameters {
 	real<lower=-2,upper=8> psi; // baseline longevity
@@ -18,10 +24,10 @@ parameters {
 	real<lower=0,upper=10> size_var;
 	real Beta; // BA_comp effect
   real<lower=0,upper=2> theta; // partition the effect between BAsp and BAinter
-	real<lower=0,upper=1> optimal_temp; // optimal temperature
-  real<lower=0> tau_temp; // inverse of temperature breadth
-	real<lower=0,upper=1> optimal_prec; // optimal precipitation
-  real<lower=0> tau_prec; // inverse of precipitation breadth
+	real<lower=minTemp,upper=maxTemp> optimal_temp; // optimal temperature
+	real<lower=0> tau_temp; // inverse of temperature breadth
+	real<lower=minPrec,upper=maxPrec> optimal_prec; // optimal precipitation
+	real<lower=0> tau_prec; // inverse of precipitation breadth
 }
 model {
 	// Priors

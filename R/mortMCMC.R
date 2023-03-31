@@ -74,36 +74,36 @@ set.seed(0.0)
     # Basal area intra
     mort_dt[!is.na(BA_comp_intra), BAintraInt := cut(BA_comp_intra, breaks = seq(floor(min(BA_comp_intra)), ceiling(max(BA_comp_intra)), by = deltaBA), labels = FALSE, include.lowest = TRUE)]
 
-  	# Derive frequencies
+    # Derive frequencies
     N <- mort_dt[, .N]
-   	freqDBH = mort_dt[, table(sizeInt)/N]
-  	freqLon = mort_dt[, table(lonInt)/N]
-  	freqLat = mort_dt[, table(latInt)/N]
+    freqDBH = mort_dt[, table(sizeInt)/N]
+    freqLon = mort_dt[, table(lonInt)/N]
+    freqLat = mort_dt[, table(latInt)/N]
     freqBAsp = mort_dt[, table(BAspInt)/N]
     freqBAintra = mort_dt[, table(BAintraInt)/N]
 
-  	ls_sizeInt = mort_dt[, unique(sizeInt)]
-  	ls_lonInt = mort_dt[, unique(lonInt)]
-  	ls_latInt = mort_dt[, unique(latInt)]
+    ls_sizeInt = mort_dt[, unique(sizeInt)]
+    ls_lonInt = mort_dt[, unique(lonInt)]
+    ls_latInt = mort_dt[, unique(latInt)]
     ls_BAspInt = mort_dt[, unique(BAspInt)]
     ls_BAintraInt = mort_dt[, unique(BAintraInt)]
 
-  	for (s in ls_sizeInt)
-  		mort_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
+    for (s in ls_sizeInt)
+      mort_dt[sizeInt == s, proba_s := freqDBH[as.character(s)]]
 
-  	for (lg in ls_lonInt)
-  		mort_dt[lonInt == lg, proba_L := freqLon[as.character(lg)]]
+    for (lg in ls_lonInt)
+      mort_dt[lonInt == lg, proba_L := freqLon[as.character(lg)]]
 
-  	for (lt in ls_latInt)
-  		mort_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
+    for (lt in ls_latInt)
+      mort_dt[latInt == lt, proba_l := freqLat[as.character(lt)]]
 
-   for (basp in ls_BAspInt)
-  		mort_dt[BAspInt == basp, proba_BAsp := freqBAsp[as.character(basp)]]
+    for (basp in ls_BAspInt)
+      mort_dt[BAspInt == basp, proba_BAsp := freqBAsp[as.character(basp)]]
 
-   for (baintra in ls_BAintraInt)
-  		mort_dt[BAintraInt == baintra, proba_BAintra := freqBAintra[as.character(baintra)]]
+    for (baintra in ls_BAintraInt)
+      mort_dt[BAintraInt == baintra, proba_BAintra := freqBAintra[as.character(baintra)]]
 
-  	mort_dt[, proba := proba_s*proba_L*proba_l*proba_BAsp*proba_BAintra]
+    mort_dt[, proba := proba_s*proba_L*proba_l*proba_BAsp*proba_BAintra]
 
     # mean inclusison probability over individual trees
     tree_prob <- mort_dt[,
@@ -176,7 +176,11 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
           size_t0 = mort_dt[sampled == 'training', dbh0],
           BA_comp_sp = mort_dt[sampled == 'training', BA_comp_sp],
           BA_comp_inter = mort_dt[sampled == 'training', BA_comp_intra],bio_01_mean = mort_dt[sampled == 'training', temp_sc],
-          bio_12_mean = mort_dt[sampled == 'training', prec_sc]
+          bio_12_mean = mort_dt[sampled == 'training', prec_sc],
+          maxTemp = dataSource[species_id == sp, max(bio_01_mean_scl, na.rm=T)],
+          minTemp = dataSource[species_id == sp, min(bio_01_mean_scl, na.rm=T)],
+          maxPrec = dataSource[species_id == sp, max(bio_12_mean_scl, na.rm=T)],
+          minPrec = dataSource[species_id == sp, min(bio_12_mean_scl, na.rm=T)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -201,6 +205,51 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
     rhat = md_out$summary() |> select(variable, rhat),
     time = md_out$time()
   )
+
+##
+
+
+
+## save output
+
+  # posterior of population level parameters
+  saveRDS(
+    post_dist |>
+      filter(!grepl(pattern = '\\[', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorPop_', sp, '.RDS')
+    )
+  )
+
+  # posterior of plot_id parameters
+  saveRDS(
+    post_dist |>
+      filter(grepl(pattern = 'psiPlot', par)),
+    file = file.path(
+      'output',
+      paste0('posteriorpsiPlot_', sp, '.RDS')
+    )
+  )
+
+  # save sampling diagnostics
+  saveRDS(
+    diag_out,
+    file = file.path(
+      'output',
+      paste0('diagnostics_', sp, '.RDS')
+    )
+  )
+
+  # save train and validate data
+  saveRDS(
+    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
+      file = file.path(
+      'output',
+      paste0('trainData_', sp, '.RDS')
+    )
+  )
+
 ##
 
 
@@ -301,50 +350,6 @@ mort_dt[, prec_sc := (bio_12_mean - min(bio_12_mean))/(max(bio_12_mean) - min(bi
       ]
   )
  
-##
-
-
-
-## save output
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiPlot', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiPlot_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
-  # save train and validate data
-  saveRDS(
-    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
-      file = file.path(
-      'output',
-      paste0('trainData_', sp, '.RDS')
-    )
-  )
-
   # save Loo
   saveRDS(
     loo_obj,
