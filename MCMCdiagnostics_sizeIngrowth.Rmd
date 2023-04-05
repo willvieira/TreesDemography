@@ -43,11 +43,53 @@ posteriopsiPop_files <- grep(
   value = TRUE
 )
 names(posteriopsiPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriopsiPop_files))))
+
+
+diag_files <- grep(
+  'diagnostics',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 ```
 
 ```{r load dataset,echo =FALSE}
 sizeIngrowth_dt <- readRDS('data/sizeIngrowth_dt.RDS')
 sizeIngrowth_dt <- sizeIngrowth_dt[species_id %in% spIds]
+```
+
+
+# Rhat
+
+```{r rhat, echo = F, fig.height = 7, fig.width = 7}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['rhat']] |>
+      bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = rhat, y = species_id)) +
+  geom_boxplot() +
+  theme_minimal()
+```
+
+
+# Divergent transitions
+
+```{r divergentTransitions, echo = FALSE}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+      bind_cols(species_id = .y) |>
+      mutate(chain = row_number())
+) |>
+pivot_wider(
+  names_from = chain,
+  values_from = num_divergent,
+  names_prefix = 'chain '
+) |>
+DT::datatable()
 ```
 
 
@@ -444,4 +486,20 @@ map_dfr(
     geom_boxplot() +
     facet_wrap(~name) +
     theme_bw()
+```
+
+
+# Sampling time
+
+```{r plot sampling time, echo = FALSE, fig.height = 7, fig.width = 8}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['time']][['chains']] |>
+    bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = total/3600, y = species_id)) +
+  geom_boxplot() +
+  xlab('Fit time (hours)') +
+  theme_minimal()
 ```
