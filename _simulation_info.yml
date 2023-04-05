@@ -15,7 +15,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: 20000
 # The simulation and folder name
-simName: "sizeIng_lognormTrunc_time"
+simName: "sizeIng_time_truc"
 # simulations to compare with
 simCompare: [
         "sizeIng_time"
@@ -26,7 +26,7 @@ simCompare: [
 ########## DESCRIPTION  ##########
 ##################################
 
-## Size ingrowth v2.0
+## Size ingrowth v3.0
 
 # Model the size distribution of ingrowth individuals folloing:
 
@@ -34,3 +34,5 @@ simCompare: [
 # m = int_sp + phi_time * delta_time
 
 # Version v2.0 makes size_ingrowth follows a log normal distribution truncated at minimum size of 127 (homemade truncated, donc even know if it's correctly) 
+
+# Version v3.0 uses a gaussian linear model using the stan build-in function for truncated likelihood.

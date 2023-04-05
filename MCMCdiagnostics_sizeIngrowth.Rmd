@@ -1,6 +1,6 @@
 ---
  title: "MCMC diagnostics - size ingrowth"
- subtitle: "Test v1.0 - size ingrowth in function of delta time"
+ subtitle: "Test v3.0 - size ingrowth in function of delta time"
  author: "Will Vieira"
  date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
 ---
@@ -42,12 +42,54 @@ posteriopsiPop_files <- grep(
   dir(file.path('output', simName), full.names = TRUE),
   value = TRUE
 )
+
 names(posteriopsiPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriopsiPop_files))))
+
+diag_files <- grep(
+  'diagnostics',
+  dir(file.path('output', simName), full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
 ```
 
 ```{r load dataset,echo =FALSE}
 sizeIngrowth_dt <- readRDS('data/sizeIngrowth_dt.RDS')
 sizeIngrowth_dt <- sizeIngrowth_dt[species_id %in% spIds]
+```
+
+
+# Rhat
+
+```{r rhat, echo = F, fig.height = 7, fig.width = 7}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['rhat']] |>
+      bind_cols(species_id = .y)
+) |>
+ggplot(aes(x = rhat, y = species_id)) +
+  geom_boxplot() +
+  theme_minimal()
+```
+
+
+# Divergent transitions
+
+```{r divergentTransitions, echo = FALSE}
+map2_dfr(
+  diag_files,
+  names(diag_files),
+  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+      bind_cols(species_id = .y) |>
+      mutate(chain = row_number())
+) |>
+pivot_wider(
+  names_from = chain,
+  values_from = num_divergent,
+  names_prefix = 'chain '
+) |>
+DT::datatable()
 ```
 
 
@@ -61,29 +103,29 @@ post <- map2_dfr(
     bind_cols(species_id = .y)
 )
 
-nIter = simInfo$maxIter * simInfo$nC/2
+# nIter = simInfo$maxIter * simInfo$nC/2
 
-post_prior <- post |>
-  bind_rows(
-    tibble(
-      par = unique(post$par),
-      species_id = 'prior'
-    ) |>
-    expand_grid(iter = 1:nIter) |>
-    group_by(par) |>
-    mutate(
-      value = case_when(
-        par == 'size_int' ~ rnorm(nIter, 127, 20),
-        par == 'phi_time' ~ rnorm(nIter, 5, 2.5),
-        par == 'sigma_size' ~ rnorm(nIter, 50, 20)
-      )
-    )
-  )
+# post_prior <- post |>
+#   bind_rows(
+#     tibble(
+#       par = unique(post$par),
+#       species_id = 'prior'
+#     ) |>
+#     expand_grid(iter = 1:nIter) |>
+#     group_by(par) |>
+#     mutate(
+#       value = case_when(
+#         par == 'size_int' ~ rnorm(nIter, log(127), 1),
+#         par == 'phi_time' ~ rnorm(nIter, 2, 1),
+#         par == 'sigma_size' ~ rnorm(nIter, 0, 1)
+#       )
+#     )
+#   )
 
 for(Par in unique(post$par))
 {
   print(
-    post_prior |>
+    post |>
       filter(par == Par) |>
       ggplot(aes(x = value, y = species_id)) +
         stat_eye() +
@@ -215,7 +257,7 @@ for(Sp in spIds)
 
   # predict ingrowth size
   train_sp[,
-    ingrow_size := rnorm(.N, ingrow_mean, sigma_size)
+    ingrow_size := qnorm(runif(.N, pnorm(127, ingrow_mean, sigma_size)), ingrow_mean, sigma_size)
   ]
 
   # random iter were selected, create a new iter vetor to a proprer sequence
@@ -301,13 +343,8 @@ for(Sp in spIds)
 
   p3 <- train_sp |>
     select(iter2, obsID, dbh, ingrow_size) |>
-    group_by(obsID) |>
-    summarise(
-      size_obs = mean(dbh),
-      size_pred = mean(ingrow_size)
-    ) |>
-    ggplot(aes(size_obs, size_pred)) +
-      geom_point(alpha = 0.2) +
+    ggplot(aes(dbh, ingrow_size)) +
+      geom_hex() +
       tune::coord_obs_pred() +
       geom_abline(slope = 1, intercept = 0) + 
       xlab('Observed ingrowth size (mm)') +

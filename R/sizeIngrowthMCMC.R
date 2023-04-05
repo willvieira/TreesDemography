@@ -48,6 +48,10 @@ set.seed(0.0)
 sizeIngrowth_dt <- dataSource[species_id == sp]
 
 
+# Remove outliers (a tree cannot be first identified with already > 50 mm)
+# 99% quantile of size distribution is 415 mm
+sizeIngrowth_dt <- sizeIngrowth_dt[dbh < 500]
+
 # ## define plot_id in sequence to be used in stan
 # plot_id_uq <- sizeIngrowth_dt[, unique(plot_id)]
 # toSub_plot <- data.table(
@@ -67,17 +71,26 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
 
   stanModel <- cmdstan_model('stan/sizeIngrowth.stan')
 
+  f_init <- function()
+    return( list(
+      size_int = runif(1, 127, 200),
+      phi_time = rnorm(1, 7, 2),
+      sigma_size = rnorm(1, 50, 20)
+      )
+    )
+
   # Run
   md_out <- stanModel$sample(
       data = list(
           N = sizeIngrowth_dt[, .N],
-          Lo = 126.99,
+          Lo = 127,
           size_ingrowth = sizeIngrowth_dt[, dbh],
           delta_time = sizeIngrowth_dt[, deltaYear_plot]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
-      iter_sampling = sim_info$maxIter/2
+      iter_sampling = sim_info$maxIter/2,
+      init = list(f_init(), f_init(), f_init(), f_init())
   )
 
   # extract posterior distribution
@@ -92,11 +105,11 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
     mutate(iter = row_number()) |>
     ungroup()
 
-  # # extract sample diagnostics
-  # diag_out <- list(
-  #   rhat = md_out$summary() |> select(variable, rhat),
-  #   time = md_out$time()
-  # )
+  # extract sample diagnostics
+  diag_out <- list(
+    rhat = md_out$summary() |> select(variable, rhat),
+    time = md_out$time()
+  )
 
   # loo 
   loo_obj <- md_out$loo(cores = 12)
@@ -129,14 +142,14 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
   #   )
   # )
 
-  # # save sampling diagnostics
-  # saveRDS(
-  #   diag_out,
-  #   file = file.path(
-  #     'output',
-  #     paste0('diagnostics_', sp, '.RDS')
-  #   )
-  # )
+  # save sampling diagnostics
+  saveRDS(
+    diag_out,
+    file = file.path(
+      'output',
+      paste0('diagnostics_', sp, '.RDS')
+    )
+  )
 
   # save Loo
   saveRDS(
