@@ -47,6 +47,9 @@ set.seed(0.0)
 # select the species
 sizeIngrowth_dt <- dataSource[species_id == sp]
 
+# Remove outliers (a tree cannot be first identified with already > 50 mm)
+# 99% quantile of size distribution is 415 mm
+sizeIngrowth_dt <- sizeIngrowth_dt[dbh < 500]
 
 # ## define plot_id in sequence to be used in stan
 # plot_id_uq <- sizeIngrowth_dt[, unique(plot_id)]
@@ -129,14 +132,14 @@ sizeIngrowth_dt <- dataSource[species_id == sp]
   #   )
   # )
 
-  # # save sampling diagnostics
-  # saveRDS(
-  #   diag_out,
-  #   file = file.path(
-  #     'output',
-  #     paste0('diagnostics_', sp, '.RDS')
-  #   )
-  # )
+  # save sampling diagnostics
+  saveRDS(
+    diag_out,
+    file = file.path(
+      'output',
+      paste0('diagnostics_', sp, '.RDS')
+    )
+  )
 
   # save Loo
   saveRDS(
