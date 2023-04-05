@@ -74,25 +74,6 @@ ggplot(aes(x = rhat, y = species_id)) +
 ```
 
 
-# Divergent transitions
-
-```{r divergentTransitions, echo = FALSE}
-map2_dfr(
-  diag_files,
-  names(diag_files),
-  ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
-      bind_cols(species_id = .y) |>
-      mutate(chain = row_number())
-) |>
-pivot_wider(
-  names_from = chain,
-  values_from = num_divergent,
-  names_prefix = 'chain '
-) |>
-DT::datatable()
-```
-
-
 # Posterior distribution of parameters
 
 ```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 8}
