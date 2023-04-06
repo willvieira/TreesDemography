@@ -18,7 +18,8 @@ sampleSize: 20000
 simName: "sizeIng_time_truc"
 # simulations to compare with
 simCompare: [
-        "sizeIng_time"
+        "sizeIng_time",
+        "sizeIng_lognormTrunc_time"
 ]
 
 
