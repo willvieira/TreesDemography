@@ -51,6 +51,9 @@ set.seed(0.0)
   # remove dead trees
   growth_dt <- growth_dt[status == 1]
   
+  # remove observations with dbh lower than 127 mm
+  growth_dt <- growth_dt[dbh >= 127]
+
   # get number of measurements by tree_id
   growth_dt[, nbMeasure := .N, by = tree_id]
 
@@ -131,6 +134,8 @@ set.seed(0.0)
 
     growth_dt <- growth_dt[!is.na(sampled)]
 
+  }else{
+    growth_dt[, sampled := 'training']
   }
 
 ##
@@ -186,6 +191,8 @@ growth_dt[
 
   stanModel <- cmdstan_model('stan/growth.stan')
 
+  dir.create(file.path('output', sp))
+  
   # Run
   md_out <- stanModel$sample(
       data = list(
@@ -208,197 +215,21 @@ growth_dt[
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
-      iter_sampling = sim_info$maxIter/2
+      iter_sampling = sim_info$maxIter/2,
+      output_dir = file.path('output', sp)
   )
 
-  # extract posterior distribution
-  post_dist <- md_out$draws(format = 'df') |>
-    select(!c('lp__', '.chain', '.iteration', '.draw')) |>
-    pivot_longer(
-      cols = everything(),
-      names_to = 'par',
-      values_to = 'value'
-    ) |>
-    group_by(par) |>
-    mutate(iter = row_number()) |>
-    ungroup()
-
-  # extract sample diagnostics
-  diag_out <- list(
-    diag_summary = md_out$diagnostic_summary(),
-    rhat = md_out$summary() |> select(variable, rhat),
-    time = md_out$time()
-  )
 ##
 
 
 ## save output
 
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'rPlot_log', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorrPlot_', sp, '.RDS')
-    )
-  )
-
-  # posterior of tree_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'rTree_log', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorrTree_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
   # save train and validate data
   saveRDS(
-    growth_dt[, .(tree_id, tree_id_seq, plot_id_seq, year_measured, sampled)],
+    growth_dt[, .(tree_id, tree_id_seq, plot_id, plot_id_seq, year_measured, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
-    )
-  )
-
-##
-
-
-
-## Approximate LOO-CV using subsampling
-
-  # Function to compute log-likelihood
-  growth_bertalanffy <- function(dt, post, log)
-  {
-    # dt is a vector of:
-    # [1] dbh,
-    # [2] time,
-    # [3] dbh0,
-    # [4] plot_id_seq,
-    # [5] tree_id_seq,
-    # [6] BA_comp_sp,
-    # [7] BA_comp_intra,
-    # [8] bio_01_mean,
-    # [9] bio_12_mean
-    
-    # Add plot_id random effects
-    rPlot_log <- post[, paste0('rPlot_log[', dt[4], ']')]
-
-    # Add tree_id random effects
-    rTree_log <- post[, paste0('rTree_log[', dt[5], ']')]
-
-    # fixed effects
-    rPlot_beta <- exp(
-      post[, 'r'] + 
-      rPlot_log +
-      rTree_log +
-      post[, 'Beta'] * (dt[6] + post[, 'theta'] * dt[7])  +
-      -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
-      -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
-    )
-
-    # time component of the model
-    rPlotTime <- exp(-rPlot_beta * dt[2])
-
-    # mean
-    Mean <- dt[3] * rPlotTime + post[, 'Lmax'] * (1 - rPlotTime)
-
-    # likelihood
-    dnorm(
-      x = dt[1],
-      mean = Mean,
-      sd = post[, 'sigma_obs'],
-      log = log
-    )
-  }
-
-  llfun_bertalanffy <- function(data_i, draws, log = TRUE)
-    apply(
-      data_i,
-      1,
-      function(x, y)
-        growth_bertalanffy(
-          x,
-          y,
-          log = log
-        ),
-        y = draws
-    )
-
-  # Matrix of posterior draws
-  post_dist_lg <- post_dist |>
-    pivot_wider(
-      names_from = par,
-      values_from = value
-    ) |>
-    select(-iter) |>
-    as.matrix()
-
-  # compute relative efficiency
-  # this is slow and optional but is recommended to allow for adjusting PSIS
-  # effective sample size based on MCMC effective sample size)
-  keepTrying <- TRUE; nTry = 1
-  while(keepTrying & nTry < 10) {
-    r_eff <- loo::relative_eff(
-        llfun_bertalanffy, 
-        log = FALSE, # relative_eff wants likelihood not log-likelihood values
-        chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-        data = growth_dt[
-          sampled == 'training',
-          .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl)
-        ],
-        draws = post_dist_lg,
-        cores = sim_info$nC
-    )
-
-    if(is.numeric(r_eff[1])) {
-      keepTrying <- FALSE
-    }else{
-      nTry <- nTry + 1
-    }
-  }
-
-  # Loo using x samples
-  loo_obj <-
-    loo::loo_subsample(
-      llfun_bertalanffy,
-      observations = sampleSize/10, # take a subsample of size x
-      cores = sim_info$nC,
-      r_eff = r_eff, 
-      draws = post_dist_lg,
-      data = growth_dt[
-        sampled == 'training',
-        .(dbh, deltaTime, dbh0, plot_id_seq, tree_id_seq, BA_comp_sp, BA_comp_intra, bio_01_mean_scl, bio_12_mean_scl)
-      ]
-  )
-
-  # save Loo
-  saveRDS(
-    loo_obj,
-      file = file.path(
-      'output',
-      paste0('loo_', sp, '.RDS')
     )
   )
 
