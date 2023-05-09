@@ -520,7 +520,7 @@ for(plot_id in fec_dt[, unique(ID_PE)])
     
     sapling_dt = sapling %>%
         select(ID_PE, year_measured, sp_code, CL_DHP, NB_TIGE) %>%
-        pivot_wider(
+        tidyr::pivot_wider(
             names_from = 'CL_DHP',
             values_from = 'NB_TIGE',
             names_prefix = 's',
