@@ -20,7 +20,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: Inf
 # The simulation and folder name
-simName: "mort_plotYear_sizeBAcompTempPrec"
+simName: "mort_plotYear_sizeBAcompTempPrec_alldb"
 # simulations to compare with
 simCompare: [
         "mort_plotYear",
@@ -29,7 +29,7 @@ simCompare: [
         "mort_plot_sizeBAcompTempPrec"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
-cluster: "cedar"
+cluster: "mpb2"
 
 ##################################
 ########## DESCRIPTION  ##########
@@ -54,3 +54,6 @@ cluster: "cedar"
 # V18.0 - Building on v17.0, add year random effects along with plot random effect. Keep size and BA competition fixed effects
 
 # V18.1 - Add bio_01_mean and bio_12_mean fixed effects on version v18.0
+
+# Final version V2, based in the v18.1 will run the model for all observed data (merge train vs validation datasets)
+# This version will also add more species to the simulation

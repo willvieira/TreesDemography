@@ -48,11 +48,11 @@ set.seed(0.0)
   # select the species
   mort_dt <- dataSource[species_id == sp]
 
+  # remove observations with dbh lower than 127 mm
+  mort_dt <- mort_dt[dbh0 >= 127]
+
   # get number of measurements by tree_id
   mort_dt[, nbMeasure := .N, by = tree_id]
-
-  # filter for tree_id with at least two measures
-  mort_dt <- mort_dt[nbMeasure > 1]
  
   if(mort_dt[, .N] > sampleSize)
   { 
@@ -191,6 +191,8 @@ time_interval[
 
   stanModel <- cmdstan_model('stan/mortality.stan')
 
+  dir.create(file.path('output', sp))
+
   # Run
   md_out <- stanModel$sample(
       data = list(
@@ -216,82 +218,13 @@ time_interval[
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
-      iter_sampling = sim_info$maxIter/2
-  )
-
-  # extract posterior distribution
-  post_dist <- md_out$draws(format = 'df') |>
-    select(!c('lp__', '.chain', '.iteration', '.draw')) |>
-    pivot_longer(
-      cols = everything(),
-      names_to = 'par',
-      values_to = 'value'
-    ) |>
-    group_by(par) |>
-    mutate(iter = row_number()) |>
-    ungroup()
-
-  # extract sample diagnostics
-  diag_out <- list(
-    diag_summary = md_out$diagnostic_summary(),
-    rhat = md_out$summary() |> select(variable, rhat),
-    time = md_out$time()
-  )
-##
-
-
-## save output
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiPlot', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiPlot_', sp, '.RDS')
-    )
-  )
-
-  # posterior of years parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiYear_interval', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiYearInt_', sp, '.RDS')
-    )
-  )
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'psiYear\\[', par)),
-    file = file.path(
-      'output',
-      paste0('posteriorpsiYear_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
+      iter_sampling = sim_info$maxIter/2,
+      output_dir = file.path('output', sp)
   )
 
   # save train and validate data
   saveRDS(
-    mort_dt[, .(tree_id, plot_id_seq, year0, sampled)],
+    mort_dt[, .(tree_id, plot_id, plot_id_seq, year0, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
@@ -302,120 +235,6 @@ time_interval[
       file = file.path(
       'output',
       paste0('timeInterval_', sp, '.RDS')
-    )
-  )
-
-##
-
-
-## Approximate LOO-CV using subsampling
-
-  # Function to compute log-likelihood
-  mort_model <- function(dt, post, log)
-  {
-    # dt is a vector of:
-    # [1] status
-    # [2] deltaTime
-    # [3] plot_id
-    # [4] dbh0
-    # [5] BA_comp_sp
-    # [6] BA_comp_inter
-    # [7] year_int
-    # [8] bio_01_mean
-    # [9] bio_01_mean
-    
-    # Add plot_id random effects
-    psiPlot <- post[, paste0('psiPlot[', dt[3], ']')]
-
-    # Add year_id random effects
-    psiYear_interval <- post[, paste0('psiYear_interval[', dt[7], ']')]
-
-    # fixed effects
-    longev_log <- 1/(1 + exp(
-        -(
-          post[, 'psi'] + 
-          psiPlot +
-          psiYear_interval + 
-          -(log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])^2 +
-          post[, 'Beta'] * (dt[5] + post[, 'theta'] * dt[6]) +
-          -post[, 'tau_temp'] * (dt[8] - post[, 'optimal_temp'])^2 +
-          -post[, 'tau_prec'] * (dt[9] - post[, 'optimal_prec'])^2
-        )
-      )
-    )
-
-    # time component of the model
-    mortality_time <- 1 - (longev_log^dt[2])
-
-    # deal with numerical instability
-    if(any(mortality_time == 1))
-      mortality_time[which(mortality_time == 1)] = 0.999999
-
-    # likelihood
-    dbinom(
-      x = dt[1],
-      size = 1,
-      prob = mortality_time,
-      log = log
-    )
-  }
-
-  llfun_mort <- function(data_i, draws, log = TRUE)
-    apply(
-      data_i,
-      1,
-      function(x, y)
-        mort_model(
-          x,
-          y,
-          log = log
-        ),
-        y = draws
-    )
-
-  # Matrix of posterior draws
-  post_dist_lg <- post_dist |>
-    pivot_wider(
-      names_from = par,
-      values_from = value
-    ) |>
-    select(-iter) |>
-    as.matrix()
-
-  # compute relative efficiency
-  # this is slow and optional but is recommended to allow for adjusting PSIS
-  # effective sample size based on MCMC effective sample size)
-  r_eff <- loo::relative_eff(
-      llfun_mort, 
-      log = FALSE, # relative_eff wants likelihood not log-likelihood values
-      chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-      data = mort_dt[
-        sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
-      ],
-      draws = post_dist_lg,
-      cores = sim_info$nC
-  )
-
-  # Loo using x samples
-  loo_obj <- loo::loo_subsample(
-      llfun_mort,
-      observations = sampleSize/5, # take a subsample of size x
-      cores = sim_info$nC,
-      r_eff = r_eff, 
-      draws = post_dist_lg,
-      data = mort_dt[
-        sampled == 'training',
-        .(mort, deltaYear, plot_id_seq, dbh0, BA_comp_sp, BA_comp_intra, time_int, bio_01_mean_scl, bio_12_mean_scl)
-      ]
-  )
- 
-  # save Loo
-  saveRDS(
-    loo_obj,
-      file = file.path(
-      'output',
-      paste0('loo_', sp, '.RDS')
     )
   )
 
