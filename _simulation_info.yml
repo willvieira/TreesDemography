@@ -20,7 +20,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: Inf
 # The simulation and folder name
-simName: "mort_plot_sizeBAcompTempPrec"
+simName: "mort_plot_sizeBAcompTempPrec_alldb"
 # simulations to compare with
 simCompare: [
         "mort_plot_size",
@@ -52,3 +52,6 @@ cluster: "mp2b"
 # V17.0 - Building on v14.1, add the fixed effect of individual size along with BA competition. Only plot random effects.
 
 # V17.1 - Add temperature and precipitation effect to V17.0
+
+# Final version, based in the v17.1 will run the model for all observed data (merge train vs validation datasets)
+# This version will also add more species to the simulation
