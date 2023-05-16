@@ -55,5 +55,5 @@ cluster: "mpb2"
 
 # V18.1 - Add bio_01_mean and bio_12_mean fixed effects on version v18.0
 
-# Final version V2, based in the v18.1 will run the model for all observed data (merge train vs validation datasets)
+# Final version V2 (with plot AND year random effects), based in the v18.1 will run the model for all observed data (merge train vs validation datasets)
 # This version will also add more species to the simulation
