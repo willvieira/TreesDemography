@@ -144,7 +144,15 @@ set.seed(0.0)
 
 ## compute de deltaTime between measures of dbh
 growth_dt[,
-  deltaTime := year_measured - lag(year_measured, 1),
+  `:=`(
+    year0 = lag(year_measured, 1),
+    year1 = year_measured
+  ),
+  by = tree_id
+]
+
+growth_dt[,
+  deltaTime := year1 - year0,
   by = tree_id
 ]
 
@@ -157,6 +165,7 @@ growth_dt[,
 ## Fill the NA first measures with their non lag information
 growth_dt[is.na(deltaTime), deltaTime := 0]
 growth_dt[deltaTime == 0, dbh0 := dbh]
+growth_dt[deltaTime == 0, year0 := year1]
 
 
 ## define plot_id in sequence to be used in stan
@@ -166,13 +175,6 @@ toSub_plot <- data.table(
   plot_id_seq = 1:length(plot_id_uq)
 )
 
-## Do the same for tree_id
-tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
-toSub_tree <- data.table(
-  tree_id = tree_id_uq,
-  tree_id_seq = 1:length(tree_id_uq)
-)
-
 # merge
 growth_dt[
   toSub_plot,
@@ -180,10 +182,35 @@ growth_dt[
   on = 'plot_id'
 ]
 
+# get all possible time intervals
+time_interval <- unique(growth_dt[sampled == 'training', .(year0, year1)])
+time_interval[, time_int := 1:.N]
+
+# merge
 growth_dt[
-  toSub_tree,
-  tree_id_seq := i.tree_id_seq,
-  on = 'tree_id'
+  time_interval,
+  time_int := i.time_int,
+  on = c('year0' = 'year0', 'year1', 'year1')
+]
+
+## get all possible years between year0 and year1
+all_years <- growth_dt[sampled == 'training', seq(min(year0), max(year1), 1)]
+toSub_year <- data.table(
+  all_years = all_years,
+  all_years_seq = 1:length(all_years)
+)
+
+# merge
+time_interval[
+  toSub_year,
+  year0_seq := i.all_years_seq,
+  on = c('year0' = 'all_years')
+]
+
+time_interval[
+  toSub_year,
+  year1_seq := i.all_years_seq,
+  on = c('year1' = 'all_years')
 ]
 
 
@@ -202,8 +229,11 @@ growth_dt[
           obs_size_t0 = growth_dt[sampled == 'training', dbh0],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
-          Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
-          tree_id = growth_dt[sampled == 'training', tree_id_seq],
+          Ny = length(all_years),
+          Ni = time_interval[, .N],
+          year0_seq = time_interval[, year0_seq],
+          year1_seq = time_interval[, year1_seq],
+          year_int = growth_dt[sampled == 'training', time_int],
           BA_comp_sp = growth_dt[sampled == 'training', BA_comp_sp],
           BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra],
           bio_01_mean = growth_dt[sampled == 'training', bio_01_mean_scl],
@@ -226,10 +256,18 @@ growth_dt[
 
   # save train and validate data
   saveRDS(
-    growth_dt[, .(tree_id, tree_id_seq, plot_id, plot_id_seq, year_measured, sampled)],
+    growth_dt[, .(tree_id, plot_id, plot_id_seq, year_measured, sampled)],
       file = file.path(
       'output',
       paste0('trainData_', sp, '.RDS')
+    )
+  )
+
+  saveRDS(
+    time_interval,
+      file = file.path(
+      'output',
+      paste0('timeInterval_', sp, '.RDS')
     )
   )
 

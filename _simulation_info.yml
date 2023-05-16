@@ -20,7 +20,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: Inf
 # The simulation and folder name
-simName: "bertalanffy_plotInd_BAspcTempPrecscl_fulldb"
+simName: "bertalanffy_plotYear_BAspcTempPrecscl_fulldb"
 # simulations to compare with
 simCompare: [
         "bertalanffy_plotInd_BAspcTempPrec"
@@ -49,5 +49,5 @@ cluster: "mp2b"
 
 # Version 23.1 uses scaled enviorment variables between 0 and 1.
 
-# Final version, based in the v23.1 will run the model for all observed points (merge train vs validation datasets)
+# Final version V2 (add year random effects instead of ind), based in the v23.1 will run the model for all observed points (merge train vs validation datasets)
 # This version will also add more species to the simulation

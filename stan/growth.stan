@@ -5,8 +5,11 @@ data {
   vector[N] obs_size_t0;
   int<lower=1> Np; // number of unique plot_id
   array[N] int<lower=1,upper=Np> plot_id;
-  int<lower=1> Nt; // number of unique plot_id
-  array[N] int<lower=1,upper=Nt> tree_id;
+	int<lower=1> Ny; // number of unique years
+	int<lower=1> Ni; // number of unique time intervals
+	array[Ni] int<lower=1,upper=Ny> year0_seq; // year_id of time 0
+	array[Ni] int<lower=1,upper=Ny> year1_seq; // year_id of time 1
+	array[N] int<lower=1,upper=Ni> year_int; // year interval ID
   vector[N] BA_comp_sp;
   vector[N] BA_comp_intra;
   vector[N] bio_01_mean;
@@ -24,10 +27,10 @@ transformed data {
 }
 parameters {
   real r;
-  vector[Np] rPlot_log;
-  vector[Nt] rTree_log;
-  real<lower=0> sigma_PlotTree;
-  real<lower=0,upper=1> p_plotTree;
+  vector[Np] rPlot;
+  vector[Ni] rYear;
+  real<lower=0> sigma_plot;
+  real<lower=0> sigma_year;
   real<lower=0> sigma_obs;
   real<lower=maxSize> Lmax;
   real Beta;
@@ -37,13 +40,19 @@ parameters {
   real<lower=minPrec,upper=maxPrec> optimal_prec;
   real<lower=0> tau_prec;
 }
+transformed parameters {
+	// average year random effect across all years within time interval t0 and t1
+	vector[Ni] rYear_interval;
+	for(i in 1:Ni)
+		rYear_interval[i] = mean(rYear[year0_seq[i]:year1_seq[i]]);
+}
 model {
   // priors
   r ~ normal(-3.5, 1);
-  rPlot_log ~ normal(0, sigma_PlotTree * p_plotTree);
-  rTree_log ~ normal(0, sigma_PlotTree * (1 - p_plotTree));
-  sigma_PlotTree ~ exponential(2);
-  p_plotTree ~ beta(2, 2);
+  rPlot ~ normal(0, sigma_plot);
+  sigma_plot ~ exponential(2);
+  rYear ~ normal(0, sigma_year);
+  sigma_year ~ exponential(2);
   sigma_obs ~ normal(0, 1.5);
   Lmax ~ normal(1000, 80);
   Beta ~ normal(-1, 1);
@@ -54,17 +63,17 @@ model {
   tau_prec ~ normal(0, 1);
 
   // What matters here:
-  vector[N] rPlot = exp( // growth parameter
+  vector[N] r_fixedpRandom = exp( // growth parameter
     r + // intercept
-    rPlot_log[plot_id] + // plot random effect
-    rTree_log[tree_id] + // tree random effect
+    rPlot[plot_id] + // plot random effect
+    rYear_interval[year_int] + // year random effect
     Beta * (BA_comp_sp + theta * BA_comp_intra) + // Intra and inter competition
     -tau_temp .* square(bio_01_mean - optimal_temp) +//temp effect
     -tau_prec .* square(bio_12_mean - optimal_prec) //prec effect
   );
 
   // pre calculate component of the model
-  vector[N] rPlotTime = exp(-rPlot .* time);
+  vector[N] rPlotTime = exp(-r_fixedpRandom .* time);
 
   // mean
   vector[N] mu_obs = obs_size_t0 .*
