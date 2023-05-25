@@ -21,7 +21,7 @@ cat('####### Sending simulations to the server #######\n')
   serverInfo <- yaml::read_yaml('_serverInfo.yml')
   simInfo <- yaml::read_yaml('_simulation_info.yml')
   
-  simName <- simInfo$simName
+  simName <- paste0('scratch/', simInfo$simName)
   vitalRates <- simInfo$vitalRates
   dataSources <- simInfo$dataSources
 
@@ -106,7 +106,9 @@ cat('####### Sending simulations to the server #######\n')
 
 ## Create bash submission script
 
-bash_file <- paste0('#!/bin/bash
+  for(VT in vitalRates) {
+  
+    bash_file <- paste0('#!/bin/bash
 #SBATCH --account=def-dgravel
 #SBATCH -t 1-23:40:00
 #SBATCH --mem-per-cpu=5000M
@@ -118,31 +120,17 @@ bash_file <- paste0('#!/bin/bash
 
 module load StdEnv/2020 r/4.1.0
 
-NCORES=\\$SLURM_CPUS_PER_TASK R -f R/recruitMCMC.R
+NCORES=\\$SLURM_CPUS_PER_TASK R -f R/', VT, 'MCMC.R
 ')
 
-  # write in the server
-  system(
-    paste0(
-      'echo "',
-      bash_file,
-      '" | ssh ',
-      serverInfo$myUser,
-      '@',
-      serverInfo$myAddress,
-      '-T "cat > ',
-      simName,
-      '/sub.sh'
+    system(
+      paste0(
+        'sshpass -f ', myPass,
+        ' ssh -t ',
+        myUser, '@', myAddress,
+        ' "echo \'', bash_file, '\' > ', simName, '/sub_', VT, '.sh"'
+      )
     )
-  )
-
-  system(
-    paste0(
-      'sshpass -f ', myPass,
-      ' ssh -t ',
-      myUser, '@', myAddress,
-      ' "echo \'', bash_file, '\' > ', simName, '/sub.sh"'
-    )
-  )
+}
 
 ##
