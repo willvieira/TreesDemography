@@ -139,6 +139,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
 ## run the model
 
   stanModel <- cmdstan_model('stan/recruit.stan')
+  dir.create(file.path('output', sp))
 
   # Run
   md_out <- stanModel$sample(
@@ -154,62 +155,8 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
-      iter_sampling = sim_info$maxIter/2
-  )
-
-  # extract posterior distribution
-  post_dist <- md_out$draws(format = 'df') |>
-    select(!c('lp__', '.chain', '.iteration', '.draw')) |>
-    pivot_longer(
-      cols = everything(),
-      names_to = 'par',
-      values_to = 'value'
-    ) |>
-    group_by(par) |>
-    mutate(iter = row_number()) |>
-    ungroup()
-
-  # extract sample diagnostics
-  diag_out <- list(
-    diag_summary = md_out$diagnostic_summary(),
-    rhat = md_out$summary() |> select(variable, rhat),
-    time = md_out$time()
-  )
-
-##
-
-
-
-
-## save output
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(par %in% c('mPop_log', 'p_log', 'sigma_plot', 'optimal_BA', 'sigma_BA', 'beta_p')),
-    file = file.path(
-      'output',
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # posterior of plot_id parameters
-  saveRDS(
-    post_dist |>
-      filter(grepl(pattern = 'mPlot_log', par)),
-    file = file.path(
-      'output',
-      paste0('posteriormPlot_', sp, '.RDS')
-    )
-  )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
+      iter_sampling = sim_info$maxIter/2,
+      output_dir = file.path('output', sp)
   )
 
   # save train and validate data
@@ -220,100 +167,3 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       paste0('toSub_', sp, '.RDS')
     )
   )
-
-##
-
-
-
-## Approximate LOO-CV using subsampling
-
-  # Function to compute log-likelihood
-  recruit_model <- function(dt, post, log)
-  {
-    # dt is vector of [1] nbRecruit, [2] plot_size, [3] deltaTime,
-    # [4] plot_id_seq, [5] BA_adult_sp, and [6] BA_adult
-    # post is a matrix of nrow draws and ncol paramaters
-  
-    # Add plot_id random effect 
-    mPlot_log <- post[, paste0('mPlot_log[', dt[4], ']')]
-    mPlot <- exp(
-      post[, 'mPop_log'] + mPlot_log + 
-      (-1/post[, 'sigma_BA']^2) * (dt[5] - post[, 'optimal_BA'])^2
-    )
-    
-    p <- exp(
-      -exp(
-        post[, 'p_log']
-      ) +
-      dt[6] * -post[, 'beta_p']
-    )
-
-    # mean
-    Mean <- mPlot * dt[2] * (1 - p^dt[3]) / (1 - p)
-
-    if(any(Mean < 0))
-      cat(sum(Mean < 0), ' negative values!!\n')
-      
-    # likelihood
-    dpois(
-      x = dt[1],
-      lambda = Mean,
-      log = log
-    )
-  }
-
-  llfun_recruit <- function(data_i, draws, log = TRUE)
-    apply(
-      data_i,
-      1,
-      function(x, y)
-        recruit_model(
-          x,
-          y,
-          log = log
-        ),
-        y = draws
-    )
-
-  # Matrix of posterior draws
-  post_dist_lg <- post_dist |>
-    pivot_wider(
-      names_from = par,
-      values_from = value
-    ) |>
-    select(-iter) |>
-    as.matrix()
-
-  # compute relative efficiency
-  # this is slow and optional but is recommended to allow for adjusting PSIS
-  # effective sample size based on MCMC effective sample size)
-  r_eff <- relative_eff(
-    llfun_recruit, 
-    log = FALSE, # relative_eff wants likelihood not log-likelihood values
-    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
-    data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)], 
-    draws = post_dist_lg,
-    cores = sim_info$nC
-  )
-
-  # Loo using x samples
-  loo_obj <-
-    loo_subsample(
-      llfun_recruit,
-      observations = recruit_dt[, floor(.N/10)], # take a subsample of size x
-      cores = sim_info$nC,
-      r_eff = r_eff, 
-      draws = post_dist_lg,
-      data = recruit_dt[, .(nbRecruit, plot_size, deltaYear_plot, plot_id_seq, BA_adult_sp, BA_adult)]
-  )
-
-  # save Loo
-  saveRDS(
-    loo_obj,
-      file = file.path(
-      'output',
-      paste0('loo_', sp, '.RDS')
-    )
-  )
-
-##

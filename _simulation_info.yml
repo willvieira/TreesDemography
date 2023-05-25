@@ -26,7 +26,8 @@ simCompare: [
         "rec_m_randomPlot_BA",
         "rec_m_p_BA"
 ]
-
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "mp2b"
 
 ##################################
 ########## DESCRIPTION  ##########
