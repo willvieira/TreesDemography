@@ -118,7 +118,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
 
 
 
-## define plot_id in sequence to be used in stan
+## define plot_id and year_id in sequence to be used in stan
 
   plot_id_uq <- recruit_dt[, unique(plot_id)]
   toSub <- data.table(
@@ -132,6 +132,37 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
     on = 'plot_id'
   ]
 
+  # get all possible time intervals
+  time_interval <- unique(recruit_dt[, .(year0, year1)])
+  time_interval[, time_int := 1:.N]
+
+  # merge
+  recruit_dt[
+    time_interval,
+    time_int := i.time_int,
+    on = c('year0' = 'year0', 'year1', 'year1')
+  ]
+
+  ## get all possible years between year0 and year1
+  all_years <- recruit_dt[, seq(min(year0), max(year1), 1)]
+  toSub_year <- data.table(
+    all_years = all_years,
+    all_years_seq = 1:length(all_years)
+  )
+
+  # merge
+  time_interval[
+    toSub_year,
+    year0_seq := i.all_years_seq,
+    on = c('year0' = 'all_years')
+  ]
+
+  time_interval[
+    toSub_year,
+    year1_seq := i.all_years_seq,
+    on = c('year1' = 'all_years')
+  ]
+
 ##
 
 
@@ -139,6 +170,7 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
 ## run the model
 
   stanModel <- cmdstan_model('stan/recruit.stan')
+
   dir.create(file.path('output', sp))
 
   # Run
@@ -151,7 +183,12 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           BA_adult_sp = recruit_dt[, BA_adult_sp],
           BA_adult = recruit_dt[, BA_adult],
           Np = recruit_dt[, length(unique(plot_id_seq))],
-          plot_id = recruit_dt[, plot_id_seq]
+          plot_id = recruit_dt[, plot_id_seq],
+          Ny = length(all_years),
+          Ni = time_interval[, .N],
+          year0_seq = time_interval[, year0_seq],
+          year1_seq = time_interval[, year1_seq],
+          year_int = recruit_dt[, time_int]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
@@ -165,5 +202,14 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
       file = file.path(
       'output',
       paste0('toSub_', sp, '.RDS')
+    )
+  )
+
+  # save year intervals
+  saveRDS(
+    time_interval,
+      file = file.path(
+      'output',
+      paste0('timeInterval_', sp, '.RDS')
     )
   )

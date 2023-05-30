@@ -1,13 +1,14 @@
 # Species id
-spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
-        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
-        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
-        '19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
-        '183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
-        '22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
-        '32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
-        '32929FRAPEN', '24799PRUPEN', '19049ULMAME', '26879PROGLA',
-        '19511OSTVIR', 'NACARALB', '27821NYSSYL'
+spIds: [
+	'28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+	'505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+	'19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+	'19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+	'183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
+	'22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
+	'32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
+	'32929FRAPEN', '24799PRUPEN', '19049ULMAME', '26879PROGLA',
+	'19511OSTVIR', 'NACARALB', '27821NYSSYL'
 ]
 # Which vital rates to run
 vitalRates: ["recruit"]
@@ -20,11 +21,11 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: Inf
 # The simulation and folder name
-simName: "rec_m_p_BA_v2"
+simName: "rec_m_p_BA_plotYear"
 # simulations to compare with
 simCompare: [
-        "rec_m_randomPlot_BA",
-        "rec_m_p_BA"
+	"rec_m_randomPlot_BA",
+	"rec_m_p_BA"
 ]
 # Name of cluster to run simulations 'cedar' or 'mp2b'
 cluster: "mp2b"
@@ -33,7 +34,7 @@ cluster: "mp2b"
 ########## DESCRIPTION  ##########
 ##################################
 
-## Recruitmenet test - v10.0
+## Recruitmenet test - v13.0
 
 ## Instead of using the following model:
 # recruit ~ poisson(lambda)
@@ -42,3 +43,5 @@ cluster: "mp2b"
 ## Version 5.0 will make `annualIngrowthRatePerArea` in function of BA_adult_sp to account for seed source, and p in function of BA_adults to account for competition in survival probability.
 
 # Version 10.0 makes m vary in function of BA of conspecific species as seed source. BA_sp affects m using a unimodal function with optimal BA_sp for the ingrowth rate. Small BA_sp slow seed source, larger BA_sp strong competitive effect. p vary as a function of total basal area to account for competition effect.
+
+# Version 13.0 based in version 10.0 makes `m` with random effects at the plot and year level
