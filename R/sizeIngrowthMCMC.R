@@ -79,6 +79,8 @@ sizeIngrowth_dt <- sizeIngrowth_dt[dbh < 500]
       )
     )
 
+  dir.create(file.path('output', sp))
+
   # Run
   md_out <- stanModel$sample(
       data = list(
@@ -90,74 +92,8 @@ sizeIngrowth_dt <- sizeIngrowth_dt[dbh < 500]
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
       iter_sampling = sim_info$maxIter/2,
-      init = list(f_init(), f_init(), f_init(), f_init())
-  )
-
-  # extract posterior distribution
-  post_dist <- md_out$draws(format = 'df') |>
-    select(!c('lp__', '.chain', '.iteration', '.draw', contains('log_lik'))) |>
-    pivot_longer(
-      cols = everything(),
-      names_to = 'par',
-      values_to = 'value'
-    ) |>
-    group_by(par) |>
-    mutate(iter = row_number()) |>
-    ungroup()
-
-  # extract sample diagnostics
-  diag_out <- list(
-    rhat = md_out$summary() |> select(variable, rhat),
-    time = md_out$time()
-  )
-
-  # loo 
-  loo_obj <- md_out$loo(cores = 12)
-
-##
-
-
-
-## save output
-
-  dir.create(file.path('output', sim_info$simName))
-
-  # posterior of population level parameters
-  saveRDS(
-    post_dist |>
-      filter(!grepl(pattern = '\\[', par)),
-    file = file.path(
-      'output', sim_info$simName,
-      paste0('posteriorPop_', sp, '.RDS')
-    )
-  )
-
-  # # generated predictions
-  # saveRDS(
-  #   post_dist |>
-  #     filter(grepl(pattern = 'y_rep', par)),
-  #   file = file.path(
-  #     'output', sim_info$simName,
-  #     paste0('y_rep', sp, '.RDS')
-  #   )
-  # )
-
-  # save sampling diagnostics
-  saveRDS(
-    diag_out,
-    file = file.path(
-      'output',
-      paste0('diagnostics_', sp, '.RDS')
-    )
-  )
-
-  # save Loo
-  saveRDS(
-    loo_obj,
-      file = file.path(
-      'output', sim_info$simName,
-      paste0('loo_', sp, '.RDS')
-    )
+      init = list(f_init(), f_init(), f_init(), f_init()),,
+      output_dir = file.path('output', sp)
   )
 
 ##
