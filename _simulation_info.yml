@@ -20,7 +20,7 @@ nC: 4
 # number of observations to use in the model fit
 sampleSize: Inf
 # The simulation and folder name
-simName: "sizeIng_time_truc"
+simName: "sizeIng_time_truc_fulldb"
 # simulations to compare with
 simCompare: [
         "sizeIng_time",
