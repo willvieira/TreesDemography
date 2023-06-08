@@ -166,24 +166,11 @@ toSub_plot <- data.table(
   plot_id_seq = 1:length(plot_id_uq)
 )
 
-## Do the same for tree_id
-tree_id_uq <- growth_dt[sampled == 'training', unique(tree_id)]
-toSub_tree <- data.table(
-  tree_id = tree_id_uq,
-  tree_id_seq = 1:length(tree_id_uq)
-)
-
 # merge
 growth_dt[
   toSub_plot,
   plot_id_seq := i.plot_id_seq,
   on = 'plot_id'
-]
-
-growth_dt[
-  toSub_tree,
-  tree_id_seq := i.tree_id_seq,
-  on = 'tree_id'
 ]
 
 
@@ -202,8 +189,6 @@ growth_dt[
           obs_size_t0 = growth_dt[sampled == 'training', dbh0],
           Np = growth_dt[sampled == 'training', length(unique(plot_id))],
           plot_id = growth_dt[sampled == 'training', plot_id_seq],
-          Nt = growth_dt[sampled == 'training', length(unique(tree_id))],
-          tree_id = growth_dt[sampled == 'training', tree_id_seq],
           BA_comp_sp = growth_dt[sampled == 'training', BA_comp_sp],
           BA_comp_intra = growth_dt[sampled == 'training', BA_comp_intra],
           bio_01_mean = growth_dt[sampled == 'training', bio_01_mean_scl],
@@ -224,7 +209,7 @@ growth_dt[
 
 ## save output
 
-  # save train and validate data
+  # save train
   saveRDS(
     growth_dt[, .(tree_id, tree_id_seq, plot_id, plot_id_seq, year_measured, sampled)],
       file = file.path(
