@@ -151,7 +151,13 @@ recruit_dt <- recruit_dt[!is.na(BA_adult)]
           BA_adult_sp = recruit_dt[, BA_adult_sp],
           BA_adult = recruit_dt[, BA_adult],
           Np = recruit_dt[, length(unique(plot_id_seq))],
-          plot_id = recruit_dt[, plot_id_seq]
+          plot_id = recruit_dt[, plot_id_seq],
+          bio_01_mean = recruit_dt[, bio_01_mean_scl],
+          bio_12_mean = recruit_dt[, bio_12_mean_scl],
+          maxTemp = dataSource[species_id == sp, max(bio_01_mean_scl, na.rm=T)],
+          minTemp = dataSource[species_id == sp, min(bio_01_mean_scl, na.rm=T)],
+          maxPrec = dataSource[species_id == sp, max(bio_12_mean_scl, na.rm=T)],
+          minPrec = dataSource[species_id == sp, min(bio_12_mean_scl, na.rm=T)]
       ),
       parallel_chains = sim_info$nC,
       iter_warmup = sim_info$maxIter/2,
