@@ -451,19 +451,19 @@ BA_comp_spIntra <- function(size, species_id, plotSize, BA_ind) {
           BA_ind[species_id %in% species_id[x]][size[species_id %in% species_id[x]] > size[x]]
         ) * 1e4/plotSize
     )
-    BA_comp_intra <- sapply(
+    BA_comp_inter <- sapply(
       1:length(size),
       function(x)
         sum(
           BA_ind[!species_id %in% species_id[x]][size[!species_id %in% species_id[x]] > size[x]]
         ) * 1e4/plotSize
     )
-    return( list(BA_comp_sp, BA_comp_intra) )
+    return( list(BA_comp_sp, BA_comp_inter) )
 }
 
 treeData[
   status == 1,
-  c('BA_comp_sp', 'BA_comp_intra') := BA_comp_spIntra(dbh, species_id, unique(subPlot_size), indBA),
+  c('BA_comp_sp', 'BA_comp_inter') := BA_comp_spIntra(dbh, species_id, unique(subPlot_size), indBA),
   by = .(plot_id, subplot_id, year_measured)
 ]
 

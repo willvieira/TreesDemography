@@ -298,14 +298,14 @@ BA_comp_spIntra <- function(size, species_id, BA_ind) {
           BA_ind[species_id %in% species_id[x]][size[species_id %in% species_id[x]] > size[x]]
         ) * 1e4/399.7212
     )
-    BA_comp_intra <- sapply(
+    BA_comp_inter <- sapply(
       1:length(size),
       function(x)
         sum(
           BA_ind[!species_id %in% species_id[x]][size[!species_id %in% species_id[x]] > size[x]]
         ) * 1e4/399.7212
     )
-    return( list(BA_comp_sp, BA_comp_intra) )
+    return( list(BA_comp_sp, BA_comp_inter) )
 }
 
 final_dt[
