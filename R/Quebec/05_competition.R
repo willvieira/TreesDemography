@@ -290,7 +290,7 @@
 
 # Basal area of larger individuals than the focal individual
 # For intra vs interspecies (competitive index)
-BA_comp_spIntra <- function(size, species_id, BA_ind) {
+BA_comp_spInter <- function(size, species_id, BA_ind) {
     BA_comp_sp <- sapply(
       1:length(size),
       function(x)
@@ -310,7 +310,7 @@ BA_comp_spIntra <- function(size, species_id, BA_ind) {
 
 final_dt[
   state == 'alive',
-  c('BA_comp_sp', 'BA_comp_intra') := BA_comp_spIntra(DHP, sp_code2, indBA),
+  c('BA_comp_sp', 'BA_comp_inter') := BA_comp_spInter(DHP, sp_code2, indBA),
   by = .(ID_PE, year_measured)
 ]
 

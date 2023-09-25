@@ -443,7 +443,7 @@ treeData[
 
 # Basal area of larger individuals than the focal individual
 # For intra vs interspecies (competitive index)
-BA_comp_spIntra <- function(size, species_id, plotSize, BA_ind) {
+BA_comp_spInter <- function(size, species_id, plotSize, BA_ind) {
     BA_comp_sp <- sapply(
       1:length(size),
       function(x)
@@ -463,7 +463,7 @@ BA_comp_spIntra <- function(size, species_id, plotSize, BA_ind) {
 
 treeData[
   status == 1,
-  c('BA_comp_sp', 'BA_comp_inter') := BA_comp_spIntra(dbh, species_id, unique(subPlot_size), indBA),
+  c('BA_comp_sp', 'BA_comp_inter') := BA_comp_spInter(dbh, species_id, unique(subPlot_size), indBA),
   by = .(plot_id, subplot_id, year_measured)
 ]
 
