@@ -51,6 +51,7 @@ rawData/*
 MCMC/*
 output/*
 output_sim/*
+output_sim_processed/*
 tests/*
 plots/*
 Exploration/*
