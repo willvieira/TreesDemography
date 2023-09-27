@@ -1,0 +1,713 @@
+---
+ title: "MCMC diagnostics - recruitment"
+ subtitle: "Model: intercept + plot random effects + competition"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+```{r, echo = F, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(ggrepel))
+```
+```{r load simulations, echo = F,warning=FALSE,message=FALSE}
+# Load simulation variables
+model_dir <- 'model_recruitment/intcpt_plot_comp'
+simInfo <- yaml::read_yaml(file.path(model_dir, '_simulation_info.yml'))
+output_dir <- file.path('output_sim_processed', simInfo$vitalRates, simInfo$simName)
+
+sp_info <- read_csv(file.path('..', 'forest-IPM', 'data', 'species_id.csv'))
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+
+# List output files and set vector names to species_id
+posteriorPop_files <- grep(
+  'posterior_pop',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+
+posteriormPlot_files <- grep(
+  'posterior_plot',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(posteriormPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriormPlot_files))))
+
+
+diag_files <- grep(
+  'diagnostics',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
+```
+
+
+```{r load dataset,echo =FALSE,warning=FALSE,message=FALSE}
+dataSource <- readRDS(
+  gsub('../../', '', simInfo$dataSources)
+)
+```
+
+# Rhat
+
+```{r, echo = F,fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['rhat']] |>
+        bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot(aes(x = rhat, y = fct_reorder(species_name, rhat))) +
+    geom_boxplot() +
+    theme_classic() +
+    geom_vline(xintercept = 1.01, linetype = 2) +
+    ylab('') +
+    theme(
+      axis.text.y = element_text(face = "italic")
+    )
+```
+
+# Divergent transitions
+
+```{r divergentTransitions, echo = FALSE,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+        bind_cols(species_id = .y) |>
+        mutate(chain = row_number())
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(!species_id) |>
+  pivot_wider(
+    names_from = chain,
+    values_from = num_divergent,
+    names_prefix = 'chain '
+  ) |>
+  DT::datatable()
+```
+
+# Posterior distribution of parameters
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    posteriorPop_files,
+    ~ readRDS(.x) |>
+      bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) ->
+post
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot() +
+      aes(x = value, y = fct_reorder(species_name, value)) +
+      stat_eye() +
+      ggtitle(Par) +
+      xlab('') +
+      theme_classic() +
+      ylab('') +
+      theme(axis.text.y = element_text(face = "italic"))
+  )
+}
+```
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8,warning=FALSE,message=FALSE}
+parComb <- post |>
+  filter(par != 'lp__') |>
+  reframe(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_name) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot() +
+      aes_string(x = parComb[1, i], y = parComb[2, i]) + 
+      geom_point(alpha = .5, size = 0.5) +
+      facet_wrap(~ species_name) +
+      xlab(parComb[1, i]) +
+      ylab(parComb[2, i]) +
+      theme_minimal() +
+      theme(strip.text = element_text(face = 'italic', size = 7))
+  )
+}
+```
+
+# Predictions
+
+## Ingrowth in function of time
+
+```{r,echo=FALSE,fig.height=5,fig.width=8,warning=FALSE,message=FALSE}
+post |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(deltaYear = seq(0, 100, 5)) |>
+  mutate(
+    lambda = exp(mPop_log) * 399 *
+             (1 - exp(-exp(p_log))^deltaYear)/(1 - exp(-exp(p_log)))
+  ) ->
+pred_data
+
+pred_data |>
+  filter(lambda < quantile(lambda, .999)) |>
+  ggplot() +
+  aes(x = deltaYear, y = lambda, color = species_name) +
+  stat_lineribbon(.width = 0.95, alpha = .8) +
+  scale_fill_brewer() +
+  theme_classic() +
+  labs(
+    x = 'Delta time (years)',
+    y = 'Number of ingrowth recruits',
+    color = ''
+  ) +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        maxYear = max(deltaYear),
+        lambda = mean(lambda[deltaYear == maxYear])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = maxYear, y = lambda, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 20, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3
+  ) +
+  theme(
+    legend.position = 'none'
+  )
+```
+
+
+## Conspecific basal area effect on ingrowth rate `m`
+
+```{r,echo=FALSE,fig.height=5,fig.width=8,warning=FALSE,message=FALSE}
+post |>
+  filter(par %in% c('mPop_log', 'sigma_BA', 'optimal_BA')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(BA_adult_sp = seq(0, 70, 2.5)) |>
+  mutate(
+    BAeffect = (-1/sigma_BA^2) * (BA_adult_sp - optimal_BA)^2,
+    m = exp(mPop_log + BAeffect)
+  ) ->
+pred_data
+ 
+pred_data |>
+  filter(m < quantile(m, 0.999)) |>
+  ggplot() +
+  aes(x = BA_adult_sp, y = m, color = species_name) +
+  stat_lineribbon(.width = 0.95, alpha = .8) +
+  scale_fill_brewer() +
+  labs(
+    x = 'Conspecific basal area',
+    y = ''
+  ) +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        max_x = max(BA_adult_sp),
+        max_y = mean(m[BA_adult_sp == max_x])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = max_x, y = max_y, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 10, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3,
+    segment.alpha = 0.5
+  ) +
+  theme_classic() +
+  theme(legend.position = 'none')
+```
+
+## Plot total basal area effect on survival `p`
+
+```{r,echo=FALSE,fig.height=5,fig.width=8,warning=FALSE,message=FALSE}
+post |>
+  filter(par %in% c('p_log', 'beta_p')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(BA_adult = seq(0, 70, 3)) |>
+  mutate(
+    BAeffect = BA_adult * -beta_p,
+    p = exp(-exp(p_log) + BAeffect)
+  ) ->
+pred_data
+
+pred_data |>
+  filter(p < quantile(p, 0.999)) |>
+  ggplot() +
+  aes(x = BA_adult, y = p, color = species_name) +
+  stat_lineribbon(.width = 0.95, alpha = .8) +
+  scale_fill_brewer() +
+  labs(
+    x = 'Basal area competition',
+    y = ''
+  ) +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        max_x = max(BA_adult),
+        max_y = mean(p[BA_adult == max_x])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = max_x, y = max_y, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 10, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3,
+    segment.alpha = 0.5
+  ) +
+  theme_classic() +
+  theme(legend.position = 'none')
+```
+
+
+
+# Observed vs predicted
+
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=7,fig.width=10}
+# As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
+# So I will loop over each species to (i) load dataset, (ii) predict, (iii) compute prediction metrics and (iv) generate the plots
+
+# list to save MSE and R2 for each species to be used later
+MSE_list <- R2_list <- list()
+
+for(Sp in spIds)
+{
+  val_sp <- dataSource[species_id == Sp]
+
+  # remove NAs
+  val_sp <- val_sp[
+    !is.na(BA_adult),
+    .(
+      plot_id, species_id, nbRecruit, deltaYear_plot,
+      plot_size, BA_adult, BA_adult_sp
+    )
+  ]
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 200 iterations of the 8000
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 200)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 200)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        as.data.table(),
+    `:=`(
+      species_name = i.species_name,
+      mPop_log = i.mPop_log,
+      p_log = i.p_log,
+      sigma_plot = i.sigma_plot,
+      optimal_BA = i.optimal_BA,
+      sigma_BA = i.sigma_BA,
+      beta_p = i.beta_p
+    ),
+    on = 'iter'
+  ]
+
+  # merge plot specific parameters
+  val_sp[
+    readRDS(posteriormPlot_files[Sp]) |>
+      setDT(),
+    mPlot_log := i.value,
+    on = c('iter', 'plot_id')
+  ]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
+
+  # compute m plot specific parameter with BA_adult_sp effect
+  val_sp[,
+    m := exp(
+      mPop_log + mPlot_log +
+      (-1/sigma_BA^2) * (BA_adult_sp - optimal_BA)^2
+    )
+  ]
+
+  # compute p parameter in function of BA_adult
+  val_sp[,
+    p := exp(
+      -exp(
+        p_log
+      ) +
+      BA_adult * -beta_p
+    )
+  ]
+
+  # predict number of recruit
+  val_sp[,
+    lambda := m *
+              plot_size *
+              (1 - p^deltaYear_plot)/(1 - p)
+  ]
+
+  # simulate nbRecruit from model distribution (Poisson dist)
+  val_sp[, lambda_random := rpois(.N, lambda)]
+
+  # calculate MSE
+  val_sp[, SE := (nbRecruit - lambda_random)^2]
+  
+  # mean SE over all observations for each iteration and save to list
+  MSE_list[[Sp]] <- val_sp[, 
+    .(
+      MSE = mean(SE, na.rm = TRUE),
+      species_id = Sp
+    ),
+    by = iter2
+  ]
+
+  # Calculate R2 (Gelman et al 2018)
+  R2gel <- val_sp |>
+    group_by(iter2) |>
+    reframe(
+      var_lambda = var(lambda, na.rm = TRUE),
+      mean_lambda = mean(lambda, na.rm = TRUE)      
+    ) |>
+    bind_cols(
+      iter = sampledIter,
+      species_id = Sp
+    ) |>
+    mutate(
+      R2gelman = var_lambda/(var_lambda + mean_lambda)
+    ) |>
+    select(iter, iter2, species_id, R2gelman) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- merge(
+    R2gel,
+    val_sp[, .(R2reg = get_r2(nbRecruit, lambda_random)), by = iter2],
+    by = 'iter2'
+  )
+
+
+  # parameter mean
+  post |>
+    filter(species_id == Sp) |>
+    group_by(par) |>
+    reframe(value = mean(value)) ->
+  post_sp_mean
+  
+  # plot
+  p1 <- val_sp[
+      nbRecruit < quantile(nbRecruit, 0.999),
+      .(BA_adult_sp = unique(BA_adult_sp), m_obs = mean(nbRecruit), m_pred  =mean(lambda_random)),
+      by = obsID
+    ] |>
+    mutate(
+      BAsp_cut = cut(BA_adult_sp, seq(0, max(BA_adult_sp), length.out = 10), include.lowest = TRUE)
+    ) |>
+    select(BAsp_cut, contains('m_')) |>
+    pivot_longer(
+      cols = !BAsp_cut,
+      names_to = 'sim'
+    ) |>
+    ggplot() +
+    aes(BAsp_cut, value, fill = sim) +
+    geom_boxplot() +
+    labs(
+      x = 'Conspecific basal area',
+      y = 'Number of recruitment',
+      subtitle = unique(val_sp$species_name)
+    ) +
+    theme_classic() +
+    theme(
+      legend.position = 'none',
+      plot.subtitle = element_text(face = "italic")
+    )
+
+  p2 <- val_sp[
+      nbRecruit < quantile(nbRecruit, 0.999),
+      .(BA_adult = unique(BA_adult), m_obs = mean(nbRecruit), m_pred  =mean(lambda_random)),
+      by = obsID
+    ] |>
+    mutate(
+      BA_cut = cut(BA_adult, seq(0, max(BA_adult), length.out = 10), include.lowest = TRUE)
+    ) |>
+    select(BA_cut, contains('m_')) |>
+    pivot_longer(
+      cols = !BA_cut,
+      names_to = 'sim'
+    ) |>
+    ggplot() +
+    aes(BA_cut, value, fill = sim) +
+    geom_boxplot() +
+    labs(
+      x = 'Total basal area',
+      y = 'Number of recruitment',
+      fill = '',
+      subtitle = ''
+    ) +
+    theme_classic()
+
+  # plot
+  p3 <- val_sp[
+      nbRecruit < quantile(nbRecruit, 0.999),
+      .(m_obs=mean(nbRecruit), m_pred=mean(lambda_random)),
+      by = obsID
+    ] |>
+    ggplot() +
+    aes(m_obs, m_pred) +
+    geom_point(alpha = .3, size = .5) +
+    geom_abline(slope = 1, intercept = 0) + 
+    geom_smooth(method = 'gam') +
+    tune::coord_obs_pred() +
+    theme_classic() +
+    theme(
+      legend.position = 'none',
+      plot.margin = margin(t = 30)
+    ) +
+    xlab('Observerd number of recruitment') +
+    ylab('Predicted number of recruitment')
+
+  pred_matrix <- val_sp[, .(lambda_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = lambda_random) |>
+      select(-iter2) |>
+      as.matrix()
+
+  xLim_max <- val_sp[, quantile(nbRecruit, probs = 0.999)]
+  p4 <- ppc_dens_overlay(
+      val_sp[iter2 == 1, nbRecruit],
+      pred_matrix[sample(1:nrow(pred_matrix), 200), ]
+  ) +
+  xlim(0, xLim_max) +
+  xlab('Number of recruitment') +
+  theme_classic()
+
+  print(
+    ggpubr::ggarrange(
+        p1, p2, p3, p4,
+        ncol = 2,
+        nrow = 2,
+        font.label = list(size = 13, face = 'italic')
+    ) +
+    theme(plot.margin = margin(t = 25))
+  )
+
+  rm(p1);rm(p2);rm(val_sp)
+}
+
+# save MSE and R2 to be used for model comparison
+invisible(
+    map_dfr(
+    c('MSE', 'R2'),
+    ~ get(paste0(.x, '_list')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          output_dir,
+          paste0(.x, '.RDS')
+      )
+    )
+  )
+)
+```
+
+
+# Mean squared error (MSE)
+
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+sim_toLoad <- c(simInfo$simCompare, simName)
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'MSE.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = MSE, y = fct_reorder(species_name, MSE), fill = sim) +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Mean Squared error (MSE)',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+
+# Rsquared
+
+The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
+
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = R2gelman, y = fct_reorder(species_name, R2gelman), fill = sim) +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Rsquared (Gelman 2018)',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+We also calculated the pseudo $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values.
+
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = R2reg, y = fct_reorder(species_name, R2reg), fill = sim) +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Rsquared (linear regression)',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+
+# Leave-one-out cross-validation to compare models
+
+```{r loo,echo = FALSE,warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = value, y = fct_reorder(species_name, value), color = sim) +
+  geom_point() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  labs(
+    x = '',
+    y = '',
+    color = 'Model'
+  ) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+
+```{r loo2,echo = FALSE,warning=FALSE,fig.height = 4, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(log(value), y = sim) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  theme_classic() +
+  ylab('Model')
+```
