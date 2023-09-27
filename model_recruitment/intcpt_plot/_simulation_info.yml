@@ -1,0 +1,42 @@
+# Species id
+spIds: [
+	'28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+	'505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+	'19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+	'19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+	'183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
+	'22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
+	'32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
+	'32929FRAPEN', '19511OSTVIR', 'NACARALB', '27821NYSSYL'
+]
+# Which vital rates to run
+vitalRates: ["recruit"]
+# Source of data (vector must much the same as `vitalRates`)
+dataSources: ["../../data/fec_dt.RDS"]
+# number of iteration MCMC (inclusing warmup)
+maxIter: 4000
+# Number of cores and chains
+nC: 4
+# The simulation and folder name
+simName: "intcpt_plot"
+# simulations to compare with
+simCompare: [
+	"intcpt"
+]
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "mp2b"
+
+##################################
+########## DESCRIPTION  ##########
+##################################
+
+## Recruitment model - Intercept and plot random effects
+
+# recruit ~ poisson(lambda)
+# lambda = (m + m_plot) * plot_size * (1 - p^deltaTime)/(1 - p)
+# m_plot ~ N(0, sigma_plot)
+
+# Parameters:
+# m: annual ingrowth rate per square meter
+# p: annual survival probability of each ingressed individual
+# sigma_plot: variance among plot offsets
