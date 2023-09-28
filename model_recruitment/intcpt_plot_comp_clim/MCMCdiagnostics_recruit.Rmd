@@ -402,7 +402,7 @@ pred_data |>
 
 # Observed vs predicted
 
-```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=7,fig.width=10}
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=12,fig.width=10}
 # As we are using each draw of the posterior distribution to predict the validation data, the dataset becames too big to store all species in memory.
 # So I will loop over each species to (i) load dataset, (ii) predict, (iii) compute prediction metrics and (iv) generate the plots
 
@@ -556,7 +556,7 @@ for(Sp in spIds)
       names_to = 'sim'
     ) |>
     ggplot() +
-    aes(BAsp_cut, log(value + 1), fill = sim) +
+    aes(BAsp_cut, value, fill = sim) +
     geom_boxplot() +
     labs(
       x = 'Conspecific basal area',
@@ -583,7 +583,7 @@ for(Sp in spIds)
       names_to = 'sim'
     ) |>
     ggplot() +
-    aes(BA_cut, log(value + 1), fill = sim) +
+    aes(BA_cut, value, fill = sim) +
     geom_boxplot() +
     labs(
       x = 'Total basal area',
@@ -607,7 +607,7 @@ for(Sp in spIds)
       names_to = 'sim'
     ) |>
     ggplot() +
-    aes(temp_cut, log(value + 1), fill = sim) +
+    aes(temp_cut, value, fill = sim) +
     geom_boxplot() +
     labs(
       x = 'Mean annual temperature',
@@ -632,7 +632,7 @@ for(Sp in spIds)
       names_to = 'sim'
     ) |>
     ggplot() +
-    aes(prec_cut, log(value + 1), fill = sim) +
+    aes(prec_cut, value, fill = sim) +
     geom_boxplot() +
     labs(
       x = 'Mean annual precipitation',
@@ -649,7 +649,7 @@ for(Sp in spIds)
       by = obsID
     ] |>
     ggplot() +
-    aes(log(m_obs + 1), log(m_pred + 1)) +
+    aes(m_obs, m_pred) +
     geom_point(alpha = .3, size = .5) +
     geom_abline(slope = 1, intercept = 0) + 
     geom_smooth(method = 'gam') +
