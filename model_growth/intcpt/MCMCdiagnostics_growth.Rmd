@@ -1,0 +1,606 @@
+---
+ title: "MCMC diagnostics - growth"
+ subtitle: "Model: intercept"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+```{r, echo = F, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(ggrepel))
+```
+```{r load simulations, echo = F,warning=FALSE,message=FALSE}
+# Load simulation variables
+model_dir <- 'model_growth/intcpt'
+simInfo <- yaml::read_yaml(file.path(model_dir, '_simulation_info.yml'))
+output_dir <- file.path('output_sim_processed', simInfo$vitalRates, simInfo$simName)
+
+sp_info <- read_csv(file.path('..', 'forest-IPM', 'data', 'species_id.csv'))
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+
+# List output files and set vector names to species_id
+posteriorPop_files <- grep(
+  'posterior_pop',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+
+# posteriormPlot_files <- grep(
+#   'posteriormPlot',
+#   dir(foutput_dir, full.names = TRUE),
+#   value = TRUE
+# )
+# names(posteriormPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriormPlot_files))))
+
+
+diag_files <- grep(
+  'diagnostics',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
+```
+
+
+```{r load dataset,echo =FALSE,warning=FALSE,message=FALSE}
+dataSource <- readRDS(
+  gsub('../../', '', simInfo$dataSources)
+)
+```
+
+# Rhat
+
+```{r, echo = F,fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['rhat']] |>
+        bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot(aes(x = rhat, y = fct_reorder(species_name, rhat))) +
+    geom_boxplot() +
+    theme_classic() +
+    geom_vline(xintercept = 1.01, linetype = 2) +
+    ylab('') +
+    theme(
+      axis.text.y = element_text(face = "italic")
+    )
+```
+
+# Divergent transitions
+
+```{r divergentTransitions, echo = FALSE,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+        bind_cols(species_id = .y) |>
+        mutate(chain = row_number())
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(!species_id) |>
+  pivot_wider(
+    names_from = chain,
+    values_from = num_divergent,
+    names_prefix = 'chain '
+  ) |>
+  DT::datatable()
+```
+
+# Posterior distribution of parameters
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    posteriorPop_files,
+    ~ readRDS(.x) |>
+      bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) ->
+post
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot() +
+      aes(x = value, y = fct_reorder(species_name, value)) +
+      stat_eye() +
+      ggtitle(Par) +
+      xlab('') +
+      theme_classic() +
+      ylab('') +
+      theme(axis.text.y = element_text(face = "italic"))
+  )
+}
+```
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8,warning=FALSE,message=FALSE}
+parComb <- post |>
+  filter(par != 'lp__') |>
+  reframe(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_name) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot() +
+      aes_string(x = parComb[1, i], y = parComb[2, i]) + 
+      geom_point(alpha = .5, size = 0.5) +
+      facet_wrap(~ species_name) +
+      xlab(parComb[1, i]) +
+      ylab(parComb[2, i]) +
+      theme_minimal() +
+      theme(strip.text = element_text(face = 'italic', size = 7))
+  )
+}
+```
+
+# Predictions
+
+## Size in function of time
+
+```{r,echo=FALSE,fig.height=6,fig.width=8,warning=FALSE,message=FALSE}
+post |>
+  filter(par %in% c('r', 'Lmax')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(time = seq(0, 1000, 50)) |>
+  mutate(
+    Lt = Lmax * (1 - exp(-exp(r) * time))
+  ) ->
+pred_data
+
+pred_data |>
+  ggplot() +
+  aes(time, Lt) +
+  aes(color = species_name) +
+  stat_lineribbon(.width = 0.95, alpha = .8) +
+  scale_fill_brewer() +
+  theme_classic() +
+  labs(
+    x = 'Time (years)',
+    y = 'DBH size (mmm)',
+    color = ''
+  ) +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        max_x = max(time),
+        max_y = mean(Lt[time == max_x])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = max_x, y = max_y, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 200, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3
+  ) +
+  theme(
+    legend.position = 'none'
+  )
+```
+
+
+# Observed vs predicted
+
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=7,fig.width=9}
+# list to save MSE and R2 for each species to be used later
+MSE_list <- R2_list <- list()
+
+for(Sp in spIds)
+{
+  val_sp <- dataSource[species_id == Sp]
+
+  ## compute de deltaTime between measures of dbh
+  val_sp[,
+    deltaTime := year_measured - lag(year_measured, 1),
+    by = tree_id
+  ]
+
+  ## define previous measure
+  val_sp[,
+    dbh0 := lag(dbh, 1),
+    by = tree_id
+  ]
+
+  ## Fill the NA first measures with their non lag information
+  val_sp[is.na(deltaTime), deltaTime := 0]
+  val_sp[deltaTime == 0, dbh0 := dbh]
+
+  # remove NAs
+  val_sp <- na.omit(
+    val_sp[,
+      .(
+        plot_id, species_id, deltaTime, dbh, dbh0, BA_comp_sp,
+        BA_comp_inter, bio_01_mean_scl, bio_12_mean_scl
+      )
+    ]
+  )
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 200 iterations of the 8000
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 200)]
+  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 200)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp[
+    post |>
+      filter(species_id == Sp) |>
+      select(-species_id) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      as.data.table(),
+    `:=`(
+      species_name = i.species_name,
+      r = i.r,
+      Lmax = i.Lmax,
+      sigma_obs = i.sigma_obs#,
+      # sigma_PlotTree = i.sigma_PlotTree,
+      # p_plotTree = i.p_plotTree,
+      # Beta = i.Beta,
+      # theta = i.theta,
+      # optimal_temp = i.optimal_temp,
+      # tau_temp = i.tau_temp,
+      # optimal_prec = i.optimal_prec,
+      # tau_prec = i.tau_prec
+    ),
+    on = 'iter'
+  ]
+  
+  # # merge plot specific parameters
+  # val_sp[
+  #   readRDS(posteriormPlot_files[Sp]) |>
+  #     setDT(),
+  #   rPlot_log := i.rPlot_log,
+  #   on = c('iter', 'plot_id_seq')
+  # ]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
+
+  # compute r plot specific parameter
+  val_sp[,
+    r_plot := exp(
+      r #+
+      # rPlot_log +
+      # Beta * (BA_comp_sp + theta * BA_comp_intra) +
+      # -tau_temp * (bio_01_mean_scl - optimal_temp)^2 +
+      # -tau_prec * (bio_12_mean_scl - optimal_prec)^2
+    )
+  ]
+
+  # predict size
+  val_sp[,
+    pred_size := dbh0 *
+                 exp(-r_plot * deltaTime) +
+                 Lmax * (1 -exp(-r_plot * deltaTime))
+  ]
+
+  # simulate size from model distribution (normal dist)
+  val_sp[, pred_size_random := rnorm(.N, pred_size, sigma_obs)]
+
+  # calculate observed and predicted growth
+  val_sp[, obs_growth := (dbh - dbh0)/deltaTime]
+  val_sp[, pred_growth_random := (pred_size_random - dbh0)/deltaTime]
+
+  # calculate MSE
+  val_sp[, SE_size := (dbh - pred_size_random)^2]
+  val_sp[, SE_growth := (obs_growth - pred_growth_random)^2]
+
+  # mean SE over all observations for each iteration and save to list
+  MSE_list[[Sp]] <- val_sp[, 
+    .(
+      MSE_size = mean(SE_size, na.rm = TRUE),
+      MSE_growth = mean(SE_growth, na.rm = TRUE),
+      species_id = Sp
+    ),
+    by = iter2
+  ]
+
+  # Calculate R2 (Gelman et al 2018)
+  R2gel <- val_sp |>
+    group_by(iter2) |>
+    summarise(var_size = var(pred_size, na.rm = TRUE)) |>
+    bind_cols(iter = sampledIter) |>
+    left_join(
+      post |>
+        filter(species_id == Sp & par == 'sigma_obs') |>
+        mutate(sigma_obs = value) |>
+        select(iter, sigma_obs, species_id)
+    ) |>
+    mutate(R2gelman_size = var_size/(var_size + sigma_obs^2)) |>
+    select(iter, iter2, species_id, R2gelman_size) |>
+    setDT()
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+  
+  R2_list[[Sp]] <- merge(
+    R2gel,
+    val_sp[,
+      .(
+        R2reg_size = get_r2(dbh, pred_size_random),
+        R2reg_growth = get_r2(obs_growth, pred_growth_random)
+      ), 
+      by = iter2
+    ],
+    by = 'iter2'
+  )
+
+  # define species specific axis limits for growth
+  yLim <- val_sp[, quantile(obs_growth, probs = c(0.001, .999), na.rm = T)]
+  
+  # plot
+  p1 <- val_sp[
+      deltaTime > 0,
+      .(m_obs=mean(dbh), m_pred=mean(pred_size_random)),
+      by = obsID
+    ] |>
+    ggplot() +
+    aes(m_obs, m_pred) +
+    geom_hex(bins = 100) +
+    geom_abline(slope = 1, intercept = 0) +
+    tune::coord_obs_pred() +
+    theme_classic() +
+    theme(
+      legend.position = 'none',
+      plot.margin = margin(t = 30)
+    ) +
+    xlab('Observerd size (mm)') +
+    ylab('Predicted size (mm)')
+
+
+  pred_matrix <- val_sp[
+      deltaTime > 0,
+      .(pred_size_random, iter2, obsID)
+    ] |>
+    pivot_wider(names_from = obsID, values_from = pred_size_random) |>
+    select(-iter2) |>
+    as.matrix()
+
+  p2 <- val_sp[
+      deltaTime > 0,
+      .(m_obs = mean(obs_growth), m_pred = mean(pred_growth_random)),
+      by = obsID
+    ] |>
+    ggplot() +
+    aes(m_obs, m_pred) +
+    geom_hex(bins = 100) +
+    geom_abline(slope = 1, intercept = 0) +
+    xlim(yLim) + ylim(yLim) +
+    theme_classic() +
+    theme(
+      legend.position="none",
+      plot.margin = margin(t = 30)
+    ) +
+    xlab('Observerd growth') +
+    ylab('Predicted growth')
+
+  pred_size_matrix <- val_sp[deltaTime > 0 & !is.na(pred_size_random), .(pred_size_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = pred_size_random) |>
+      select(-iter2) |>
+      as.matrix()
+
+  p3 <- ppc_dens_overlay(
+      val_sp[iter2 == 1 & deltaTime > 0, dbh],
+      pred_size_matrix
+  ) +
+  xlab('Obs vs predicted size') +
+  ylab('') +
+  theme_classic() +
+  theme(legend.position = 'none')
+
+  pred_growth_matrix <- val_sp[deltaTime > 0 & !is.na(obs_growth) & !is.na(pred_growth_random), .(pred_growth_random, iter2, obsID)] |>
+      pivot_wider(names_from = obsID, values_from = pred_growth_random) |>
+      select(-iter2) |>
+      as.matrix()
+
+  p4 <- ppc_dens_overlay(
+      val_sp[iter2 == 1 & deltaTime > 0 & !is.na(obs_growth), obs_growth],
+      pred_growth_matrix
+  ) +
+  xlab('Obs vs predicted growth') +
+  xlim(yLim) +
+  ylab('') +
+  theme_classic()
+
+  print(
+    ggpubr::ggarrange(
+        p1, p2, p3, p4,
+        ncol = 2, nrow = 2,
+        labels = unique(val_sp$species_name),
+        font.label = list(size = 13, face = 'italic')
+    )
+  )
+}
+
+# save MSE and R2 to be used for model comparison
+invisible(
+    map_dfr(
+    c('MSE', 'R2'),
+    ~ get(paste0(.x, '_list')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          output_dir,
+          paste0(.x, '.RDS')
+      )
+    )
+  )
+)
+```
+
+
+# Mean squared error (MSE)
+
+```{r plot_MSE, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 7, fig.width = 8}
+sim_toLoad <- c(simInfo$simCompare, simName)
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'MSE.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  pivot_longer(
+    cols = contains('MSE_')
+  ) |>
+  mutate(name = gsub('MSE_', '', name)) |>
+  ggplot() +
+  aes(value, fct_reorder(species_name, value)) +
+  aes(fill = sim) +
+  facet_wrap(~name, scales = 'free_x') +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Mean Squared error (MSE)',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+
+# Rsquared
+
+The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
+
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(!contains('R2reg')) |>
+  ggplot() +
+  aes(x = R2gelman_size, y = fct_reorder(species_name, R2gelman_size), fill = sim) +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Rsquared (Gelman 2018)',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+We also calculated the pseudo $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values.
+
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(!contains('R2gelman')) |>
+  pivot_longer(cols = contains('R2reg')) |>
+  mutate(
+    name = case_match(
+      name,
+      'R2reg_growth' ~ 'growth rate',
+      'R2reg_size' ~ 'size'
+    )
+  ) |>
+  ggplot() +
+  aes(value, fct_reorder(species_name, value)) +
+  aes(fill = sim) +
+  facet_wrap(~name, scales = 'free_x') +
+  geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  labs(
+    x = 'Pseudo Rsquared',
+    y = '',
+    fill = 'Model'
+  ) +
+  theme_classic() +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+<!-- 
+# Leave-one-out cross-validation to compare models -->
+
+```{r loo, eval=FALSE, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = value, y = species_id, color = sim) +
+  geom_point() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  labs(
+    x = '',
+    y = '',
+    color = 'Model'
+  ) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  theme(axis.text.y = element_text(face = "italic"))
+```

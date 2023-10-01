@@ -1,0 +1,40 @@
+# Species id
+spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+        '19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+        '183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
+        '22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
+        '32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
+        '32929FRAPEN', '19511OSTVIR', 'NACARALB', '27821NYSSYL'
+]
+# Which vital rates to run
+vitalRates: ["growth"]
+# Source of data (vector must much the same as `vitalRates`)
+dataSources: ["../../data/treeData.RDS"]
+# number of iteration MCMC (inclusing warmup)
+maxIter: 4000
+# Number of cores and chains
+nC: 4
+# The simulation and folder name
+simName: "intcpt"
+# simulations to compare with
+simCompare: []
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "mp2b"
+
+##################################
+########## DESCRIPTION  ##########
+##################################
+
+## Growth model - Intercept only
+
+## The Von Bertalanffy (VB) to predict future size of trees
+# s_t+1 ~ Normal(
+#            s_t * exp(-r * delta_time) + Lmax * (1 - exp(-r * delta_time))
+#            sigma_obs
+#         )
+# Parameters:
+# r: growth rate in function of size s_t
+# Lmax: asympotic size at which growth rate reaches zero
+# sigma_obs: observation error
