@@ -1,0 +1,467 @@
+---
+ title: "MCMC diagnostics - survival"
+ subtitle: "Model: intercept + plot random effects"
+ author: "Will Vieira"
+ date: "`r paste('Last updated on', format(Sys.time(), '%d %B, %Y'))`"
+---
+
+```{r, echo = F, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(cmdstanr))
+suppressPackageStartupMessages(library(loo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tidybayes))
+suppressPackageStartupMessages(library(bayesplot))
+suppressPackageStartupMessages(library(ggridges))
+suppressPackageStartupMessages(require(RColorBrewer))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(ggrepel))
+```
+```{r load simulations, echo = F,warning=FALSE,message=FALSE}
+# Load simulation variables
+model_dir <- 'model_survival/intcpt_plot'
+simInfo <- yaml::read_yaml(file.path(model_dir, '_simulation_info.yml'))
+output_dir <- file.path('output_sim_processed', simInfo$vitalRates, simInfo$simName)
+
+sp_info <- read_csv(file.path('..', 'forest-IPM', 'data', 'species_id.csv'))
+spIds <- simInfo$spIds
+simName <- simInfo$simName
+
+# List output files and set vector names to species_id
+posteriorPop_files <- grep(
+  'posterior_pop',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(posteriorPop_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriorPop_files))))
+
+posteriormPlot_files <- grep(
+  'posterior_plot',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(posteriormPlot_files) <- names(sort(sapply(spIds, function(x) grep(x, posteriormPlot_files))))
+
+diag_files <- grep(
+  'diagnostics',
+  dir(output_dir, full.names = TRUE),
+  value = TRUE
+)
+names(diag_files) <- names(sort(sapply(spIds, function(x) grep(x, diag_files))))
+```
+
+
+```{r load dataset,echo =FALSE,warning=FALSE,message=FALSE}
+dataSource <- readRDS(
+  gsub('../../', '', simInfo$dataSources)
+)
+```
+
+# Rhat
+
+```{r, echo = F,fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['rhat']] |>
+        bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot(aes(x = rhat, y = fct_reorder(species_name, rhat))) +
+    geom_boxplot() +
+    theme_classic() +
+    geom_vline(xintercept = 1.01, linetype = 2) +
+    ylab('') +
+    theme(
+      axis.text.y = element_text(face = "italic")
+    )
+```
+
+# Divergent transitions
+
+```{r divergentTransitions, echo = FALSE,warning=FALSE,message=FALSE}
+imap_dfr(
+    diag_files,
+    ~ readRDS(.x)[['diag_summary']]['num_divergent'] |>
+        bind_cols(species_id = .y) |>
+        mutate(chain = row_number())
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(!species_id) |>
+  pivot_wider(
+    names_from = chain,
+    values_from = num_divergent,
+    names_prefix = 'chain '
+  ) |>
+  DT::datatable()
+```
+
+# Posterior distribution of parameters
+
+```{r posteriorDist, eval = TRUE,echo = F, fig.height = 7, fig.width = 7,warning=FALSE,message=FALSE}
+imap_dfr(
+    posteriorPop_files,
+    ~ readRDS(.x) |>
+      bind_cols(species_id = .y)
+  ) |>
+  left_join(
+    sp_info |> select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) ->
+post
+
+for(Par in unique(post$par))
+{
+  print(
+    post |>
+      filter(par == Par) |>
+      ggplot() +
+      aes(x = value, y = fct_reorder(species_name, value)) +
+      stat_eye() +
+      ggtitle(Par) +
+      xlab('') +
+      theme_classic() +
+      ylab('') +
+      theme(axis.text.y = element_text(face = "italic"))
+  )
+}
+```
+
+# Correlation between parameters
+
+```{r parCorrelation, eval = TRUE,echo = F, fig.height = 8, fig.width = 8,warning=FALSE,message=FALSE}
+parComb <- post |>
+  filter(par != 'lp__') |>
+  reframe(uqPar = unique(par)) |>
+  pull(uqPar) |>
+  combn(2)
+
+for(i in 1:ncol(parComb))
+{
+  print(
+    post |>
+      filter(par %in% parComb[, i]) |>
+      filter(iter %in% sample(iter, 1000)) |>
+      select(par, value, iter, species_name) |>
+      pivot_wider(names_from = par, values_from = value) |>
+      ggplot() +
+      aes_string(x = parComb[1, i], y = parComb[2, i]) + 
+      geom_point(alpha = .5, size = 0.5) +
+      facet_wrap(~ species_name) +
+      xlab(parComb[1, i]) +
+      ylab(parComb[2, i]) +
+      theme_minimal() +
+      theme(strip.text = element_text(face = 'italic', size = 7))
+  )
+}
+```
+
+# Predictions
+
+## Mortality probability in function of time
+
+```{r,echo=FALSE,fig.height=6,fig.width=8,warning=FALSE,message=FALSE}
+post |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(deltaYear = seq(0, 1000, 25)) |>
+  mutate(
+    mort_prob = 1 - (1/(1 + exp(-psi))^deltaYear)
+  ) ->
+pred_data
+
+pred_data |>
+  ggplot() +
+  aes(deltaYear, mort_prob) +
+  aes(color = species_name) +
+  stat_lineribbon(.width = 0.95, alpha = .8) +
+  scale_fill_brewer() +
+  theme_classic() +
+  labs(
+    x = 'Delta time (years)',
+    y = 'Mortality probability',
+    color = ''
+  ) +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        maxYear = max(deltaYear),
+        mort = mean(mort_prob[deltaYear == maxYear])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = maxYear, y = mort, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 150, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3
+  ) +
+  theme(
+    legend.position = 'none'
+  )
+```
+
+
+# Observed vs predicted
+
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4,fig.width=9}
+accur_ls <- mortProp_ls <- mortPropPlot_ls <- list()
+
+for(Sp in spIds)
+{
+  val_sp <- dataSource[species_id == Sp]
+
+  # replicate each observation by N_iteration to accommodate the parameters draw
+  # Using only 200 iterations of the 8000
+  val_sp[, obsID := .I]
+  val_sp <- val_sp[rep(obsID, each = 200)]
+  sampledIter <- sample(1:(simInfo$maxIter/4 * simInfo$nC), 200)
+  val_sp[, iter := sampledIter, by = obsID]
+
+  # merge global parameters
+  val_sp[
+    post |>
+        filter(species_id == Sp) |>
+        select(-species_id) |>
+        pivot_wider(names_from = par, values_from = value) |>
+        as.data.table(),
+    `:=`(
+      psi = i.psi,
+      sigma_plot = i.sigma_plot#,
+      # size_opt = i.size_opt,
+      # size_var = i.size_var,
+      # Beta = i.Beta,
+      # theta = i.theta,
+      # optimal_temp = i.optimal_temp,
+      # tau_temp = i.tau_temp,
+      # optimal_prec = i.optimal_prec,
+      # tau_prec = i.tau_prec
+    ),
+    on = 'iter'
+  ]
+
+  # merge plot specific parameters
+  val_sp[
+    readRDS(posteriormPlot_files[Sp]) |>
+      setDT(),
+    psiPlot := i.value,
+    on = c('iter', 'plot_id')
+  ]
+
+  # remove NAs
+  val_sp <- val_sp[!is.na(psiPlot)]
+
+  # random iter were selected, create a new iter vetor to a proprer sequence
+  # from 1 to nSample of iteration
+  val_sp[, iter2 := 1:.N, by = obsID]
+
+  # compute longevity logit
+  val_sp[,
+    longev_log := 1/(1 + exp(
+        -(
+          psi + 
+          psiPlot #+
+          # -(log(dbh0/size_opt)/size_var)^2 +
+          # Beta * (BA_comp_sp + theta * BA_comp_intra) +
+          # -tau_temp * (temp_sc - optimal_temp)^2 +
+          # -tau_prec * (prec_sc - optimal_prec)^2
+        )
+      )
+    )
+  ]
+
+  # compute mortality rate in function of time
+  val_sp[,
+    mortality_prob := 1 - (longev_log^deltaYear)
+  ]
+
+  # predict mortality event
+  val_sp[, mort_random := rbinom(.N, size = 1, mortality_prob)]
+
+# Compute model accuracy
+  accur_ls[[Sp]] <- val_sp |>
+    group_by(iter2) |>
+    reframe(
+      TP = sum(mort == 1 & mort_random == 1),
+      TN = sum(mort == 0 & mort_random == 0),
+      FN = sum(mort == 1 & mort_random == 0),
+      FP = sum(mort == 0 & mort_random == 1)
+    ) |>
+    mutate(
+      Acc = (TP + TN)/(TP + TN + FP + FN),
+      Sensitivity = TP/(TP + FN),
+      Specificity = TN/(FP + TN),
+      AccCorrected = (Sensitivity + Specificity)/2
+    ) |>
+    bind_cols(species_id = Sp)
+
+  # Compute proportion of mortality events (pred vs obs)
+  mortProp_ls[[Sp]] <- val_sp |>
+    group_by(iter2) |>
+    reframe(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_random == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
+
+  mortPropPlot_ls[[Sp]] <- val_sp |>
+    group_by(plot_id) |>
+    reframe(
+      mortProp_obs = sum(mort == 1)/n(),
+      mortProp_pred = sum(mort_random == 1)/n()
+    ) |>
+    bind_cols(species_id = Sp)
+}
+
+# save accuracy for model comparison
+invisible(
+    map_dfr(
+    c('accur', 'mortProp', 'mortPropPlot'),
+    ~ get(paste0(.x, '_ls')) |>
+        bind_rows() |>
+        saveRDS(file = file.path(
+          output_dir,
+          paste0(.x, '.RDS')
+      )
+    )
+  )
+)
+```
+
+## Accuracy
+
+Using four different metrics:
+
+- **Sensitivity** measures the percentage of dead trees that are identified as dead
+- **Specificity** measures the percentage of alive trees that are correctly identified as alive
+- **Accuracy** is the ratio of number of correct predictions to the total of predictions
+- **Accuracy balanced** considers unbalanced accuracy predictions of positive and negative events (sensitivity and specificity)
+
+```{r plot_accur, echo = FALSE, warning=FALSE, message=FALSE, fig.height = 13, fig.width = 9}
+sim_toLoad <- c(simInfo$simCompare, simName)
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'accur.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  select(species_name, sim, iter2, Acc, Sensitivity, Specificity, AccCorrected) |>
+  pivot_longer(
+    cols = c(Acc, Sensitivity, Specificity, AccCorrected)
+  ) |>
+  mutate(
+    name = recode_factor(
+      name,
+      Acc = 'Accuracy',
+      AccCorrected = 'Accuracy corrected',
+      Sensitivity = 'Sensitivity',
+      Specificity = 'Specificity'
+    )
+  ) |>
+  ggplot() +
+  aes(value, fct_reorder(species_name, value)) +
+  aes(color = sim) +
+  stat_pointinterval() +
+  facet_wrap(~ name, scales = 'free_x') +
+  theme_classic() +
+  labs(
+    x = '',
+    y = ''
+  ) +
+  theme(axis.text.y = element_text(face = 'italic'))
+```
+
+
+## Population level mortality rate
+
+```{r plotMortProp,echo=F,warning=FALSE,message=FALSE,fig.height=8,fig.width=7}
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'mortProp.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  filter(sim == simInfo$simName) |>
+  group_by(species_id) |>
+  reframe(mprop = unique(mortProp_obs)) |>
+  # bind mean of predicted value so we can sort species by the mean of predict
+  # this is necessary to match the sorted species for the next figure
+  left_join(
+    map_dfr(
+      sim_toLoad,
+      ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'mortProp.RDS')) |>
+        bind_cols(sim = .x)
+    ) |>
+    group_by(species_id) |>
+    reframe(mean_pred = mean(mortProp_pred))
+  ) |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  arrange(mean_pred) ->
+propObs
+
+map_dfr(
+    sim_toLoad,
+    ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'mortProp.RDS')) |>
+      bind_cols(sim = .x)
+  ) |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(mortProp_pred, y = fct_reorder(species_name, mortProp_pred)) +
+  aes(fill = sim) +
+  ggridges::geom_density_ridges2(color = NA) +
+  geom_segment(
+    data = propObs,
+    aes(
+      x = mprop, xend = mprop,
+      y = 1:length(species_name),
+      fill = NULL,
+      yend = (1:length(species_name)) + .8
+    ),
+    color = "red", alpha = 0.6
+  ) +
+  theme_classic() +
+  labs(
+    x = 'Proportion of mortality events (obs in line vs predicted in dist)',
+    y = ''
+  ) +
+  theme(axis.text.y = element_text(face = 'italic'))
+```
+
+```{r plotMortProp2,echo=F,warning=FALSE,message=FALSE,fig.height=10,fig.width=10}
+mortPropPlot_ls |>
+  bind_rows() |>
+  left_join(
+    sp_info,
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot(aes(x = mortProp_obs, y = mortProp_pred)) +
+    geom_point(size = .5, alpha = 0.6) +
+    facet_wrap(~species_name) +
+    geom_smooth(method = 'gam') +
+    geom_abline(slope = 1, intercept = 0) +
+    theme_minimal() +
+    xlab('Observerd mortality rate') +
+    ylab('Predicted mortality rate') +
+    theme(strip.text = element_text(face = 'italic', size = 7))
+```
