@@ -50,6 +50,18 @@ for(Sp in spIds)
     setDT() ->
   dataSource
 
+  # remove dead trees
+  dataSource <- dataSource[status == 1]
+
+  # remove observations with dbh lower than 127 mm
+  dataSource <- dataSource[dbh >= 127]
+
+  # get number of measurements by tree_id
+  dataSource[, nbMeasure := .N, by = tree_id]
+
+  # filter for tree_id with at least two measures
+  dataSource <- dataSource[nbMeasure > 1]
+
   ## compute de deltaTime between measures of dbh
   dataSource[,
     deltaTime := year_measured - lag(year_measured, 1),
@@ -95,8 +107,11 @@ for(Sp in spIds)
   )
   
   md_out$post_warmup_draws |>
-    as_draws_matrix() |>
+    as_draws_df() |>
     as_tibble() |>
+    # keep only the last 1k iteration per chain
+    filter(.iteration %in% 1001:2000) |>
+    select(!contains('.')) |>
     mutate(iter = row_number()) |>
     pivot_longer(
       cols = !iter,
@@ -198,7 +213,7 @@ for(Sp in spIds)
   r_eff <- loo::relative_eff(
     llfun_growth, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
-    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/4), 
     data = dataSource |>
               select(dbh, dbh0, deltaTime), 
     draws = post_dist_lg,
@@ -225,6 +240,7 @@ for(Sp in spIds)
       paste0('loo_', Sp, '.RDS')
     )
   )
-
+  
+  rm(r_eff); rm(loo_obj)
   cat(' Species', which(Sp == spIds), 'of', length(spIds), '\n')
 }
