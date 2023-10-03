@@ -334,7 +334,7 @@ for(Sp in spIds)
   # Using only 200 iterations of the 8000
   val_sp[, obsID := .I]
   val_sp <- val_sp[rep(obsID, each = 200)]
-  sampledIter <- sample(1:(simInfo$maxIter/2 * simInfo$nC), 200)
+  sampledIter <- sample(1:(simInfo$maxIter/4 * simInfo$nC), 200)
   val_sp[, iter := sampledIter, by = obsID]
 
   # merge global parameters
