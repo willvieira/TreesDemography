@@ -38,7 +38,7 @@ library(posterior)
 
 ## Loop over species
 
-for(Sp in spIds[6])
+for(Sp in spIds)
 {
   # load database
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,8 +77,10 @@ for(Sp in spIds[6])
   md_out$post_warmup_draws |>
     as_draws_df() |>
     as_tibble() |>
-    select(!c(.iteration, .chain)) |>
-    rename(iter = .draw) |>
+    # keep only the last 1k iteration per chain
+    filter(.iteration %in% 1001:2000) |>
+    select(!contains('.')) |>
+    mutate(iter = row_number()) |>
     pivot_longer(
       cols = !iter,
       names_to = 'par'
@@ -206,7 +208,7 @@ for(Sp in spIds[6])
   r_eff <- loo::relative_eff(
     llfun_recruit, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
-    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/4), 
     data = dataSource |>
               left_join(toSub) |>
               select(

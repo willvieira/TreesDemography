@@ -75,8 +75,10 @@ for(Sp in spIds)
   )
   
   md_out$post_warmup_draws |>
-    as_draws_matrix() |>
+    as_draws_df() |>
     as_tibble() |>
+    # keep only the last 1k iteration per chain
+    filter(.iteration %in% 1001:2000) |>
     mutate(iter = row_number()) |>
     pivot_longer(
       cols = !iter,
@@ -180,7 +182,7 @@ for(Sp in spIds)
   r_eff <- loo::relative_eff(
     llfun_recruit, 
     log = FALSE, # relative_eff wants likelihood not log-likelihood values
-    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/2), 
+    chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/4), 
     data = dataSource |>
               select(nbRecruit, plot_size, deltaYear_plot), 
     draws = post_dist_lg,
