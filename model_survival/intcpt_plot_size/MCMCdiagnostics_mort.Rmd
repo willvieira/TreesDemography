@@ -212,6 +212,54 @@ pred_data |>
 ```
 
 
+## Size effect
+
+```{r SizeEffect,echo=FALSE,warning=FALSE,message=FALSE,fig.height=6,fig.width=10}
+post |>
+  filter(par %in% c('psi', 'size_opt', 'size_var')) |>
+  pivot_wider(
+    names_from = par,
+    values_from = value
+  ) |>
+  group_by(species_name) |>
+  expand_grid(size = seq(10, 800, 20)) |>
+  mutate(
+    psi_size = exp(psi + -(log(size/size_opt)/size_var)^2)
+  ) ->
+pred_data
+
+pred_data |>
+  ggplot() +
+  aes(size, psi_size) +
+  aes(color = species_name) +
+  stat_lineribbon(.width = 0.9, alpha = .8) +
+  scale_fill_brewer() +
+  labs(
+    x = 'DBH (mm)',
+    y = '',
+    color = ''
+  ) +
+  theme_classic() +
+  geom_text_repel(
+    data = pred_data |>
+      group_by(species_name) |>
+      mutate(
+        max_x = max(size),
+        max_y = mean(psi_size[size == max_x])
+      ) |>
+      slice_head(n = 1),
+    mapping = aes(x = max_x, y = max_y, label = species_name),
+    max.overlaps = Inf,
+    nudge_x = 150, direction = 'y', hjust = 'left',
+    fontface = 'italic',
+    size = 3
+  ) +
+  theme(
+    legend.position = 'none'
+  )
+```
+
+
 # Observed vs predicted
 
 ```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4,fig.width=5}
@@ -443,7 +491,7 @@ map_dfr(
   ggplot() +
   aes(value, fct_reorder(species_name, value)) +
   aes(color = sim) +
-  stat_pointinterval() +
+  stat_pointinterva(alpha = 0.7) +
   facet_wrap(~ name, scales = 'free_x') +
   theme_classic() +
   labs(
@@ -496,7 +544,7 @@ map_dfr(
   ggplot() +
   aes(mortProp_pred, y = fct_reorder(species_name, mortProp_pred)) +
   aes(fill = sim) +
-  ggridges::geom_density_ridges2(color = NA) +
+  ggridges::geom_density_ridges2(color = NA, alpha = 0.7) +
   geom_segment(
     data = propObs,
     aes(
