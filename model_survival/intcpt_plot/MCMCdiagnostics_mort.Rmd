@@ -215,7 +215,7 @@ pred_data |>
 # Observed vs predicted
 
 ```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4,fig.width=9}
-accur_ls <- mortProp_ls <- mortPropPlot_ls <- list()
+accur_ls <- mortProp_ls <- mortPropPlot_ls <- R2_ls <- list()
 
 for(Sp in spIds)
 {
@@ -314,11 +314,30 @@ for(Sp in spIds)
     ) |>
     bind_cols(species_id = Sp)
 
-  mortPropPlot_ls[[Sp]] <- val_sp |>
-    group_by(plot_id) |>
+
+  mortPropPlot <- val_sp |>
+    group_by(iter2, plot_id) |>
     reframe(
       mortProp_obs = sum(mort == 1)/n(),
       mortProp_pred = sum(mort_random == 1)/n()
+    )
+
+  # calculate R2 from regression linear model using the 1:1 obs vs pred
+  get_r2 <- function(x, y)
+      return(summary(lm(y~x))$r.squared)
+
+  R2_ls[[Sp]] <- as.data.table(mortPropPlot)[,
+      .(
+        R2 = get_r2(mortProp_obs, mortProp_pred)
+      ), 
+      by = iter2
+    ]
+
+  mortPropPlot_ls[[Sp]] <- mortPropPlot |>
+    group_by(plot_id) |>
+    reframe(
+      mortProp_obs = mean(mortProp_obs),
+      mortProp_pred = mean(mortProp_pred)
     ) |>
     bind_cols(species_id = Sp)
 }
@@ -326,7 +345,7 @@ for(Sp in spIds)
 # save accuracy for model comparison
 invisible(
     map_dfr(
-    c('accur', 'mortProp', 'mortPropPlot'),
+    c('accur', 'mortProp', 'mortPropPlot', 'R2'),
     ~ get(paste0(.x, '_ls')) |>
         bind_rows() |>
         saveRDS(file = file.path(
