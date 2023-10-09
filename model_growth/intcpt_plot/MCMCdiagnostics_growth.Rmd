@@ -215,7 +215,7 @@ pred_data |>
 
 # Observed vs predicted
 
-```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4,fig.width=9}
+```{r crossValidation, echo=FALSE, warning=FALSE, message=FALSE, fig.height=8,fig.width=9}
 # list to save MSE and R2 for each species to be used later
 MSE_list <- R2_list <- list()
 
@@ -357,9 +357,7 @@ for(Sp in spIds)
     val_sp[,
       .(
         R2reg_size = get_r2(dbh, pred_size_random),
-        R2reg_growth = get_r2(obs_growth, pred_growth_random),
-        R2reg_size_mean = get_r2(dbh, pred_size),
-        R2reg_growth_mean = get_r2(obs_growth, pred_growth)
+        R2reg_growth = get_r2(obs_growth, pred_growth_random)
       ), 
       by = iter2
     ],
@@ -478,21 +476,27 @@ map_dfr(
     ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'MSE.RDS')) |>
       bind_cols(sim = .x)
   ) |>
+  pivot_longer(
+    cols = contains('MSE')
+  ) |>
+  mutate(name = gsub('MSE_', '', name)) |>
   left_join(
     sp_info |>
       select(species_id_old, species_name),
     by = c('species_id' = 'species_id_old')
   ) |>
   ggplot() +
-  aes(x = MSE, y = fct_reorder(species_name, MSE), fill = sim) +
+  aes(x = value, y = fct_reorder(species_name, value), fill = sim) +
   geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  facet_grid(~name, scales = 'free') +
   labs(
     x = 'Mean Squared error (MSE)',
     y = '',
     fill = 'Model'
   ) +
   theme_classic() +
-  theme(axis.text.y = element_text(face = "italic"))
+  theme(axis.text.y = element_text(face = "italic")) +
+  theme(legend.position = 'top')
 ```
 
 
@@ -500,19 +504,20 @@ map_dfr(
 
 The distribution of R squared values is calculated using the Gelman et al. [2018](http://www.stat.columbia.edu/~gelman/research/unpublished/bayes_R2.pdf) definition.
 
-```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+```{r plot Rsquared_gelman,echo=FALSE,fig.height = 7, fig.width = 6, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
+  select(!contains('R2reg')) |>
   left_join(
     sp_info |>
       select(species_id_old, species_name),
     by = c('species_id' = 'species_id_old')
   ) |>
   ggplot() +
-  aes(x = R2gelman, y = fct_reorder(species_name, R2gelman), fill = sim) +
+  aes(x = R2gelman_size, y = fct_reorder(species_name, R2gelman_size), fill = sim) +
   geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
   labs(
     x = 'Rsquared (Gelman 2018)',
@@ -525,39 +530,44 @@ map_dfr(
 
 We also calculated the pseudo $R^2$ from the linear model using the 1:1 plot comparing observed values to the predicted values.
 
-```{r plot Rsquared_regression,echo=FALSE,fig.height = 7, fig.width = 7, warning=FALSE, message=FALSE}
+```{r plot Rsquared_regression,echo=FALSE,fig.height = 7, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     sim_toLoad,
     ~ readRDS(file.path('output_sim_processed', simInfo$vitalRates, .x, 'R2.RDS')) |>
       bind_cols(sim = .x)
   ) |>
+  select(!contains('R2gelman')) |>
+  pivot_longer(cols = contains('R2reg')) |>
+  mutate(name = gsub('R2reg_', '', name)) |>
   left_join(
     sp_info |>
       select(species_id_old, species_name),
     by = c('species_id' = 'species_id_old')
   ) |>
   ggplot() +
-  aes(x = R2reg, y = fct_reorder(species_name, R2reg), fill = sim) +
+  aes(x = value, y = fct_reorder(species_name, value), fill = sim) +
   geom_density_ridges(alpha = 0.8, scale= 1.8, color = NA) +
+  facet_grid(~name, scales = 'free') +
   labs(
     x = 'Rsquared (linear regression)',
     y = '',
     fill = 'Model'
   ) +
   theme_classic() +
-  theme(axis.text.y = element_text(face = "italic"))
+  theme(axis.text.y = element_text(face = "italic")) +
+  theme(legend.position = 'top')
 ```
 
-<!-- 
-# Leave-one-out cross-validation to compare models -->
 
-```{r loo, eval=FALSE, echo = FALSE, warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+# Leave-one-out cross-validation to compare models
+
+```{r loo,echo = FALSE,warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
 map_dfr(
     spIds,
     ~ map2(
         setNames(sim_toLoad, sim_toLoad),
         .x,
-        ~ readRDS(paste0('output/', .x, '/loo_', .y, '.RDS'))
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
       ) |>
       loo::loo_compare() |>
       as.data.frame() |>
@@ -576,7 +586,7 @@ map_dfr(
     by = c('species_id' = 'species_id_old')
   ) |>
   ggplot() +
-  aes(x = value, y = species_id, color = sim) +
+  aes(x = value, y = fct_reorder(species_name, value), color = sim) +
   geom_point() +
   facet_wrap(~ variable, scales = 'free_x') +
   labs(
@@ -585,6 +595,38 @@ map_dfr(
     color = 'Model'
   ) +
   theme_classic() +
-  theme(legend.position = 'bottom') +
+  theme(legend.position = 'top') +
   theme(axis.text.y = element_text(face = "italic"))
+```
+
+```{r loo2,echo = FALSE,warning=FALSE,fig.height = 4, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(value, y = sim) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  theme_classic() +
+  ylab('Model')
 ```
