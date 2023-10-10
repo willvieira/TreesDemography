@@ -337,7 +337,8 @@ for(Sp in spIds)
 
   # remove NAs
   val_sp <- na.omit(
-    val_sp[,
+    val_sp[
+      deltaTime > 0,
       .(
         plot_id, species_id, deltaTime, dbh, dbh0, BA_comp_sp,
         BA_comp_inter, bio_01_mean_scl, bio_12_mean_scl

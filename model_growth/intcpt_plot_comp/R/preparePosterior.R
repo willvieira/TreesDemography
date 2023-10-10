@@ -38,7 +38,7 @@ library(posterior)
 
 ## Loop over species
 
-for(Sp in spIds[7:32])
+for(Sp in spIds)
 {
   # load database
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
