@@ -141,7 +141,8 @@ for(Sp in spIds)
     # dt is vector of:
     # [1] state1,
     # [2] deltaTime,
-    # [3] plot_id_seq
+    # [3] plot_id_seq,
+    # [4] dbh0
     
     # post is a matrix of nrow draws and ncol paramaters
 
@@ -149,7 +150,8 @@ for(Sp in spIds)
     longev_log <- 1/(1 + exp(
         -(
           post[, 'psi'] +
-          post[, paste0('psiPlot[', dt[3], ']')]
+          post[, paste0('psiPlot[', dt[3], ']')] +
+          -(log(dt[4]/post[, 'size_opt'])/post[, 'size_var'])
         )
       )
     )
@@ -201,7 +203,7 @@ for(Sp in spIds)
     chain_id = rep(1:sim_info$nC, each = sim_info$maxIter/4), 
     data = dataSource |>
               left_join(toSub) |>
-              select(mort, deltaYear, plot_id_seq),
+              select(mort, deltaYear, plot_id_seq, dbh0),
     draws = post_dist_lg,
     cores = sim_info$nC
   )
@@ -216,7 +218,7 @@ for(Sp in spIds)
       draws = post_dist_lg,
       data = dataSource |>
               left_join(toSub) |>
-              select(mort, deltaYear, plot_id_seq)
+              select(mort, deltaYear, plot_id_seq, dbh0)
   )
 
   # save Loo

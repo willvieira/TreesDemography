@@ -491,7 +491,7 @@ map_dfr(
   ggplot() +
   aes(value, fct_reorder(species_name, value)) +
   aes(color = sim) +
-  stat_pointinterva(alpha = 0.7) +
+  stat_pointinterval(alpha = 0.7) +
   facet_wrap(~ name, scales = 'free_x') +
   theme_classic() +
   labs(
@@ -579,4 +579,77 @@ mortPropPlot_ls |>
     xlab('Observerd mortality rate') +
     ylab('Predicted mortality rate') +
     theme(strip.text = element_text(face = 'italic', size = 7))
+```
+
+# Leave-one-out cross-validation to compare models
+
+```{r loo,echo = FALSE,warning=FALSE,fig.height = 8, fig.width = 8, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(x = value, y = fct_reorder(species_name, value), color = sim) +
+  geom_point() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  labs(
+    x = '',
+    y = '',
+    color = 'Model'
+  ) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  theme(axis.text.y = element_text(face = "italic"))
+```
+
+
+```{r loo2,echo = FALSE,warning=FALSE,fig.height = 4, fig.width = 7, warning=FALSE, message=FALSE}
+map_dfr(
+    spIds,
+    ~ map2(
+        setNames(sim_toLoad, sim_toLoad),
+        .x,
+        ~ readRDS(paste0('output_sim_processed/', simInfo$vitalRates, '/', .x, '/loo_', .y, '.RDS'))
+      ) |>
+      loo::loo_compare() |>
+      as.data.frame() |>
+      bind_cols(species_id = .x) |>
+      rownames_to_column(var = 'sim')
+  ) |>
+  select(species_id, sim, elpd_diff, se_diff) |>
+  pivot_longer(
+    cols = c(elpd_diff, se_diff),
+    names_to = 'variable',
+    values_to = 'value'
+  ) |>
+  left_join(
+    sp_info |>
+      select(species_id_old, species_name),
+    by = c('species_id' = 'species_id_old')
+  ) |>
+  ggplot() +
+  aes(value, y = sim) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = 'free_x') +
+  theme_classic() +
+  ylab('Model')
 ```
