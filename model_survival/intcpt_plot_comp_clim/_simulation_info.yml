@@ -1,0 +1,50 @@
+# Species id
+spIds: ['28728ACERUB', '28731ACESAC', '183302PICMAR', '18032ABIBAL',
+        '505490THUOCC', '19489BETPAP', '195773POPTRE', '19290QUEALB',
+        '19481BETALL', '19408QUERUB', '183397TSUCAN', '19462FAGGRA',
+        '19231CARGLA', '183385PINSTR', '18034PICRUB', '183295PICGLA',
+        '183319PINBAN', '19422QUESTE', '32945FRANIG', '19027LIQSTY',
+        '22463POPGRA', '24764PRUSER', 'NAQUEPRI', '19447QUEVEL',
+        '32931FRAAME', '21536TILAME', '18048JUNVIR', '18086LIRTUL',
+        '32929FRAPEN', '19511OSTVIR', 'NACARALB', '27821NYSSYL'
+]
+# Which vital rates to run
+vitalRates: ["mort"]
+# Source of data (vector must much the same as `vitalRates`)
+dataSources: ["../../data/mort_dt.RDS"]
+# number of iteration MCMC (inclusing warmup)
+maxIter: 4000
+# Number of cores and chains
+nC: 4
+# The simulation and folder name
+simName: "intcpt_plot_comp_clim"
+# simulations to compare with
+simCompare: [
+        "intcpt",
+        "intcpt_plot",
+        "intcpt_plot_comp"
+]
+# Name of cluster to run simulations 'cedar' or 'mp2b'
+cluster: "mp2b"
+
+##################################
+########## DESCRIPTION  ##########
+##################################
+
+## Survival model - Intercept + plot random effects + comp + clim
+
+## Model
+# status_t+1 ~ bernoulli(mean)
+# mean = 1 - inv_logit(
+#       psi +
+#       plotEffect +
+#       beta * (BA_comp_sp + theta * BA_comp_inter) +
+#       tau_clim * (opt_clim - clim)^2
+# )^deltaTime
+# Parameters:
+# psi: baseline longevity
+# plotEffect ~ N(0, sigma_plot)
+# beta: competition effect
+# theta: proportion of competition effect asigned to heterospecific competition
+# tau_clim: climate breadth (1/sigma_clim)
+# opt_clim: optimal climate condition
